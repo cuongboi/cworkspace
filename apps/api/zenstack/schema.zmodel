@@ -1,0 +1,806 @@
+datasource db {
+    provider = 'postgresql'
+    url = env('DATABASE_URL')
+}
+
+plugin policy {
+    provider = '@zenstackhq/plugin-policy'
+}
+
+// Policy conventions (see AGENTS.md):
+// - Top-level tenant entities (Group, Conversation, Event, Call, Attachment, Notification) carry
+//   `organizationId` and the tenant guard `@@deny('all', !(organization.members?[userId == auth().id]))`.
+// - Child rows inherit tenancy and visibility from their parent through `check(parent)`.
+// - Rows never move between parents/tenants: `@@deny('post-update', x != before().x)`.
+//   `before()` values are cast to text, so only use it on String fields; make enum/boolean/number
+//   fields immutable with `@deny('update', true)` instead.
+
+type PermissionType {
+    model   String
+    actions String[]    // "create", "read", "update", "post-update", "delete". Use "all" to denote all operations.
+}
+
+// ───────────────────────────── better-auth ─────────────────────────────
+
+model User {
+    id                      String              @id
+    name                    String
+    email                   String              @unique @deny('update', true)
+    emailVerified           Boolean             @default(false) @deny('update', true)
+    image                   String?
+    // profile (editable by the user through `db.user.update`)
+    title                   String?
+    department              String?
+    location                String?
+    phone                   String?
+    bio                     String?
+    // better-auth admin plugin: written by the server only, never through /api/execute
+    role                    String?             @deny('update', true)
+    banned                  Boolean?            @default(false) @deny('update', true)
+    banReason               String?             @deny('update', true)
+    banExpires              DateTime?           @deny('update', true)
+    // RBAC: [{ model, actions }], see `type Permission`
+    permissions             PermissionType[]    @json @default("[]") @deny('update', true)
+    createdAt               DateTime            @default(now())
+    updatedAt               DateTime            @default(now()) @updatedAt
+    sessions                Session[]
+    accounts                Account[]
+    members                 Member[]
+    invitations             Invitation[]
+    groupsCreated           Group[]             @relation('GroupCreator')
+    groupMemberships        GroupMember[]
+    posts                   Post[]
+    comments                Comment[]
+    postReactions           PostReaction[]
+    commentReactions        CommentReaction[]
+    pollVotes               PollVote[]
+    attachments             Attachment[]
+    conversationsCreated    Conversation[]
+    conversationMemberships ConversationMember[]
+    messages                Message[]
+    messageReactions        MessageReaction[]
+    notifications           Notification[]      @relation('NotificationRecipient')
+    notificationsActed      Notification[]      @relation('NotificationActor')
+    eventsCreated           Event[]
+    eventAttendances        EventAttendee[]
+    callsStarted            Call[]
+    callParticipations      CallParticipant[]
+
+    // yourself, and anyone who shares an organization with you
+    @@allow('read', id == auth().id)
+    @@allow('read', members?[organization.members?[userId == auth().id]])
+    @@allow('update', id == auth().id)
+    @@map('user')
+}
+
+model Session {
+    id                   String   @id
+    expiresAt            DateTime
+    token                String   @unique
+    createdAt            DateTime @default(now())
+    updatedAt            DateTime @updatedAt
+    ipAddress            String?
+    userAgent            String?
+    userId               String
+    user                 User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+    activeOrganizationId String?
+    impersonatedBy       String?
+
+    // managed by better-auth through the unscoped client only
+    @@deny('all', true)
+    @@map('session')
+}
+
+model Account {
+    id                    String    @id
+    accountId             String
+    providerId            String
+    userId                String
+    user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+    accessToken           String?
+    refreshToken          String?
+    idToken               String?
+    accessTokenExpiresAt  DateTime?
+    refreshTokenExpiresAt DateTime?
+    scope                 String?
+    password              String?
+    createdAt             DateTime  @default(now())
+    updatedAt             DateTime  @updatedAt
+
+    // managed by better-auth through the unscoped client only (holds password hashes)
+    @@deny('all', true)
+    @@map('account')
+}
+
+model Verification {
+    id         String   @id
+    identifier String
+    value      String
+    expiresAt  DateTime
+    createdAt  DateTime @default(now())
+    updatedAt  DateTime @default(now()) @updatedAt
+
+    // managed by better-auth through the unscoped client only
+    @@deny('all', true)
+    @@map('verification')
+}
+
+// better-auth jwt plugin keys
+model Jwks {
+    id         String    @id
+    publicKey  String
+    privateKey String
+    createdAt  DateTime
+    expiresAt  DateTime?
+    alg        String?
+    crv        String?
+
+    @@deny('all', true)
+    @@map('jwks')
+}
+
+model Organization {
+    id            String             @id
+    name          String
+    slug          String             @unique
+    logo          String?
+    createdAt     DateTime
+    metadata      String?
+    members       Member[]
+    permissions   MemberPermission[]
+    invitations   Invitation[]
+    groups        Group[]
+    conversations Conversation[]
+    events        Event[]
+    calls         Call[]
+    attachments   Attachment[]
+    notifications Notification[]
+
+    // mutate via authClient.organization.*; members can read
+    @@allow('read', members?[userId == auth().id])
+    @@map('organization')
+}
+
+model Member {
+    id             String            @id
+    organizationId String
+    organization   Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+    userId         String
+    user           User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+    role           String            @default('member')
+    createdAt      DateTime
+    permissionId   String?
+    permissions    MemberPermission? @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+    // mutate via authClient.organization.*; members of the same org can read
+    @@allow('read', organization.members?[userId == auth().id])
+
+    // every tenant policy checks membership: keep this lookup indexed
+    @@index([organizationId, userId])
+    @@index([userId])
+    @@map('member')
+}
+
+model Invitation {
+    id             String       @id
+    organizationId String
+    organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+    email          String
+    role           String?
+    status         String       @default('pending')
+    expiresAt      DateTime
+    createdAt      DateTime     @default(now())
+    inviterId      String
+    user           User         @relation(fields: [inviterId], references: [id], onDelete: Cascade)
+
+    // mutate via authClient.organization.*; org owners/admins and the invitee can read
+    @@allow('read', organization.members?[userId == auth().id && role in ['owner', 'admin']])
+    @@allow('read', email == auth().email)
+    @@map('invitation')
+}
+
+model MemberPermission {
+    id             String           @id
+    name           String
+    permissions    PermissionType[] @json
+    organization   Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+    organizationId String
+    createdAt      DateTime         @default(now())
+    updatedAt      DateTime         @default(now()) @updatedAt
+    members        Member[]
+
+    // custom permissions are managed server-side (Phase 8); members can read
+    @@allow('read', organization.members?[userId == auth().id])
+    @@map('member_permissions')
+}
+
+// ───────────────────────────── groups ─────────────────────────────
+
+enum GroupPrivacy {
+    PUBLIC  // anyone in the org can see the group and its posts, and join
+    CLOSED  // anyone in the org can see the group; posts are members-only; joining needs approval
+    SECRET  // only members can see the group
+}
+
+enum GroupRole {
+    ADMIN
+    MODERATOR
+    MEMBER
+}
+
+enum MembershipStatus {
+    ACTIVE
+    PENDING
+}
+
+model Group {
+    id             String        @id @default(cuid())
+    organizationId String
+    organization   Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+    name           String
+    slug           String
+    description    String?
+    coverUrl       String?
+    privacy        GroupPrivacy  @default(PUBLIC)
+    // the org-wide "All company" group: every member belongs to it, it cannot be deleted
+    isDefault      Boolean       @default(false) @deny('update', true)
+    createdById    String        @default(auth().id)
+    createdBy      User          @relation('GroupCreator', fields: [createdById], references: [id], onDelete: Cascade)
+    createdAt      DateTime      @default(now())
+    updatedAt      DateTime      @updatedAt
+    members        GroupMember[]
+    posts          Post[]
+    events         Event[]
+    notifications  Notification[]
+
+    @@deny('all', !(organization.members?[userId == auth().id]))
+    @@allow('read', privacy != SECRET || members?[userId == auth().id && status == ACTIVE])
+    @@allow('create', createdById == auth().id && !isDefault)
+    @@allow('update', members?[userId == auth().id && status == ACTIVE && role == ADMIN])
+    @@allow('update', organization.members?[userId == auth().id && role in ['owner', 'admin']])
+    @@allow('delete', !isDefault && members?[userId == auth().id && status == ACTIVE && role == ADMIN])
+    @@allow('delete', !isDefault && organization.members?[userId == auth().id && role in ['owner', 'admin']])
+    @@deny('post-update', organizationId != before().organizationId || createdById != before().createdById)
+
+    @@unique([organizationId, slug])
+    @@index([organizationId])
+    @@map('group')
+}
+
+model GroupMember {
+    id        String           @id @default(cuid())
+    groupId   String
+    group     Group            @relation(fields: [groupId], references: [id], onDelete: Cascade)
+    userId    String
+    user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+    role      GroupRole        @default(MEMBER)
+    status    MembershipStatus @default(ACTIVE)
+    createdAt DateTime         @default(now())
+
+    @@allow('read', check(group, 'read'))
+    // the member must belong to the group's organization
+    @@deny('create', !(user.members?[organizationId == this.group.organizationId]))
+    // creator bootstraps the group with themself as admin
+    @@allow('create', userId == auth().id && group.createdById == auth().id)
+    // self-join: PUBLIC → ACTIVE member, CLOSED → PENDING request (default group is joined server-side)
+    @@allow('create', userId == auth().id && role == MEMBER && !group.isDefault && ((group.privacy == PUBLIC && status == ACTIVE) || (group.privacy == CLOSED && status == PENDING)))
+    // group admins/moderators add people
+    @@allow('create', group.members?[userId == auth().id && status == ACTIVE && role in [ADMIN, MODERATOR]])
+    // group admins approve requests and change roles
+    @@allow('update', group.members?[userId == auth().id && status == ACTIVE && role == ADMIN])
+    @@allow('update', group.organization.members?[userId == auth().id && role in ['owner', 'admin']])
+    // leave, or be removed by a group admin/moderator or an org admin (nobody leaves the default group)
+    @@allow('delete', userId == auth().id && !group.isDefault)
+    @@allow('delete', !group.isDefault && group.members?[userId == auth().id && status == ACTIVE && role in [ADMIN, MODERATOR]])
+    @@allow('delete', !group.isDefault && group.organization.members?[userId == auth().id && role in ['owner', 'admin']])
+    @@deny('post-update', groupId != before().groupId || userId != before().userId)
+
+    @@unique([groupId, userId])
+    @@index([userId, status])
+    @@map('group_member')
+}
+
+// ───────────────────────────── feed ─────────────────────────────
+
+enum PostType {
+    TEXT
+    POLL
+    EVENT
+}
+
+enum ReactionType {
+    LIKE
+    LOVE
+    HAHA
+    WOW
+    SAD
+    ANGRY
+}
+
+model Post {
+    id            String         @id @default(cuid())
+    groupId       String
+    group         Group          @relation(fields: [groupId], references: [id], onDelete: Cascade)
+    authorId      String         @default(auth().id)
+    author        User           @relation(fields: [authorId], references: [id], onDelete: Cascade)
+    // plain text; mentions are encoded as @[Name](userId)
+    content       String         @default('')
+    type          PostType       @default(TEXT) @deny('update', true)
+    pinnedAt      DateTime?
+    editedAt      DateTime?
+    createdAt     DateTime       @default(now())
+    updatedAt     DateTime       @updatedAt
+    comments      Comment[]
+    reactions     PostReaction[]
+    poll          Poll?
+    event         Event?
+    attachments   Attachment[]
+    notifications Notification[]
+
+    @@allow('read', check(group, 'read') && (group.privacy == PUBLIC || group.members?[userId == auth().id && status == ACTIVE]))
+    @@allow('create', authorId == auth().id && group.members?[userId == auth().id && status == ACTIVE])
+    @@allow('update', authorId == auth().id)
+    @@allow('update,delete', group.members?[userId == auth().id && status == ACTIVE && role in [ADMIN, MODERATOR]])
+    @@allow('update,delete', group.organization.members?[userId == auth().id && role in ['owner', 'admin']])
+    @@allow('delete', authorId == auth().id)
+    @@deny('post-update', groupId != before().groupId || authorId != before().authorId)
+
+    @@index([groupId, createdAt])
+    @@index([authorId])
+    @@map('post')
+}
+
+model Comment {
+    id            String            @id @default(cuid())
+    postId        String
+    post          Post              @relation(fields: [postId], references: [id], onDelete: Cascade)
+    // one level of replies
+    parentId      String?
+    parent        Comment?          @relation('CommentReplies', fields: [parentId], references: [id], onDelete: Cascade)
+    replies       Comment[]         @relation('CommentReplies')
+    authorId      String            @default(auth().id)
+    author        User              @relation(fields: [authorId], references: [id], onDelete: Cascade)
+    content       String
+    editedAt      DateTime?
+    createdAt     DateTime          @default(now())
+    updatedAt     DateTime          @updatedAt
+    reactions     CommentReaction[]
+    attachments   Attachment[]
+    notifications Notification[]
+
+    @@allow('read', check(post, 'read'))
+    @@allow('create', authorId == auth().id && check(post, 'read'))
+    @@allow('update', authorId == auth().id)
+    @@allow('delete', authorId == auth().id || post.authorId == auth().id)
+    @@allow('delete', post.group.members?[userId == auth().id && status == ACTIVE && role in [ADMIN, MODERATOR]])
+    @@deny('post-update', postId != before().postId || authorId != before().authorId)
+
+    @@index([postId, createdAt])
+    @@map('comment')
+}
+
+model PostReaction {
+    id        String       @id @default(cuid())
+    postId    String
+    post      Post         @relation(fields: [postId], references: [id], onDelete: Cascade)
+    userId    String       @default(auth().id)
+    user      User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+    type      ReactionType @default(LIKE)
+    createdAt DateTime     @default(now())
+
+    @@allow('read', check(post, 'read'))
+    @@allow('create,update,delete', userId == auth().id && check(post, 'read'))
+    @@deny('post-update', postId != before().postId || userId != before().userId)
+
+    @@unique([postId, userId])
+    @@map('post_reaction')
+}
+
+model CommentReaction {
+    id        String       @id @default(cuid())
+    commentId String
+    comment   Comment      @relation(fields: [commentId], references: [id], onDelete: Cascade)
+    userId    String       @default(auth().id)
+    user      User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+    type      ReactionType @default(LIKE)
+    createdAt DateTime     @default(now())
+
+    @@allow('read', check(comment, 'read'))
+    @@allow('create,update,delete', userId == auth().id && check(comment, 'read'))
+    @@deny('post-update', commentId != before().commentId || userId != before().userId)
+
+    @@unique([commentId, userId])
+    @@map('comment_reaction')
+}
+
+// ───────────────────────────── polls ─────────────────────────────
+
+model Poll {
+    id            String       @id @default(cuid())
+    postId        String       @unique
+    post          Post         @relation(fields: [postId], references: [id], onDelete: Cascade)
+    question      String
+    allowMultiple Boolean      @default(false)
+    closesAt      DateTime?
+    createdAt     DateTime     @default(now())
+    options       PollOption[]
+    votes         PollVote[]
+
+    @@allow('read', check(post, 'read'))
+    @@allow('create,update,delete', post.authorId == auth().id)
+    @@deny('post-update', postId != before().postId)
+    @@map('poll')
+}
+
+model PollOption {
+    id     String     @id @default(cuid())
+    pollId String
+    poll   Poll       @relation(fields: [pollId], references: [id], onDelete: Cascade)
+    text   String
+    order  Int        @default(0)
+    votes  PollVote[]
+
+    @@allow('read', check(poll, 'read'))
+    @@allow('create,update,delete', poll.post.authorId == auth().id)
+    @@deny('post-update', pollId != before().pollId)
+
+    @@index([pollId])
+    @@map('poll_option')
+}
+
+model PollVote {
+    id        String     @id @default(cuid())
+    pollId    String
+    poll      Poll       @relation(fields: [pollId], references: [id], onDelete: Cascade)
+    optionId  String
+    option    PollOption @relation(fields: [optionId], references: [id], onDelete: Cascade)
+    userId    String     @default(auth().id)
+    user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+    createdAt DateTime   @default(now())
+
+    @@allow('read', check(poll, 'read'))
+    @@allow('create', userId == auth().id && check(poll, 'read') && option.pollId == pollId && (poll.closesAt == null || poll.closesAt > now()))
+    // single-choice polls: one vote per user (change a vote by deleting it first)
+    @@deny('create', !poll.allowMultiple && poll.votes?[userId == auth().id])
+    @@allow('delete', userId == auth().id && (poll.closesAt == null || poll.closesAt > now()))
+
+    @@unique([optionId, userId])
+    @@index([pollId, userId])
+    @@map('poll_vote')
+}
+
+// ───────────────────────────── files ─────────────────────────────
+
+model Attachment {
+    id             String        @id @default(cuid())
+    organizationId String
+    organization   Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+    uploaderId     String        @default(auth().id)
+    uploader       User          @relation(fields: [uploaderId], references: [id], onDelete: Cascade)
+    // object key in the S3 bucket: org/{organizationId}/{id}/{name}
+    key            String        @unique
+    name           String
+    mimeType       String
+    size           Int           @deny('update', true)
+    width          Int?
+    height         Int?
+    // avatars, group covers: readable by everyone in the organization
+    orgVisible     Boolean       @default(false) @deny('update', true)
+    postId         String?
+    post           Post?         @relation(fields: [postId], references: [id], onDelete: Cascade)
+    commentId      String?
+    comment        Comment?      @relation(fields: [commentId], references: [id], onDelete: Cascade)
+    messageId      String?
+    message        Message?      @relation(fields: [messageId], references: [id], onDelete: Cascade)
+    createdAt      DateTime      @default(now())
+
+    @@deny('all', !(organization.members?[userId == auth().id]))
+    @@allow('read', uploaderId == auth().id || orgVisible || check(post, 'read') || check(comment, 'read') || check(message, 'read'))
+    // created by POST /api/uploads; the uploader attaches it to their own post/comment/message
+    @@allow('create,update,delete', uploaderId == auth().id)
+    @@deny('post-update', organizationId != before().organizationId || uploaderId != before().uploaderId || key != before().key || mimeType != before().mimeType)
+
+    @@index([postId])
+    @@index([commentId])
+    @@index([messageId])
+    @@map('attachment')
+}
+
+// ───────────────────────────── chat ─────────────────────────────
+
+enum ConversationType {
+    DIRECT
+    GROUP
+}
+
+enum ConversationRole {
+    ADMIN
+    MEMBER
+}
+
+enum MessageType {
+    TEXT
+    SYSTEM
+    CALL
+}
+
+model Conversation {
+    id             String               @id @default(cuid())
+    organizationId String
+    organization   Organization         @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+    type           ConversationType     @default(GROUP) @deny('update', true)
+    title          String?
+    // DIRECT only: `${organizationId}:${sortedUserIds.join(':')}`, dedupes 1:1 conversations
+    directKey      String?              @unique
+    createdById    String               @default(auth().id)
+    createdBy      User                 @relation(fields: [createdById], references: [id], onDelete: Cascade)
+    lastMessageAt  DateTime             @default(now())
+    createdAt      DateTime             @default(now())
+    members        ConversationMember[]
+    messages       Message[]
+    calls          Call[]
+
+    @@deny('all', !(organization.members?[userId == auth().id]))
+    @@allow('read', members?[userId == auth().id])
+    @@allow('create', createdById == auth().id)
+    @@allow('update', type == GROUP && members?[userId == auth().id])
+    @@allow('delete', type == GROUP && members?[userId == auth().id && role == ADMIN])
+    @@deny('post-update', organizationId != before().organizationId || directKey != before().directKey || createdById != before().createdById)
+
+    @@index([organizationId, lastMessageAt])
+    @@map('conversation')
+}
+
+model ConversationMember {
+    id             String           @id @default(cuid())
+    conversationId String
+    conversation   Conversation     @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+    userId         String
+    user           User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+    // only conversation admins may change roles
+    role           ConversationRole @default(MEMBER) @deny('update', !(conversation.members?[userId == auth().id && role == ADMIN]))
+    lastReadAt     DateTime         @default(now())
+    mutedUntil     DateTime?
+    joinedAt       DateTime         @default(now())
+
+    @@allow('read', check(conversation, 'read'))
+    // the member must belong to the conversation's organization
+    @@deny('create', !(user.members?[organizationId == this.conversation.organizationId]))
+    @@allow('create', conversation.createdById == auth().id)
+    @@allow('create', conversation.type == GROUP && conversation.members?[userId == auth().id && role == ADMIN])
+    // own read state / mute; admins manage roles
+    @@allow('update', userId == auth().id || conversation.members?[userId == auth().id && role == ADMIN])
+    // leave a group conversation, or be removed by an admin
+    @@allow('delete', conversation.type == GROUP && (userId == auth().id || conversation.members?[userId == auth().id && role == ADMIN]))
+    @@deny('post-update', conversationId != before().conversationId || userId != before().userId)
+
+    @@unique([conversationId, userId])
+    @@index([userId])
+    @@map('conversation_member')
+}
+
+model Message {
+    id             String            @id @default(cuid())
+    conversationId String
+    conversation   Conversation      @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+    senderId       String            @default(auth().id)
+    sender         User              @relation(fields: [senderId], references: [id], onDelete: Cascade)
+    content        String            @default('')
+    type           MessageType       @default(TEXT) @deny('update', true)
+    // CALL / SYSTEM payloads (call id, duration, …)
+    data           Json?
+    replyToId      String?
+    replyTo        Message?          @relation('MessageReplies', fields: [replyToId], references: [id], onDelete: SetNull)
+    replies        Message[]         @relation('MessageReplies')
+    editedAt       DateTime?
+    // soft delete: content is cleared by the sender
+    deletedAt      DateTime?
+    createdAt      DateTime          @default(now())
+    reactions      MessageReaction[]
+    attachments    Attachment[]
+
+    @@allow('read', check(conversation, 'read'))
+    @@allow('create', senderId == auth().id && type == TEXT && check(conversation, 'read'))
+    @@allow('update', senderId == auth().id && type == TEXT)
+    @@deny('post-update', conversationId != before().conversationId || senderId != before().senderId)
+
+    @@index([conversationId, createdAt])
+    @@map('message')
+}
+
+model MessageReaction {
+    id        String       @id @default(cuid())
+    messageId String
+    message   Message      @relation(fields: [messageId], references: [id], onDelete: Cascade)
+    userId    String       @default(auth().id)
+    user      User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+    type      ReactionType @default(LIKE)
+    createdAt DateTime     @default(now())
+
+    @@allow('read', check(message, 'read'))
+    @@allow('create,update,delete', userId == auth().id && check(message, 'read'))
+    @@deny('post-update', messageId != before().messageId || userId != before().userId)
+
+    @@unique([messageId, userId])
+    @@map('message_reaction')
+}
+
+// ───────────────────────────── notifications ─────────────────────────────
+
+enum NotificationType {
+    MENTION
+    POST_COMMENT
+    COMMENT_REPLY
+    POST_REACTION
+    GROUP_POST
+    GROUP_JOIN_REQUEST
+    GROUP_JOIN_APPROVED
+    EVENT_INVITE
+    EVENT_REMINDER
+    MISSED_CALL
+}
+
+model Notification {
+    id             String           @id @default(cuid())
+    organizationId String
+    organization   Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+    userId         String
+    user           User             @relation('NotificationRecipient', fields: [userId], references: [id], onDelete: Cascade)
+    actorId        String?
+    actor          User?            @relation('NotificationActor', fields: [actorId], references: [id], onDelete: Cascade)
+    type           NotificationType @deny('update', true)
+    groupId        String?
+    group          Group?           @relation(fields: [groupId], references: [id], onDelete: Cascade)
+    postId         String?
+    post           Post?            @relation(fields: [postId], references: [id], onDelete: Cascade)
+    commentId      String?
+    comment        Comment?         @relation(fields: [commentId], references: [id], onDelete: Cascade)
+    eventId        String?
+    event          Event?           @relation(fields: [eventId], references: [id], onDelete: Cascade)
+    conversationId String?
+    callId         String?
+    data           Json?
+    readAt         DateTime?
+    createdAt      DateTime         @default(now())
+
+    // written only by the server (realtime plugin); recipients read, mark read, dismiss
+    @@allow('read,update,delete', userId == auth().id)
+    @@deny('post-update', userId != before().userId || organizationId != before().organizationId || actorId != before().actorId)
+
+    @@index([userId, organizationId, readAt, createdAt])
+    @@map('notification')
+}
+
+// ───────────────────────────── calendar ─────────────────────────────
+
+enum EventType {
+    MEETING        // has attendees; may have a video call
+    EVENT          // group/company event with RSVP
+    OUT_OF_OFFICE  // visible to the whole org
+    REMINDER       // personal
+}
+
+enum Rsvp {
+    PENDING
+    GOING
+    MAYBE
+    DECLINED
+}
+
+model Event {
+    id             String          @id @default(cuid())
+    organizationId String
+    organization   Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+    groupId        String?
+    group          Group?          @relation(fields: [groupId], references: [id], onDelete: Cascade)
+    // group events are announced as a Post(type EVENT)
+    postId         String?         @unique
+    post           Post?           @relation(fields: [postId], references: [id], onDelete: SetNull)
+    creatorId      String          @default(auth().id)
+    creator        User            @relation(fields: [creatorId], references: [id], onDelete: Cascade)
+    title          String
+    description    String?
+    type           EventType       @default(MEETING)
+    startAt        DateTime
+    endAt          DateTime
+    allDay         Boolean         @default(false)
+    location       String?
+    // RFC 5545 recurrence rule (expanded client-side)
+    rrule          String?
+    hasVideoCall   Boolean         @default(false)
+    remindedAt     DateTime?
+    createdAt      DateTime        @default(now())
+    updatedAt      DateTime        @updatedAt
+    attendees      EventAttendee[]
+    calls          Call[]
+    notifications  Notification[]
+
+    @@deny('all', !(organization.members?[userId == auth().id]))
+    @@allow('read', creatorId == auth().id || attendees?[userId == auth().id] || type == OUT_OF_OFFICE)
+    @@allow('read', groupId != null && check(group, 'read'))
+    @@allow('create', creatorId == auth().id && (groupId == null || group.members?[userId == auth().id && status == ACTIVE]))
+    @@allow('update,delete', creatorId == auth().id)
+    @@deny('post-update', organizationId != before().organizationId || creatorId != before().creatorId)
+    @@deny('post-update', endAt < startAt)
+    @@deny('create', endAt < startAt)
+
+    @@index([organizationId, startAt])
+    @@index([groupId])
+    @@map('event')
+}
+
+model EventAttendee {
+    id        String   @id @default(cuid())
+    eventId   String
+    event     Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+    userId    String
+    user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+    rsvp      Rsvp     @default(PENDING)
+    createdAt DateTime @default(now())
+
+    @@allow('read', check(event, 'read'))
+    @@deny('create', !(user.members?[organizationId == this.event.organizationId]))
+    // the creator invites; anyone who can see a group event can RSVP themself
+    @@allow('create', event.creatorId == auth().id)
+    @@allow('create', userId == auth().id && check(event, 'read'))
+    @@allow('update', userId == auth().id || event.creatorId == auth().id)
+    @@allow('delete', userId == auth().id || event.creatorId == auth().id)
+    @@deny('post-update', eventId != before().eventId || userId != before().userId)
+
+    @@unique([eventId, userId])
+    @@index([userId])
+    @@map('event_attendee')
+}
+
+// ───────────────────────────── calls ─────────────────────────────
+
+enum CallType {
+    AUDIO
+    VIDEO
+}
+
+enum CallStatus {
+    RINGING
+    ACTIVE
+    ENDED
+}
+
+model Call {
+    id             String            @id @default(cuid())
+    organizationId String
+    organization   Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+    conversationId String?
+    conversation   Conversation?     @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+    eventId        String?
+    event          Event?            @relation(fields: [eventId], references: [id], onDelete: Cascade)
+    type           CallType          @default(VIDEO)
+    status         CallStatus        @default(RINGING)
+    startedById    String
+    startedBy      User              @relation(fields: [startedById], references: [id], onDelete: Cascade)
+    startedAt      DateTime          @default(now())
+    endedAt        DateTime?
+    participants   CallParticipant[]
+
+    // written only by the socket server (src/server/socket/calls.ts) after its own checks
+    @@deny('all', !(organization.members?[userId == auth().id]))
+    @@allow('read', participants?[userId == auth().id] || check(conversation, 'read') || check(event, 'read'))
+
+    @@index([conversationId])
+    @@index([eventId])
+    @@map('call')
+}
+
+model CallParticipant {
+    id       String    @id @default(cuid())
+    callId   String
+    call     Call      @relation(fields: [callId], references: [id], onDelete: Cascade)
+    userId   String
+    user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+    joinedAt DateTime  @default(now())
+    leftAt   DateTime?
+
+    @@allow('read', check(call, 'read'))
+
+    @@unique([callId, userId])
+    @@map('call_participant')
+}

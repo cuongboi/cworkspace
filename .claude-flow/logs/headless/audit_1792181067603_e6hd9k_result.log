@@ -1,0 +1,105 @@
+[2026-10-16T20:05:14.346Z] RESULT
+============================================================
+{
+  "success": true,
+  "output": "# Security Analysis Report: cworkplace\n\nI've analyzed the provided codebase context. Since you've shared minified compiled JavaScript assets and the AGENTS.md architecture guide, I can identify architectural patterns and potential vulnerabilities. Here's my analysis:\n\n```json\n{\n  \"vulnerabilities\": [\n    {\n      \"severity\": \"high\",\n      \"file\": \"apps/api/src/routes/execute.ts\",\n      \"line\": null,\n      \"description\": \"The /api/execute endpoint allow-lists models and CRUD operators (mentioned in AGENTS.md). Risk: If the guardExecute allow-list is incomplete or incorrectly configured, it could expose sensitive models or operations. Ensure every model with sensitive data explicitly denies access, and only explicitly allowed operations are permitted.\"\n    },\n    {\n      \"severity\": \"high\",\n      \"file\": \"apps/api/zenstack/schema.zmodel\",\n      \"line\": null,\n      \"description\": \"Multi-tenancy isolation enforced by ZenStack policies. Risk: If any top-level tenant entity is missing the `@@deny('all', !(organization.members?[userId == auth().id]))` guard, or if child rows lack proper `check(parent)` constraints, tenant data leakage is possible. The AGENTS.md states tenant isolation is 'the most important invariant' but depends entirely on policy correctness.\"\n    },\n    {\n      \"severity\": \"high\",\n      \"file\": \"apps/api/src/websocket/index.ts\",\n      \"line\": null,\n      \"description\": \"WebSocket endpoint at /ws requires authentication but authorization on individual socket events is not visible in compiled assets. Risk: Each socket event handler must validate user has access to the requested resource (e.g., checking organizationId, conversationId). Unvalidated handlers could leak cross-tenant data or allow unauthorized operations like call signaling.\"\n    },\n    {\n      \"severity\": \"high\",\n      \"file\": \"apps/web/src/components/*/rich-text-*.tsx\",\n      \"line\": null,\n      \"description\": \"Rich text rendering detected in posts, comments, and group descriptions (visible in compiled assets: rich-text-Bkev6nic.js). Risk: If not properly HTML-sanitized, user input in posts/comments could enable XSS attacks. Ensure DOMPurify or equivalent is used with strict allowlist for tags.\"\n    },\n    {\n      \"severity\": \"medium\",\n      \"file\": \"apps/api/src/routes/uploads.ts\",\n      \"line\": null,\n      \"description\": \"File uploads to S3 are handled (referenced in AGENTS.md). Risk: Compiled assets show file upload logic (upload-CnN9eTlB.js) but validation details are not visible. Ensure: (1) file type/MIME validation on server-side, (2) file size limits, (3) malware scanning, (4) secure bucket policy preventing public reads unless intentional.\"\n    },\n    {\n      \"severity\": \"medium\",\n      \"file\": \"apps/api/src/env.ts\",\n      \"line\": null,\n      \"description\": \"S3 and mail credentials in environment. Risk: If S3_ACCESS_KEY_ID, S3_SECRET_ACCESS_KEY, or RESEND_API_KEY are accidentally logged, printed to console (AGENTS.md mentions 'emails are printed to API console if Resend not configured'), or exposed in error messages, credentials are compromised. Ensure these are never logged in production.\"\n    },\n    {\n      \"severity\": \"medium\",\n      \"file\": \"apps/api/src/lib/db.ts\",\n      \"line\": null,\n      \"description\": \"Policy-bypassing `db` client is available for server-only code. Risk: Mentioned in AGENTS.md as 'Never expose it to /api/execute'. If any route handler mistakenly uses `db` for user input instead of `userDb` (policy-enforced), access controls are bypassed. Add lint rule to catch this.\"\n    },\n    {\n      \"severity\": \"medium\",\n      \"file\": \"apps/api/src/server/plugins/realtime-plugin.ts\",\n      \"line\": null,\n      \"description\": \"Mutation side effects and notifications are emitted through WebSocket. Risk: If the realtime plugin doesn't verify the user has access to the mutated entity before emitting, notifications could leak data. Example: emitting 'post:created' to org:{id} without verifying post exists in that org could expose existence of posts in other orgs.\"\n    },\n    {\n      \"severity\": \"medium\",\n      \"file\": \"apps/api/src/index.ts\",\n      \"line\": null,\n      \"description\": \"Rate limiting is capped at 300 /min per user on /api/execute (per AGENTS.md). Risk: Other endpoints may lack rate limiting. Brute-force attacks on login, password reset, or invitation endpoints are not mitigated unless rate limits are uniformly applied.\"\n    },\n    {\n      \"severity\": \"medium\",\n      \"file\": \"apps/web/src/router.tsx\",\n      \"line\": null,\n      \"description\": \"Tenant routes are children of /:orgSlug. Risk: If route handlers or API calls don't validate the orgSlug matches the authenticated user's active organization, cross-tenant access is possible. Ensure every page reads org from useOrg() and compares against auth state.\"\n    },\n    {\n      \"severity\": \"low\",\n      \"file\": \"apps/api/src/lib/auth.ts\",\n      \"line\": null,\n      \"description\": \"Org hooks handle group membership on invite/remove. Risk: Low — AGENTS.md states hooks create 'All company' group and sync memberships. But verify that banned users' notifications/messages are purged or marked as such.\"\n    },\n    {\n      \"severity\": \"low\",\n      \"file\": \"apps/api/zenstack/schema.zmodel\",\n      \"line\": null,\n      \"description\": \"Server-written models (Notification, Call, Message type CALL/SYSTEM) are exempt from user input validation. Risk: If async jobs or WebSocket handlers create these without proper tenancy checks, data could be created in wrong org. Ensure all writes include organizationId checks.\"\n    }\n  ],\n  \"riskScore\": 62,\n  \"recommendations\": [\n    \"1. **Audit ZenStack policies immediately**: Every model must have `@@allow` rules. Run `bun --cwd apps/api run test` and confirm all `tests/policies.test.ts` cases pass, including negative tests for cross-tenant reads/writes.\",\n    \"2. **Verify rich-text sanitization**: Search codebase for DOMPurify or similar HTML sanitization in post/comment rendering. If absent, add it with a strict allowlist (no <script>, <iframe>, event handlers).\",\n    \"3. **Validate socket event handlers**: Audit `apps/api/src/websocket/*.ts` to ensure every event (call:join, call:signal, etc.) checks `auth()` and verifies the user has access to the target resource (organization, conversation, call, etc.).\",\n    \"4. **Enforce lint rules for db client usage**: Add ESLint rule to flag `db.model.operation()` in route handlers; only `userDb` should be used for user-driven operations. Exceptions require code review.\",\n    \"5. **Add Content Security Policy header**: Emit `Content-Security-Policy: default-src 'self'; script-src 'self'; object-src 'none'; ...` to mitigate XSS impact.\",\n    \"6. **File upload validation**: Confirm `apps/api/src/routes/uploads.ts` validates MIME type server-side (whitelist only image/* for avatars, PDFs for docs, etc.), enforces size limits (e.g., 25MB), and stores files outside webroot or behind authentication.\",\n    \"7. **Rate limit all sensitive endpoints**: Extend rate limiting beyond /api/execute to `/api/auth/sign-in`, `/api/auth/password-reset`, and `/api/organization/invite` to block brute-force attacks.\",\n    \"8. **Verify CORS configuration**: Check that `WEB_ORIGIN` env var is used by `@elysia/cors` and does NOT include wildcards (e.g., not `*` or `*.example.com`).\",\n    \"9. **Audit realtime emission**: In `realtime-plugin.ts`, verify every `emitToUsers()` / `emitToRoom()` call includes a tenancy check before emitting. Example: before `emitToRoom('org:123')`, confirm the mutation entity belongs to org:123.\",\n    \"10. **Test tenant isolation**: Expand `tests/policies.test.ts` to include scenarios: (a) user from Org A cannot read data from Org B via /api/execute, (b) socket events from Org A user are rejected if they reference Org B resources, (c) WebRTC signaling is isolated by call.organizationId.\",\n    \"11. **Secure credential handling**: Add pre-commit hook to scan for hardcoded AWS keys, Resend tokens, BETTER_AUTH_SECRET in source. Never log these in production (adjust RESEND config to fail loudly instead of printing).\",\n    \"12. **Add CSRF protection**: If using cookies for auth, implement double-submit cookie pattern or SameSite=Strict. Verify state-changing operations (POST, PUT, DELETE) require a CSRF token.\",\n    \"13. **Review server-only fields**: Confirm `@deny('update', true)` is applied to admin-only fields (`User.role`, `banned`, `permissions`, `MemberPermission`). Run `tests/user-admin-fields.test.ts` before every deploy.\",\n    \"14. **Monitor WebSocket resource leaks**: Ensure socket cleanup (detach handlers, leave rooms) happens on disconnect to prevent memory leaks and stale presence data.\"\n  ]\n}\n```\n\n## Key Findings\n\n**High-Risk Areas:**\n- **Tenant isolation** depends entirely on ZenStack policy correctness; any missing `@@deny` guard or incomplete `check(parent)` can leak data across organizations.\n- **WebSocket authorization** is not visible in compiled assets; socket event handlers must validate organizationId and resource ownership.\n- **Rich-text XSS** — if user input in posts/comments/descriptions isn't sanitized, stored XSS attacks are possible.\n\n**Why the score is 62:**\n- Architecture is sound (policy-first, ZenStack ORM, single-server model avoids distributed auth complexity).\n- But policy enforcement depends on configuration correctness, which is hard to audit without source code.\n- WebSocket and file upload attack surfaces lack visible validation in compiled assets.\n\n**Next steps:** Run the provided analysis against the *uncompiled* source (`apps/api/src` and `apps/web/src`) to verify policies, socket handlers, and sanitization.\n",
+  "parsedOutput": {
+    "vulnerabilities": [
+      {
+        "severity": "high",
+        "file": "apps/api/src/routes/execute.ts",
+        "line": null,
+        "description": "The /api/execute endpoint allow-lists models and CRUD operators (mentioned in AGENTS.md). Risk: If the guardExecute allow-list is incomplete or incorrectly configured, it could expose sensitive models or operations. Ensure every model with sensitive data explicitly denies access, and only explicitly allowed operations are permitted."
+      },
+      {
+        "severity": "high",
+        "file": "apps/api/zenstack/schema.zmodel",
+        "line": null,
+        "description": "Multi-tenancy isolation enforced by ZenStack policies. Risk: If any top-level tenant entity is missing the `@@deny('all', !(organization.members?[userId == auth().id]))` guard, or if child rows lack proper `check(parent)` constraints, tenant data leakage is possible. The AGENTS.md states tenant isolation is 'the most important invariant' but depends entirely on policy correctness."
+      },
+      {
+        "severity": "high",
+        "file": "apps/api/src/websocket/index.ts",
+        "line": null,
+        "description": "WebSocket endpoint at /ws requires authentication but authorization on individual socket events is not visible in compiled assets. Risk: Each socket event handler must validate user has access to the requested resource (e.g., checking organizationId, conversationId). Unvalidated handlers could leak cross-tenant data or allow unauthorized operations like call signaling."
+      },
+      {
+        "severity": "high",
+        "file": "apps/web/src/components/*/rich-text-*.tsx",
+        "line": null,
+        "description": "Rich text rendering detected in posts, comments, and group descriptions (visible in compiled assets: rich-text-Bkev6nic.js). Risk: If not properly HTML-sanitized, user input in posts/comments could enable XSS attacks. Ensure DOMPurify or equivalent is used with strict allowlist for tags."
+      },
+      {
+        "severity": "medium",
+        "file": "apps/api/src/routes/uploads.ts",
+        "line": null,
+        "description": "File uploads to S3 are handled (referenced in AGENTS.md). Risk: Compiled assets show file upload logic (upload-CnN9eTlB.js) but validation details are not visible. Ensure: (1) file type/MIME validation on server-side, (2) file size limits, (3) malware scanning, (4) secure bucket policy preventing public reads unless intentional."
+      },
+      {
+        "severity": "medium",
+        "file": "apps/api/src/env.ts",
+        "line": null,
+        "description": "S3 and mail credentials in environment. Risk: If S3_ACCESS_KEY_ID, S3_SECRET_ACCESS_KEY, or RESEND_API_KEY are accidentally logged, printed to console (AGENTS.md mentions 'emails are printed to API console if Resend not configured'), or exposed in error messages, credentials are compromised. Ensure these are never logged in production."
+      },
+      {
+        "severity": "medium",
+        "file": "apps/api/src/lib/db.ts",
+        "line": null,
+        "description": "Policy-bypassing `db` client is available for server-only code. Risk: Mentioned in AGENTS.md as 'Never expose it to /api/execute'. If any route handler mistakenly uses `db` for user input instead of `userDb` (policy-enforced), access controls are bypassed. Add lint rule to catch this."
+      },
+      {
+        "severity": "medium",
+        "file": "apps/api/src/server/plugins/realtime-plugin.ts",
+        "line": null,
+        "description": "Mutation side effects and notifications are emitted through WebSocket. Risk: If the realtime plugin doesn't verify the user has access to the mutated entity before emitting, notifications could leak data. Example: emitting 'post:created' to org:{id} without verifying post exists in that org could expose existence of posts in other orgs."
+      },
+      {
+        "severity": "medium",
+        "file": "apps/api/src/index.ts",
+        "line": null,
+        "description": "Rate limiting is capped at 300 /min per user on /api/execute (per AGENTS.md). Risk: Other endpoints may lack rate limiting. Brute-force attacks on login, password reset, or invitation endpoints are not mitigated unless rate limits are uniformly applied."
+      },
+      {
+        "severity": "medium",
+        "file": "apps/web/src/router.tsx",
+        "line": null,
+        "description": "Tenant routes are children of /:orgSlug. Risk: If route handlers or API calls don't validate the orgSlug matches the authenticated user's active organization, cross-tenant access is possible. Ensure every page reads org from useOrg() and compares against auth state."
+      },
+      {
+        "severity": "low",
+        "file": "apps/api/src/lib/auth.ts",
+        "line": null,
+        "description": "Org hooks handle group membership on invite/remove. Risk: Low — AGENTS.md states hooks create 'All company' group and sync memberships. But verify that banned users' notifications/messages are purged or marked as such."
+      },
+      {
+        "severity": "low",
+        "file": "apps/api/zenstack/schema.zmodel",
+        "line": null,
+        "description": "Server-written models (Notification, Call, Message type CALL/SYSTEM) are exempt from user input validation. Risk: If async jobs or WebSocket handlers create these without proper tenancy checks, data could be created in wrong org. Ensure all writes include organizationId checks."
+      }
+    ],
+    "riskScore": 62,
+    "recommendations": [
+      "1. **Audit ZenStack policies immediately**: Every model must have `@@allow` rules. Run `bun --cwd apps/api run test` and confirm all `tests/policies.test.ts` cases pass, including negative tests for cross-tenant reads/writes.",
+      "2. **Verify rich-text sanitization**: Search codebase for DOMPurify or similar HTML sanitization in post/comment rendering. If absent, add it with a strict allowlist (no <script>, <iframe>, event handlers).",
+      "3. **Validate socket event handlers**: Audit `apps/api/src/websocket/*.ts` to ensure every event (call:join, call:signal, etc.) checks `auth()` and verifies the user has access to the target resource (organization, conversation, call, etc.).",
+      "4. **Enforce lint rules for db client usage**: Add ESLint rule to flag `db.model.operation()` in route handlers; only `userDb` should be used for user-driven operations. Exceptions require code review.",
+      "5. **Add Content Security Policy header**: Emit `Content-Security-Policy: default-src 'self'; script-src 'self'; object-src 'none'; ...` to mitigate XSS impact.",
+      "6. **File upload validation**: Confirm `apps/api/src/routes/uploads.ts` validates MIME type server-side (whitelist only image/* for avatars, PDFs for docs, etc.), enforces size limits (e.g., 25MB), and stores files outside webroot or behind authentication.",
+      "7. **Rate limit all sensitive endpoints**: Extend rate limiting beyond /api/execute to `/api/auth/sign-in`, `/api/auth/password-reset`, and `/api/organization/invite` to block brute-force attacks.",
+      "8. **Verify CORS configuration**: Check that `WEB_ORIGIN` env var is used by `@elysia/cors` and does NOT include wildcards (e.g., not `*` or `*.example.com`).",
+      "9. **Audit realtime emission**: In `realtime-plugin.ts`, verify every `emitToUsers()` / `emitToRoom()` call includes a tenancy check before emitting. Example: before `emitToRoom('org:123')`, confirm the mutation entity belongs to org:123.",
+      "10. **Test tenant isolation**: Expand `tests/policies.test.ts` to include scenarios: (a) user from Org A cannot read data from Org B via /api/execute, (b) socket events from Org A user are rejected if they reference Org B resources, (c) WebRTC signaling is isolated by call.organizationId.",
+      "11. **Secure credential handling**: Add pre-commit hook to scan for hardcoded AWS keys, Resend tokens, BETTER_AUTH_SECRET in source. Never log these in production (adjust RESEND config to fail loudly instead of printing).",
+      "12. **Add CSRF protection**: If using cookies for auth, implement double-submit cookie pattern or SameSite=Strict. Verify state-changing operations (POST, PUT, DELETE) require a CSRF token.",
+      "13. **Review server-only fields**: Confirm `@deny('update', true)` is applied to admin-only fields (`User.role`, `banned`, `permissions`, `MemberPermission`). Run `tests/user-admin-fields.test.ts` before every deploy.",
+      "14. **Monitor WebSocket resource leaks**: Ensure socket cleanup (detach handlers, leave rooms) happens on disconnect to prevent memory leaks and stale presence data."
+    ]
+  },
+  "durationMs": 46743,
+  "model": "haiku",
+  "sandboxMode": "strict",
+  "workerType": "audit",
+  "timestamp": "2026-10-16T20:05:14.346Z",
+  "executionId": "audit_1792181067603_e6hd9k"
+}

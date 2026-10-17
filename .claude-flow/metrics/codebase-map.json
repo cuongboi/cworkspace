@@ -1,0 +1,11 @@
+{
+  "timestamp": "2026-10-17T00:52:47.291Z",
+  "projectRoot": "/Users/cuong/Desktop/P2026/cworkplace",
+  "structure": {
+    "hasPackageJson": true,
+    "hasTsConfig": false,
+    "hasClaudeConfig": true,
+    "hasClaudeFlow": true
+  },
+  "scannedAt": 1792198367291
+}

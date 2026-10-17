@@ -1,0 +1,81 @@
+[2026-10-16T20:04:18.984Z] RESULT
+============================================================
+{
+  "success": true,
+  "output": "Here's the comprehensive performance analysis of the codebase:\n\n---\n\n## Performance Analysis\n\n### 1. N+1 Query Patterns\n\n**1a. `notify()` serializes N individual INSERTs** — `apps/api/src/server/notify.ts:26`\n\nEach notification is created one at a time, then the realtime plugin fetches each one separately:\n\n```typescript\n// CURRENT — N round-trips\nfor (const row of rows) await db.notification.create({ data: row });\n```\n\nFix: batch with `createMany`, then one `findMany` with `id: { in: [...ids] }` to load actors before emitting.\n\n**1b. Comment handler — up to 4 DB queries per row** — `realtime-plugin.ts:92`\n\nEach `Comment` triggers: parent post fetch → group fetch inside `mentionedReaders()` → user fetch → optional parent comment fetch. Pass `organizationId` and `privacy` from the already-loaded post into `mentionedReaders` so it skips the redundant `group.findUnique`.\n\n**1c. Message handler — `conversationMemberIds` called per message** — `realtime-plugin.ts:292`\n\n```typescript\nfor (const row of rows) {\n  const memberIds = await conversationMemberIds(conversationId); // DB hit every iteration\n```\n\nFix: add a local `Map` cache inside the handler and fetch each `conversationId` only once per batch.\n\n**1d. `call:start` calls `callTitle()` per invitee** — `websocket/calls.ts:227`\n\nFor a 6-person call, `callTitle()` runs 5 identical `db.conversation.findUnique` queries. Move it before the loop — the title is the same for all invitees.\n\n---\n\n### 2. Unnecessary React Re-renders\n\n**2a. `ContactsRail` re-sorts up to 100 contacts on every presence update** — `contacts-rail.tsx:26`\n\n```tsx\n// CURRENT — no memoization\nconst sorted = [...people].sort((a, b) => Number(online.has(b.id)) - Number(online.has(a.id)))\n```\n\nFix: `useMemo(() => [...people].sort(...), [people, online])`\n\n**2b. `OrgLayout` re-creates context value on every render** — `org-layout.tsx:98`\n\n```typescript\n// New object + new function on every render — propagates to ALL useOrg() consumers\nconst value = { org, me, role, isAdmin, href: (path = \"\") => `/${org.slug}${path}` }\n```\n\nFix: `useMemo` + `useCallback` on `href`. Every `AppSidebar`, `AppHeader`, `ContactsRail`, and page component re-renders unnecessarily today.\n\n**2c. `MessageList` passes new `actions` object to every `MessageRow` per render** — `message-list.tsx:166`\n\n```tsx\nactions={{ ...actions, onJumpTo: jumpTo }}  // new reference every render\n```\n\nFix: `useMemo` on the merged actions object + `React.memo` on `MessageRow`. In a 200-message thread, every state change causes 200 re-renders.\n\n**2d. `useRealtimeSync` invalidates 4 model prefixes on one reaction** — `use-realtime-sync.ts:13`\n\n```typescript\nuseSocketEvent(\"reaction:changed\", () =>\n  invalidateModels(qc, [\"postReaction\", \"commentReaction\", \"post\", \"comment\"])\n)\n```\n\nOne emoji tap triggers ~10+ global refetches. The event payloads already include `postId`/`groupId` — use them to target `queryClient.invalidateQueries({ queryKey: [\"post\", \"findMany\", \"feed\", groupId] })` instead.\n\n---\n\n### 3. Caching Opportunities\n\n**3a. Notification count refetches on 30s stale clock** — `notification-bell.tsx`\n\nThe count is already invalidated instantly via `notification:new` socket events. Add `staleTime: Infinity` so it only refetches when the event fires, not on every 30s timer.\n\n**3b. Contacts/group membership queries** — `staleTime: 5 * 60_000` is safe since realtime events already invalidate these when membership changes.\n\n---\n\n### 4. Memory Leaks\n\n**4a. `rate-limit.ts` bucket Map cleanup only triggers at 50,000 entries** — `server/rate-limit.ts:18`\n\nBelow the threshold, idle buckets accumulate for up to 10 minutes with no cleanup. Fix: add a `setInterval` that prunes entries idle > 120s, running every 60s.\n\n**4b. `accentFor` — module-level cache prevents repeated hash computation** — `lib/accent.ts:14` (see #5a below, same fix)\n\n---\n\n### 5. Redundant Computations\n\n**5a. `accentFor()` re-hashes user ID on every `UserAvatar` render** — `lib/accent.ts:14`\n\nSimple module-level `Map` cache fixes this — user IDs are stable UUIDs, so the cache needs at most O(unique users) entries and never grows unboundedly.\n\n```typescript\nconst cache = new Map<string, string>()\nexport function accentFor(key: string | null | undefined) {\n  const k = key ?? \"\"\n  if (cache.has(k)) return cache.get(k)!\n  let hash = 0\n  for (const ch of k) hash = (hash * 31 + ch.charCodeAt(0)) | 0\n  const result = ACCENTS[Math.abs(hash) % ACCENTS.length]!\n  cache.set(k, result)\n  return result\n}\n```\n\n**5b. `parseText()` called on every render of `RichText`** — `common/rich-text.tsx:17`\n\n`RichText` renders inside posts, comments, and messages. Wrap in `useMemo(() => parseText(text), [text])`.\n\n**5c. Search input fires a query on every keystroke** — `groups/group-members.tsx:365`\n\nThe query key includes `q.trim()` so each character typed triggers a new network request. Add a 300ms debounce before updating the query key.\n\n**5d. `reactionMeta()` does a `.find()` on every render call** — `reactions.tsx:248`\n\nReplace the array `.find()` with a module-level `Map` for O(1) lookup.\n\n---\n\n### Priority Order\n\n| Priority | Issue | File | Effort |\n|---|---|---|---|\n| 🔴 High | N+1 in `notify()` — N serial INSERTs + N SELECTs | `server/notify.ts:26` | Low |\n| 🔴 High | `OrgContext` value re-created every render | `org-layout.tsx:98` | Low |\n| 🔴 High | `MessageRow` gets new `actions` ref per render | `message-list.tsx:166` | Low |\n| 🔴 High | Broad reaction invalidation (4 prefixes) | `use-realtime-sync.ts:13` | Medium |\n| 🟡 Med | `callTitle()` in invitee loop | `websocket/calls.ts:227` | Trivial |\n| 🟡 Med | `conversationMemberIds` per message in loop | `realtime-plugin.ts:292` | Low |\n| 🟡 Med | Contact sort not memoized | `contacts-rail.tsx:26` | Trivial |\n| 🟡 Med | Keystroke-per-request search | `groups/group-members.tsx:365` | Low |\n| 🟡 Med | `parseText()` not memoized | `rich-text.tsx:17` | Trivial |\n| 🟢 Low | `accentFor` hash cache | `lib/accent.ts:14` | Trivial |\n| 🟢 Low | Rate-limit bucket cleanup | `server/rate-limit.ts:18` | Low |\n",
+  "parsedOutput": {
+    "sections": [
+      {
+        "title": "Performance Analysis",
+        "content": "\n",
+        "level": 2
+      },
+      {
+        "title": "1. N+1 Query Patterns",
+        "content": "\n**1a. `notify()` serializes N individual INSERTs** — `apps/api/src/server/notify.ts:26`\n\nEach notification is created one at a time, then the realtime plugin fetches each one separately:\n\n```typescript\n// CURRENT — N round-trips\nfor (const row of rows) await db.notification.create({ data: row });\n```\n\nFix: batch with `createMany`, then one `findMany` with `id: { in: [...ids] }` to load actors before emitting.\n\n**1b. Comment handler — up to 4 DB queries per row** — `realtime-plugin.ts:92`\n\nEach `Comment` triggers: parent post fetch → group fetch inside `mentionedReaders()` → user fetch → optional parent comment fetch. Pass `organizationId` and `privacy` from the already-loaded post into `mentionedReaders` so it skips the redundant `group.findUnique`.\n\n**1c. Message handler — `conversationMemberIds` called per message** — `realtime-plugin.ts:292`\n\n```typescript\nfor (const row of rows) {\n  const memberIds = await conversationMemberIds(conversationId); // DB hit every iteration\n```\n\nFix: add a local `Map` cache inside the handler and fetch each `conversationId` only once per batch.\n\n**1d. `call:start` calls `callTitle()` per invitee** — `websocket/calls.ts:227`\n\nFor a 6-person call, `callTitle()` runs 5 identical `db.conversation.findUnique` queries. Move it before the loop — the title is the same for all invitees.\n\n---\n\n",
+        "level": 3
+      },
+      {
+        "title": "2. Unnecessary React Re-renders",
+        "content": "\n**2a. `ContactsRail` re-sorts up to 100 contacts on every presence update** — `contacts-rail.tsx:26`\n\n```tsx\n// CURRENT — no memoization\nconst sorted = [...people].sort((a, b) => Number(online.has(b.id)) - Number(online.has(a.id)))\n```\n\nFix: `useMemo(() => [...people].sort(...), [people, online])`\n\n**2b. `OrgLayout` re-creates context value on every render** — `org-layout.tsx:98`\n\n```typescript\n// New object + new function on every render — propagates to ALL useOrg() consumers\nconst value = { org, me, role, isAdmin, href: (path = \"\") => `/${org.slug}${path}` }\n```\n\nFix: `useMemo` + `useCallback` on `href`. Every `AppSidebar`, `AppHeader`, `ContactsRail`, and page component re-renders unnecessarily today.\n\n**2c. `MessageList` passes new `actions` object to every `MessageRow` per render** — `message-list.tsx:166`\n\n```tsx\nactions={{ ...actions, onJumpTo: jumpTo }}  // new reference every render\n```\n\nFix: `useMemo` on the merged actions object + `React.memo` on `MessageRow`. In a 200-message thread, every state change causes 200 re-renders.\n\n**2d. `useRealtimeSync` invalidates 4 model prefixes on one reaction** — `use-realtime-sync.ts:13`\n\n```typescript\nuseSocketEvent(\"reaction:changed\", () =>\n  invalidateModels(qc, [\"postReaction\", \"commentReaction\", \"post\", \"comment\"])\n)\n```\n\nOne emoji tap triggers ~10+ global refetches. The event payloads already include `postId`/`groupId` — use them to target `queryClient.invalidateQueries({ queryKey: [\"post\", \"findMany\", \"feed\", groupId] })` instead.\n\n---\n\n",
+        "level": 3
+      },
+      {
+        "title": "3. Caching Opportunities",
+        "content": "\n**3a. Notification count refetches on 30s stale clock** — `notification-bell.tsx`\n\nThe count is already invalidated instantly via `notification:new` socket events. Add `staleTime: Infinity` so it only refetches when the event fires, not on every 30s timer.\n\n**3b. Contacts/group membership queries** — `staleTime: 5 * 60_000` is safe since realtime events already invalidate these when membership changes.\n\n---\n\n",
+        "level": 3
+      },
+      {
+        "title": "4. Memory Leaks",
+        "content": "\n**4a. `rate-limit.ts` bucket Map cleanup only triggers at 50,000 entries** — `server/rate-limit.ts:18`\n\nBelow the threshold, idle buckets accumulate for up to 10 minutes with no cleanup. Fix: add a `setInterval` that prunes entries idle > 120s, running every 60s.\n\n**4b. `accentFor` — module-level cache prevents repeated hash computation** — `lib/accent.ts:14` (see #5a below, same fix)\n\n---\n\n",
+        "level": 3
+      },
+      {
+        "title": "5. Redundant Computations",
+        "content": "\n**5a. `accentFor()` re-hashes user ID on every `UserAvatar` render** — `lib/accent.ts:14`\n\nSimple module-level `Map` cache fixes this — user IDs are stable UUIDs, so the cache needs at most O(unique users) entries and never grows unboundedly.\n\n```typescript\nconst cache = new Map<string, string>()\nexport function accentFor(key: string | null | undefined) {\n  const k = key ?? \"\"\n  if (cache.has(k)) return cache.get(k)!\n  let hash = 0\n  for (const ch of k) hash = (hash * 31 + ch.charCodeAt(0)) | 0\n  const result = ACCENTS[Math.abs(hash) % ACCENTS.length]!\n  cache.set(k, result)\n  return result\n}\n```\n\n**5b. `parseText()` called on every render of `RichText`** — `common/rich-text.tsx:17`\n\n`RichText` renders inside posts, comments, and messages. Wrap in `useMemo(() => parseText(text), [text])`.\n\n**5c. Search input fires a query on every keystroke** — `groups/group-members.tsx:365`\n\nThe query key includes `q.trim()` so each character typed triggers a new network request. Add a 300ms debounce before updating the query key.\n\n**5d. `reactionMeta()` does a `.find()` on every render call** — `reactions.tsx:248`\n\nReplace the array `.find()` with a module-level `Map` for O(1) lookup.\n\n---\n\n",
+        "level": 3
+      },
+      {
+        "title": "Priority Order",
+        "content": "| Priority | Issue | File | Effort |\n|---|---|---|---|\n| 🔴 High | N+1 in `notify()` — N serial INSERTs + N SELECTs | `server/notify.ts:26` | Low |\n| 🔴 High | `OrgContext` value re-created every render | `org-layout.tsx:98` | Low |\n| 🔴 High | `MessageRow` gets new `actions` ref per render | `message-list.tsx:166` | Low |\n| 🔴 High | Broad reaction invalidation (4 prefixes) | `use-realtime-sync.ts:13` | Medium |\n| 🟡 Med | `callTitle()` in invitee loop | `websocket/calls.ts:227` | Trivial |\n| 🟡 Med | `conversationMemberIds` per message in loop | `realtime-plugin.ts:292` | Low |\n| 🟡 Med | Contact sort not memoized | `contacts-rail.tsx:26` | Trivial |\n| 🟡 Med | Keystroke-per-request search | `groups/group-members.tsx:365` | Low |\n| 🟡 Med | `parseText()` not memoized | `rich-text.tsx:17` | Trivial |\n| 🟢 Low | `accentFor` hash cache | `lib/accent.ts:14` | Trivial |\n| 🟢 Low | Rate-limit bucket cleanup | `server/rate-limit.ts:18` | Low |",
+        "level": 3
+      }
+    ],
+    "codeBlocks": [
+      {
+        "language": "typescript",
+        "code": "// CURRENT — N round-trips\nfor (const row of rows) await db.notification.create({ data: row });"
+      },
+      {
+        "language": "typescript",
+        "code": "for (const row of rows) {\n  const memberIds = await conversationMemberIds(conversationId); // DB hit every iteration"
+      },
+      {
+        "language": "tsx",
+        "code": "// CURRENT — no memoization\nconst sorted = [...people].sort((a, b) => Number(online.has(b.id)) - Number(online.has(a.id)))"
+      },
+      {
+        "language": "typescript",
+        "code": "// New object + new function on every render — propagates to ALL useOrg() consumers\nconst value = { org, me, role, isAdmin, href: (path = \"\") => `/${org.slug}${path}` }"
+      },
+      {
+        "language": "tsx",
+        "code": "actions={{ ...actions, onJumpTo: jumpTo }}  // new reference every render"
+      },
+      {
+        "language": "typescript",
+        "code": "useSocketEvent(\"reaction:changed\", () =>\n  invalidateModels(qc, [\"postReaction\", \"commentReaction\", \"post\", \"comment\"])\n)"
+      },
+      {
+        "language": "typescript",
+        "code": "const cache = new Map<string, string>()\nexport function accentFor(key: string | null | undefined) {\n  const k = key ?? \"\"\n  if (cache.has(k)) return cache.get(k)!\n  let hash = 0\n  for (const ch of k) hash = (hash * 31 + ch.charCodeAt(0)) | 0\n  const result = ACCENTS[Math.abs(hash) % ACCENTS.length]!\n  cache.set(k, result)\n  return result\n}"
+      }
+    ]
+  },
+  "durationMs": 278756,
+  "model": "sonnet",
+  "sandboxMode": "permissive",
+  "workerType": "optimize",
+  "timestamp": "2026-10-16T20:04:18.984Z",
+  "executionId": "optimize_1792180780228_dfmf00"
+}

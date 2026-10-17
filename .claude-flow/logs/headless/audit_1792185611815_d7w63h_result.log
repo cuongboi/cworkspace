@@ -1,0 +1,72 @@
+[2026-10-16T21:23:05.094Z] RESULT
+============================================================
+{
+  "success": true,
+  "output": "Based on my comprehensive security scan of the source code, here is the JSON vulnerability report:\n\n```json\n{\n  \"vulnerabilities\": [\n    {\n      \"severity\": \"critical\",\n      \"file\": \".env\",\n      \"line\": 2,\n      \"description\": \"Hardcoded BETTER_AUTH_SECRET exposed in repository. Authentication secrets should never be committed to version control. This compromises the entire JWT/session security model.\"\n    },\n    {\n      \"severity\": \"critical\",\n      \"file\": \"apps/api/src/app.ts\",\n      \"line\": 22,\n      \"description\": \"CORS wildcard (*) in WEB_ORIGIN environment variable. Parsing '.env' with 'WEB_ORIGIN=....*' allows any domain to make authenticated requests with credentials, bypassing CORS security entirely. This is a critical breach of cross-origin policy.\"\n    },\n    {\n      \"severity\": \"high\",\n      \"file\": \"apps/api/src/lib/auth.ts\",\n      \"line\": 73,\n      \"description\": \"Weak password policy: minPasswordLength set to 6 characters. NIST guidelines recommend minimum 8-12 characters. Current policy is susceptible to brute-force and dictionary attacks.\"\n    },\n    {\n      \"severity\": \"high\",\n      \"file\": \"apps/api/src/lib/auth.ts\",\n      \"line\": 72,\n      \"description\": \"Email verification disabled (requireEmailVerification: false). Users can register with any email address without validation, enabling account takeover, spam registration, and service abuse.\"\n    },\n    {\n      \"severity\": \"high\",\n      \"file\": \"apps/web/src/components/ui/chart.tsx\",\n      \"line\": 94,\n      \"description\": \"Potential XSS vulnerability: dangerouslySetInnerHTML used to inject CSS variables from chart config. If chart configuration becomes user-controllable in the future, this could enable CSS-based attacks. Currently low risk but a latent vulnerability.\"\n    },\n    {\n      \"severity\": \"medium\",\n      \"file\": \"apps/api/src/server/rate-limit.ts\",\n      \"line\": 1,\n      \"description\": \"In-memory rate limiting only works for single instance. Code comment indicates: 'move state to Redis when running more than one instance.' In production with load balancing, rate limits can be bypassed by distributing requests across instances.\"\n    },\n    {\n      \"severity\": \"low\",\n      \"file\": \"apps/api/src/app.ts\",\n      \"line\": null,\n      \"description\": \"Missing security headers: No Content-Security-Policy, X-Frame-Options, X-Content-Type-Options, or Strict-Transport-Security headers found. These should be set server-side to mitigate XSS, clickjacking, and other header-based attacks.\"\n    }\n  ],\n  \"riskScore\": 87,\n  \"recommendations\": [\n    \"IMMEDIATE: Remove wildcard (*) from CORS origins in .env. Use explicit trusted domain list only (e.g., 'http://localhost:5173,https://app.company.com')\",\n    \"IMMEDIATE: Remove .env file from git history using BFG Repo-Cleaner or git-filter-branch. Rotate BETTER_AUTH_SECRET immediately and use environment variables for all secrets\",\n    \"IMMEDIATE: Increase minPasswordLength from 6 to at least 12 characters. Add complexity requirements (uppercase, lowercase, numbers, symbols)\",\n    \"HIGH: Enable requireEmailVerification: true in auth configuration to prevent fraudulent registrations\",\n    \"HIGH: Move rate limiting state from memory to Redis using @upstash/redis or similar for distributed deployments\",\n    \"HIGH: Add security headers in app.ts middleware:\\n  - Content-Security-Policy: \\\"default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'\\\"\\n  - X-Frame-Options: SAMEORIGIN\\n  - X-Content-Type-Options: nosniff\\n  - Strict-Transport-Security: max-age=31536000; includeSubDomains\",\n    \"MEDIUM: If chart config becomes user-supplied, replace dangerouslySetInnerHTML with sanitized CSS class approach or CSS-in-JS\",\n    \"MEDIUM: Implement CSRF token validation for state-changing operations (POST/PUT/DELETE)\",\n    \"LOW: Add request logging and security event monitoring to detect brute-force attempts and unusual access patterns\",\n    \"GOOD PRACTICE: Continue leveraging ZenStack policies for data isolation - this is properly implemented\",\n    \"GOOD PRACTICE: Current SQL injection prevention via Prisma ORM is solid - maintain this pattern\"\n  ]\n}\n```\n\n## Summary\n\n**Risk Score: 87/100** (High Risk)\n\n### Critical Issues (Fix Before Production)\n1. **CORS wildcard enabled** — allows any website to attack authenticated users\n2. **Hardcoded auth secret** — entire authentication system compromised if exposed\n\n### Key Strengths\n✅ Proper tenant isolation via ZenStack policies  \n✅ SQL injection prevention (Prisma ORM)  \n✅ Rate limiting framework in place  \n✅ Secure file upload handling  \n✅ Proper WebSocket authentication  \n\n### Action Items (Priority Order)\n1. Remove `*` from CORS; rotate auth secret immediately\n2. Increase minimum password length to 12+ characters\n3. Enable email verification\n4. Add security headers\n5. Move rate limiting to Redis for production multi-instance deployment\n\nThe codebase has a solid security foundation, but these configuration issues in `.env` and auth settings pose immediate risks in production.\n",
+  "parsedOutput": {
+    "vulnerabilities": [
+      {
+        "severity": "critical",
+        "file": ".env",
+        "line": 2,
+        "description": "Hardcoded BETTER_AUTH_SECRET exposed in repository. Authentication secrets should never be committed to version control. This compromises the entire JWT/session security model."
+      },
+      {
+        "severity": "critical",
+        "file": "apps/api/src/app.ts",
+        "line": 22,
+        "description": "CORS wildcard (*) in WEB_ORIGIN environment variable. Parsing '.env' with 'WEB_ORIGIN=....*' allows any domain to make authenticated requests with credentials, bypassing CORS security entirely. This is a critical breach of cross-origin policy."
+      },
+      {
+        "severity": "high",
+        "file": "apps/api/src/lib/auth.ts",
+        "line": 73,
+        "description": "Weak password policy: minPasswordLength set to 6 characters. NIST guidelines recommend minimum 8-12 characters. Current policy is susceptible to brute-force and dictionary attacks."
+      },
+      {
+        "severity": "high",
+        "file": "apps/api/src/lib/auth.ts",
+        "line": 72,
+        "description": "Email verification disabled (requireEmailVerification: false). Users can register with any email address without validation, enabling account takeover, spam registration, and service abuse."
+      },
+      {
+        "severity": "high",
+        "file": "apps/web/src/components/ui/chart.tsx",
+        "line": 94,
+        "description": "Potential XSS vulnerability: dangerouslySetInnerHTML used to inject CSS variables from chart config. If chart configuration becomes user-controllable in the future, this could enable CSS-based attacks. Currently low risk but a latent vulnerability."
+      },
+      {
+        "severity": "medium",
+        "file": "apps/api/src/server/rate-limit.ts",
+        "line": 1,
+        "description": "In-memory rate limiting only works for single instance. Code comment indicates: 'move state to Redis when running more than one instance.' In production with load balancing, rate limits can be bypassed by distributing requests across instances."
+      },
+      {
+        "severity": "low",
+        "file": "apps/api/src/app.ts",
+        "line": null,
+        "description": "Missing security headers: No Content-Security-Policy, X-Frame-Options, X-Content-Type-Options, or Strict-Transport-Security headers found. These should be set server-side to mitigate XSS, clickjacking, and other header-based attacks."
+      }
+    ],
+    "riskScore": 87,
+    "recommendations": [
+      "IMMEDIATE: Remove wildcard (*) from CORS origins in .env. Use explicit trusted domain list only (e.g., 'http://localhost:5173,https://app.company.com')",
+      "IMMEDIATE: Remove .env file from git history using BFG Repo-Cleaner or git-filter-branch. Rotate BETTER_AUTH_SECRET immediately and use environment variables for all secrets",
+      "IMMEDIATE: Increase minPasswordLength from 6 to at least 12 characters. Add complexity requirements (uppercase, lowercase, numbers, symbols)",
+      "HIGH: Enable requireEmailVerification: true in auth configuration to prevent fraudulent registrations",
+      "HIGH: Move rate limiting state from memory to Redis using @upstash/redis or similar for distributed deployments",
+      "HIGH: Add security headers in app.ts middleware:\n  - Content-Security-Policy: \"default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'\"\n  - X-Frame-Options: SAMEORIGIN\n  - X-Content-Type-Options: nosniff\n  - Strict-Transport-Security: max-age=31536000; includeSubDomains",
+      "MEDIUM: If chart config becomes user-supplied, replace dangerouslySetInnerHTML with sanitized CSS class approach or CSS-in-JS",
+      "MEDIUM: Implement CSRF token validation for state-changing operations (POST/PUT/DELETE)",
+      "LOW: Add request logging and security event monitoring to detect brute-force attempts and unusual access patterns",
+      "GOOD PRACTICE: Continue leveraging ZenStack policies for data isolation - this is properly implemented",
+      "GOOD PRACTICE: Current SQL injection prevention via Prisma ORM is solid - maintain this pattern"
+    ]
+  },
+  "durationMs": 173279,
+  "model": "haiku",
+  "sandboxMode": "strict",
+  "workerType": "audit",
+  "timestamp": "2026-10-16T21:23:05.094Z",
+  "executionId": "audit_1792185611815_d7w63h"
+}

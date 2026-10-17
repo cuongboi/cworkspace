@@ -1,0 +1,117 @@
+[2026-10-16T20:02:57.580Z] RESULT
+============================================================
+{
+  "success": true,
+  "output": "Here's the full performance analysis across both the API and web layers:\n\n---\n\n## Performance Analysis\n\n### 1. N+1 Query Patterns (API)\n\n**Critical: Sequential notification inserts** (`src/server/notify.ts:27`)\n\n```typescript\n// ❌ Current: O(n) round trips\nfor (const row of rows) await db.notification.create({ data: row });\n\n// ✅ Fix: one query\nawait db.notification.createMany({ data: rows });\n```\n\n**High: Loop queries in `realtime-plugin.ts`**\n\nIn the Comment handler (~line 94), for each comment in `rows`:\n- `db.post.findUnique(...)` — one per comment\n- `mentionedReaders(...)` — one per comment (itself does a `user.findMany`)\n- `db.comment.findUnique(...)` — one per parent comment\n\nFix: batch-load before the loop:\n```typescript\n// Collect all postIds and parentIds first\nconst postIds = rows.map(r => r.postId);\nconst posts = await db.post.findMany({ where: { id: { in: postIds } } });\nconst postMap = Object.fromEntries(posts.map(p => [p.id, p]));\n\n// Then use postMap inside the loop instead of calling findUnique\n```\n\nSame pattern applies to the GroupMember handler (~lines 231–288): `db.group.findUnique` and `db.groupMember.findMany` are called inside a loop.\n\n**Medium: `conversationMemberIds()` called 4 times per message** (`realtime-plugin.ts` ~lines 296, 325, 337, 346)\n\nThe same query runs 3–4 times in a single message handler. Cache it at the top of the handler:\n```typescript\nconst memberIds = await conversationMemberIds(conversationId);\n// reuse memberIds everywhere below\n```\n\n---\n\n### 2. Unnecessary Re-renders (React)\n\n**High: Missing `useMemo` on sorted contacts list** (`src/components/layout/contacts-rail.tsx:26–28`)\n\n```typescript\n// ❌ Current: O(n log n) sort on every render\nconst sorted = [...people].sort((a, b) => Number(online.has(b.id)) - Number(online.has(a.id)));\n\n// ✅ Fix:\nconst sorted = useMemo(\n  () => [...people].sort((a, b) => Number(online.has(b.id)) - Number(online.has(a.id))),\n  [people, online]\n);\n```\n\n**High: No `React.memo` on list items** (`message-list.tsx:201`, `post-feed.tsx:101`)\n\n`MessageRow` and `PostCard` render in arbitrarily long lists. When one message updates, all siblings re-render. Wrap them:\n```typescript\nexport const MessageRow = React.memo(function MessageRow(props: Props) { ... });\nexport const PostCard = React.memo(function PostCard(props: Props) { ... });\n```\n\nAlso move inline handlers to `useCallback` to avoid breaking `memo`:\n```typescript\n// ❌ onClick={() => actions.onReact(message, myReaction)}\n// ✅\nconst handleReact = useCallback(() => actions.onReact(message, myReaction), [actions, message, myReaction]);\n```\n\n**Medium: Reaction groups computed every render** (`src/components/chat/message-row.tsx:175–182`)\n\n```typescript\n// ✅ Fix:\nconst reactionGroups = useMemo(\n  () => REACTIONS.map(r => ({ ...r, users: message.reactions.filter(x => x.type === r.type) }))\n               .filter(g => g.users.length > 0),\n  [message.reactions]\n);\n```\n\n**Medium: Unstable `actions` object spread** (`message-list.tsx:236`)\n\n`actions={{ ...actions, onJumpTo: jumpTo }}` creates a new object reference every render. Define it once:\n```typescript\nconst rowActions = useMemo(() => ({ ...actions, onJumpTo: jumpTo }), [actions, jumpTo]);\n```\n\n---\n\n### 3. Caching Opportunities\n\n**Critical: Blanket query invalidation on reconnect** (`src/hooks/use-socket.tsx:30`)\n\n```typescript\n// ❌ Invalidates EVERY cached query simultaneously → network storm\ninstance.on(\"reconnect\", () => void queryClient.invalidateQueries());\n\n// ✅ Invalidate only models that can drift during disconnection\ninstance.on(\"reconnect\", () => {\n  queryClient.invalidateQueries({ queryKey: [\"message\"] });\n  queryClient.invalidateQueries({ queryKey: [\"post\"] });\n  queryClient.invalidateQueries({ queryKey: [\"notification\"] });\n});\n```\n\n**High: Overly broad mutation invalidations** (`post-card.tsx:94`, `comments-thread.tsx:161`)\n\n`invalidates: [\"post\", \"comment\"]` refetches the entire feed on a single reaction. Use precise query keys:\n```typescript\n// ✅ Optimistic update instead of full invalidation\nonMutate: async (reaction) => {\n  await queryClient.cancelQueries({ queryKey: [\"post\", postId] });\n  const prev = queryClient.getQueryData([\"post\", postId]);\n  queryClient.setQueryData([\"post\", postId], (old) => applyReaction(old, reaction));\n  return { prev };\n},\nonError: (_err, _vars, ctx) => queryClient.setQueryData([\"post\", postId], ctx.prev),\n```\n\n**Medium: DB connection pool unconfigured** (`src/lib/db.ts:18`)\n\n```typescript\npool: new Pool({\n  connectionString: env.DATABASE_URL,\n  max: 20,\n  idleTimeoutMillis: 30_000,\n  connectionTimeoutMillis: 5_000,\n}),\n```\n\n**Medium: `callTitle()` fetches all conversation members** (`src/websocket/calls.ts:43–67`)\n\nFetches every member just for display names. Cap it:\n```typescript\nmembers: { select: { user: { select: { id: true, name: true } } }, take: 5 },\n```\n\n---\n\n### 4. Memory Leaks\n\n**Medium: `verified` map in typing handler never cleared** (`src/websocket/presence.ts:44–56`)\n\nThe per-connection `Map<string, string[]>` of verified conversation IDs grows for the lifetime of the connection without a cleanup path. Fix:\n```typescript\nexport function registerTyping(conn: Conn) {\n  const verified = new Map<string, string[]>();\n  // ... existing logic ...\n  conn.onClose(() => verified.clear());  // ← add this\n}\n```\n\n**Medium: `setTimeout` for ring timeout not tracked** (`src/websocket/calls.ts:234–237`)\n\n```typescript\nconst callTimers = new Map<string, ReturnType<typeof setTimeout>>();\n\n// In call:start:\ncallTimers.set(call.id, setTimeout(() => {\n  if (!answered.has(call.id) && live.has(call.id))\n    endCall(call.id).catch(logError(\"ring timeout\"));\n}, RING_TIMEOUT_MS));\n\n// In endCall():\nclearTimeout(callTimers.get(callId));\ncallTimers.delete(callId);\n```\n\n---\n\n### 5. Redundant Computations & Missing Virtualization\n\n**Medium: No virtualization for message lists or post feed**\n\n`message-list.tsx` renders every message to the DOM. For threads with 500+ messages this degrades significantly. Recommended: `@tanstack/react-virtual` (already in the Radix/shadcn ecosystem context):\n\n```tsx\nconst rowVirtualizer = useVirtualizer({\n  count: messages.length,\n  getScrollElement: () => scrollRef.current,\n  estimateSize: () => 60,\n  overscan: 10,\n});\n```\n\n**Medium: Presence query unbounded** (`src/websocket/presence.ts:23–27`)\n\n```typescript\nconst visible = await db.member.findMany({\n  where: { userId: { in: [...onlineUserIds()] }, organizationId: { in: orgIds } },\n  select: { userId: true },\n  distinct: [\"userId\"],\n  take: 10_000,  // ← add safety cap\n});\n```\n\n**Low: Missing `@@index([conversationId])` on ConversationMember** (`zenstack/schema.zmodel`)\n\n`conversationMemberIds()` queries by `conversationId` only, but the model has `unique([conversationId, userId])` — the unique index can serve this query but adding an explicit single-column index makes intent clear and ensures the planner uses it for non-unique lookups.\n\n---\n\n### Priority Order\n\n| Severity | Issue | File |\n|----------|-------|------|\n| Critical | Blanket reconnect invalidation | `use-socket.tsx:30` |\n| Critical | N+1 notification inserts | `notify.ts:27` |\n| High | N+1 in realtime plugin loops | `realtime-plugin.ts:65–288` |\n| High | `React.memo` missing on list items | `message-list.tsx`, `post-feed.tsx` |\n| High | Broad mutation invalidations | `post-card.tsx`, `comments-thread.tsx` |\n| Medium | `conversationMemberIds()` called 4× per message | `realtime-plugin.ts` |\n| Medium | Typing cache memory leak | `presence.ts:56` |\n| Medium | Ring timer not tracked | `calls.ts:234` |\n| Medium | Sorted contacts not memoized | `contacts-rail.tsx:26` |\n| Medium | Reaction groups not memoized | `message-row.tsx:175` |\n| Medium | No virtualization on lists | `message-list.tsx`, `post-feed.tsx` |\n| Medium | Pool unconfigured | `db.ts:18` |\n\nThe two most impactful fixes are the **blanket reconnect invalidation** (causes network storms affecting all users simultaneously) and **N+1 notification inserts** (scales linearly with mentions per post/comment).\n",
+  "parsedOutput": {
+    "sections": [
+      {
+        "title": "Performance Analysis",
+        "content": "\n",
+        "level": 2
+      },
+      {
+        "title": "1. N+1 Query Patterns (API)",
+        "content": "\n**Critical: Sequential notification inserts** (`src/server/notify.ts:27`)\n\n```typescript\n// ❌ Current: O(n) round trips\nfor (const row of rows) await db.notification.create({ data: row });\n\n// ✅ Fix: one query\nawait db.notification.createMany({ data: rows });\n```\n\n**High: Loop queries in `realtime-plugin.ts`**\n\nIn the Comment handler (~line 94), for each comment in `rows`:\n- `db.post.findUnique(...)` — one per comment\n- `mentionedReaders(...)` — one per comment (itself does a `user.findMany`)\n- `db.comment.findUnique(...)` — one per parent comment\n\nFix: batch-load before the loop:\n```typescript\n// Collect all postIds and parentIds first\nconst postIds = rows.map(r => r.postId);\nconst posts = await db.post.findMany({ where: { id: { in: postIds } } });\nconst postMap = Object.fromEntries(posts.map(p => [p.id, p]));\n\n// Then use postMap inside the loop instead of calling findUnique\n```\n\nSame pattern applies to the GroupMember handler (~lines 231–288): `db.group.findUnique` and `db.groupMember.findMany` are called inside a loop.\n\n**Medium: `conversationMemberIds()` called 4 times per message** (`realtime-plugin.ts` ~lines 296, 325, 337, 346)\n\nThe same query runs 3–4 times in a single message handler. Cache it at the top of the handler:\n```typescript\nconst memberIds = await conversationMemberIds(conversationId);\n// reuse memberIds everywhere below\n```\n\n---\n\n",
+        "level": 3
+      },
+      {
+        "title": "2. Unnecessary Re-renders (React)",
+        "content": "\n**High: Missing `useMemo` on sorted contacts list** (`src/components/layout/contacts-rail.tsx:26–28`)\n\n```typescript\n// ❌ Current: O(n log n) sort on every render\nconst sorted = [...people].sort((a, b) => Number(online.has(b.id)) - Number(online.has(a.id)));\n\n// ✅ Fix:\nconst sorted = useMemo(\n  () => [...people].sort((a, b) => Number(online.has(b.id)) - Number(online.has(a.id))),\n  [people, online]\n);\n```\n\n**High: No `React.memo` on list items** (`message-list.tsx:201`, `post-feed.tsx:101`)\n\n`MessageRow` and `PostCard` render in arbitrarily long lists. When one message updates, all siblings re-render. Wrap them:\n```typescript\nexport const MessageRow = React.memo(function MessageRow(props: Props) { ... });\nexport const PostCard = React.memo(function PostCard(props: Props) { ... });\n```\n\nAlso move inline handlers to `useCallback` to avoid breaking `memo`:\n```typescript\n// ❌ onClick={() => actions.onReact(message, myReaction)}\n// ✅\nconst handleReact = useCallback(() => actions.onReact(message, myReaction), [actions, message, myReaction]);\n```\n\n**Medium: Reaction groups computed every render** (`src/components/chat/message-row.tsx:175–182`)\n\n```typescript\n// ✅ Fix:\nconst reactionGroups = useMemo(\n  () => REACTIONS.map(r => ({ ...r, users: message.reactions.filter(x => x.type === r.type) }))\n               .filter(g => g.users.length > 0),\n  [message.reactions]\n);\n```\n\n**Medium: Unstable `actions` object spread** (`message-list.tsx:236`)\n\n`actions={{ ...actions, onJumpTo: jumpTo }}` creates a new object reference every render. Define it once:\n```typescript\nconst rowActions = useMemo(() => ({ ...actions, onJumpTo: jumpTo }), [actions, jumpTo]);\n```\n\n---\n\n",
+        "level": 3
+      },
+      {
+        "title": "3. Caching Opportunities",
+        "content": "\n**Critical: Blanket query invalidation on reconnect** (`src/hooks/use-socket.tsx:30`)\n\n```typescript\n// ❌ Invalidates EVERY cached query simultaneously → network storm\ninstance.on(\"reconnect\", () => void queryClient.invalidateQueries());\n\n// ✅ Invalidate only models that can drift during disconnection\ninstance.on(\"reconnect\", () => {\n  queryClient.invalidateQueries({ queryKey: [\"message\"] });\n  queryClient.invalidateQueries({ queryKey: [\"post\"] });\n  queryClient.invalidateQueries({ queryKey: [\"notification\"] });\n});\n```\n\n**High: Overly broad mutation invalidations** (`post-card.tsx:94`, `comments-thread.tsx:161`)\n\n`invalidates: [\"post\", \"comment\"]` refetches the entire feed on a single reaction. Use precise query keys:\n```typescript\n// ✅ Optimistic update instead of full invalidation\nonMutate: async (reaction) => {\n  await queryClient.cancelQueries({ queryKey: [\"post\", postId] });\n  const prev = queryClient.getQueryData([\"post\", postId]);\n  queryClient.setQueryData([\"post\", postId], (old) => applyReaction(old, reaction));\n  return { prev };\n},\nonError: (_err, _vars, ctx) => queryClient.setQueryData([\"post\", postId], ctx.prev),\n```\n\n**Medium: DB connection pool unconfigured** (`src/lib/db.ts:18`)\n\n```typescript\npool: new Pool({\n  connectionString: env.DATABASE_URL,\n  max: 20,\n  idleTimeoutMillis: 30_000,\n  connectionTimeoutMillis: 5_000,\n}),\n```\n\n**Medium: `callTitle()` fetches all conversation members** (`src/websocket/calls.ts:43–67`)\n\nFetches every member just for display names. Cap it:\n```typescript\nmembers: { select: { user: { select: { id: true, name: true } } }, take: 5 },\n```\n\n---\n\n",
+        "level": 3
+      },
+      {
+        "title": "4. Memory Leaks",
+        "content": "\n**Medium: `verified` map in typing handler never cleared** (`src/websocket/presence.ts:44–56`)\n\nThe per-connection `Map<string, string[]>` of verified conversation IDs grows for the lifetime of the connection without a cleanup path. Fix:\n```typescript\nexport function registerTyping(conn: Conn) {\n  const verified = new Map<string, string[]>();\n  // ... existing logic ...\n  conn.onClose(() => verified.clear());  // ← add this\n}\n```\n\n**Medium: `setTimeout` for ring timeout not tracked** (`src/websocket/calls.ts:234–237`)\n\n```typescript\nconst callTimers = new Map<string, ReturnType<typeof setTimeout>>();\n\n// In call:start:\ncallTimers.set(call.id, setTimeout(() => {\n  if (!answered.has(call.id) && live.has(call.id))\n    endCall(call.id).catch(logError(\"ring timeout\"));\n}, RING_TIMEOUT_MS));\n\n// In endCall():\nclearTimeout(callTimers.get(callId));\ncallTimers.delete(callId);\n```\n\n---\n\n",
+        "level": 3
+      },
+      {
+        "title": "5. Redundant Computations & Missing Virtualization",
+        "content": "\n**Medium: No virtualization for message lists or post feed**\n\n`message-list.tsx` renders every message to the DOM. For threads with 500+ messages this degrades significantly. Recommended: `@tanstack/react-virtual` (already in the Radix/shadcn ecosystem context):\n\n```tsx\nconst rowVirtualizer = useVirtualizer({\n  count: messages.length,\n  getScrollElement: () => scrollRef.current,\n  estimateSize: () => 60,\n  overscan: 10,\n});\n```\n\n**Medium: Presence query unbounded** (`src/websocket/presence.ts:23–27`)\n\n```typescript\nconst visible = await db.member.findMany({\n  where: { userId: { in: [...onlineUserIds()] }, organizationId: { in: orgIds } },\n  select: { userId: true },\n  distinct: [\"userId\"],\n  take: 10_000,  // ← add safety cap\n});\n```\n\n**Low: Missing `@@index([conversationId])` on ConversationMember** (`zenstack/schema.zmodel`)\n\n`conversationMemberIds()` queries by `conversationId` only, but the model has `unique([conversationId, userId])` — the unique index can serve this query but adding an explicit single-column index makes intent clear and ensures the planner uses it for non-unique lookups.\n\n---\n\n",
+        "level": 3
+      },
+      {
+        "title": "Priority Order",
+        "content": "| Severity | Issue | File |\n|----------|-------|------|\n| Critical | Blanket reconnect invalidation | `use-socket.tsx:30` |\n| Critical | N+1 notification inserts | `notify.ts:27` |\n| High | N+1 in realtime plugin loops | `realtime-plugin.ts:65–288` |\n| High | `React.memo` missing on list items | `message-list.tsx`, `post-feed.tsx` |\n| High | Broad mutation invalidations | `post-card.tsx`, `comments-thread.tsx` |\n| Medium | `conversationMemberIds()` called 4× per message | `realtime-plugin.ts` |\n| Medium | Typing cache memory leak | `presence.ts:56` |\n| Medium | Ring timer not tracked | `calls.ts:234` |\n| Medium | Sorted contacts not memoized | `contacts-rail.tsx:26` |\n| Medium | Reaction groups not memoized | `message-row.tsx:175` |\n| Medium | No virtualization on lists | `message-list.tsx`, `post-feed.tsx` |\n| Medium | Pool unconfigured | `db.ts:18` |\n\nThe two most impactful fixes are the **blanket reconnect invalidation** (causes network storms affecting all users simultaneously) and **N+1 notification inserts** (scales linearly with mentions per post/comment).",
+        "level": 3
+      }
+    ],
+    "codeBlocks": [
+      {
+        "language": "typescript",
+        "code": "// ❌ Current: O(n) round trips\nfor (const row of rows) await db.notification.create({ data: row });\n\n// ✅ Fix: one query\nawait db.notification.createMany({ data: rows });"
+      },
+      {
+        "language": "typescript",
+        "code": "// Collect all postIds and parentIds first\nconst postIds = rows.map(r => r.postId);\nconst posts = await db.post.findMany({ where: { id: { in: postIds } } });\nconst postMap = Object.fromEntries(posts.map(p => [p.id, p]));\n\n// Then use postMap inside the loop instead of calling findUnique"
+      },
+      {
+        "language": "typescript",
+        "code": "const memberIds = await conversationMemberIds(conversationId);\n// reuse memberIds everywhere below"
+      },
+      {
+        "language": "typescript",
+        "code": "// ❌ Current: O(n log n) sort on every render\nconst sorted = [...people].sort((a, b) => Number(online.has(b.id)) - Number(online.has(a.id)));\n\n// ✅ Fix:\nconst sorted = useMemo(\n  () => [...people].sort((a, b) => Number(online.has(b.id)) - Number(online.has(a.id))),\n  [people, online]\n);"
+      },
+      {
+        "language": "typescript",
+        "code": "export const MessageRow = React.memo(function MessageRow(props: Props) { ... });\nexport const PostCard = React.memo(function PostCard(props: Props) { ... });"
+      },
+      {
+        "language": "typescript",
+        "code": "// ❌ onClick={() => actions.onReact(message, myReaction)}\n// ✅\nconst handleReact = useCallback(() => actions.onReact(message, myReaction), [actions, message, myReaction]);"
+      },
+      {
+        "language": "typescript",
+        "code": "// ✅ Fix:\nconst reactionGroups = useMemo(\n  () => REACTIONS.map(r => ({ ...r, users: message.reactions.filter(x => x.type === r.type) }))\n               .filter(g => g.users.length > 0),\n  [message.reactions]\n);"
+      },
+      {
+        "language": "typescript",
+        "code": "const rowActions = useMemo(() => ({ ...actions, onJumpTo: jumpTo }), [actions, jumpTo]);"
+      },
+      {
+        "language": "typescript",
+        "code": "// ❌ Invalidates EVERY cached query simultaneously → network storm\ninstance.on(\"reconnect\", () => void queryClient.invalidateQueries());\n\n// ✅ Invalidate only models that can drift during disconnection\ninstance.on(\"reconnect\", () => {\n  queryClient.invalidateQueries({ queryKey: [\"message\"] });\n  queryClient.invalidateQueries({ queryKey: [\"post\"] });\n  queryClient.invalidateQueries({ queryKey: [\"notification\"] });\n});"
+      },
+      {
+        "language": "typescript",
+        "code": "// ✅ Optimistic update instead of full invalidation\nonMutate: async (reaction) => {\n  await queryClient.cancelQueries({ queryKey: [\"post\", postId] });\n  const prev = queryClient.getQueryData([\"post\", postId]);\n  queryClient.setQueryData([\"post\", postId], (old) => applyReaction(old, reaction));\n  return { prev };\n},\nonError: (_err, _vars, ctx) => queryClient.setQueryData([\"post\", postId], ctx.prev),"
+      },
+      {
+        "language": "typescript",
+        "code": "pool: new Pool({\n  connectionString: env.DATABASE_URL,\n  max: 20,\n  idleTimeoutMillis: 30_000,\n  connectionTimeoutMillis: 5_000,\n}),"
+      },
+      {
+        "language": "typescript",
+        "code": "members: { select: { user: { select: { id: true, name: true } } }, take: 5 },"
+      },
+      {
+        "language": "typescript",
+        "code": "export function registerTyping(conn: Conn) {\n  const verified = new Map<string, string[]>();\n  // ... existing logic ...\n  conn.onClose(() => verified.clear());  // ← add this\n}"
+      },
+      {
+        "language": "typescript",
+        "code": "const callTimers = new Map<string, ReturnType<typeof setTimeout>>();\n\n// In call:start:\ncallTimers.set(call.id, setTimeout(() => {\n  if (!answered.has(call.id) && live.has(call.id))\n    endCall(call.id).catch(logError(\"ring timeout\"));\n}, RING_TIMEOUT_MS));\n\n// In endCall():\nclearTimeout(callTimers.get(callId));\ncallTimers.delete(callId);"
+      },
+      {
+        "language": "tsx",
+        "code": "const rowVirtualizer = useVirtualizer({\n  count: messages.length,\n  getScrollElement: () => scrollRef.current,\n  estimateSize: () => 60,\n  overscan: 10,\n});"
+      },
+      {
+        "language": "typescript",
+        "code": "const visible = await db.member.findMany({\n  where: { userId: { in: [...onlineUserIds()] }, organizationId: { in: orgIds } },\n  select: { userId: true },\n  distinct: [\"userId\"],\n  take: 10_000,  // ← add safety cap\n});"
+      }
+    ]
+  },
+  "durationMs": 197363,
+  "model": "sonnet",
+  "sandboxMode": "permissive",
+  "workerType": "optimize",
+  "timestamp": "2026-10-16T20:02:57.579Z",
+  "executionId": "optimize_1792180780216_d8ox7q"
+}

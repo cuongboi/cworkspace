@@ -1,0 +1,118 @@
+[2026-10-16T21:46:35.196Z] RESULT
+============================================================
+{
+  "success": true,
+  "output": "Based on my comprehensive security audit, here's the detailed vulnerability report in the requested JSON format:\n\n```json\n{\n  \"vulnerabilities\": [\n    {\n      \"severity\": \"high\",\n      \"file\": \"apps/api/src/websocket/index.ts\",\n      \"line\": 44,\n      \"description\": \"Missing per-connection rate limiting on WebSocket messages, allowing potential message flooding/DoS attacks. The dispatch() call accepts unlimited messages per connection without throttling.\"\n    },\n    {\n      \"severity\": \"high\",\n      \"file\": \"apps/api/src/lib/auth.ts\",\n      \"line\": 73,\n      \"description\": \"Minimum password length set to 6 characters (minPasswordLength: 6) is below NIST/OWASP recommendations of 12+. Significantly weakens account security.\"\n    },\n    {\n      \"severity\": \"medium\",\n      \"file\": \"apps/api/src/lib/auth.ts\",\n      \"line\": 49,\n      \"description\": \"JWT token storage via cookieCache strategy. While better-auth handles this securely, insufficient verification that BETTER_AUTH_SECRET meets minimum entropy (32+ bytes recommended) in documentation.\"\n    },\n    {\n      \"severity\": \"medium\",\n      \"file\": \"apps/api/src/lib/errors.ts\",\n      \"line\": 84,\n      \"description\": \"Full error objects logged to console, potentially exposing sensitive database details (SQL queries, column names, internal error codes) if server logs accessed by unauthorized users.\"\n    },\n    {\n      \"severity\": \"medium\",\n      \"file\": \"apps/api/src/routes/uploads.ts\",\n      \"line\": 9,\n      \"description\": \"File type validation uses MIME type blacklist only, vulnerable to MIME type spoofing. No magic number verification or file signature validation performed.\"\n    },\n    {\n      \"severity\": \"medium\",\n      \"file\": \"apps/api/src/app.ts\",\n      \"line\": 22,\n      \"description\": \"CORS configured with credentials: true and wildcard origin expansion, but no explicit CSRF token requirement on state-changing operations beyond implicit CORS validation.\"\n    },\n    {\n      \"severity\": \"medium\",\n      \"file\": \"apps/api/src/plugins/auth.ts\",\n      \"line\": 1,\n      \"description\": \"Missing rate limiting on authentication endpoints (/sign-in, /sign-up). No brute-force protection against repeated login attempts from same IP/user.\"\n    },\n    {\n      \"severity\": \"low\",\n      \"file\": \"apps/api/src/app.ts\",\n      \"line\": 1,\n      \"description\": \"Missing security headers (CSP, X-Frame-Options, X-Content-Type-Options, Strict-Transport-Security). Increases vulnerability to clickjacking and MIME sniffing attacks.\"\n    },\n    {\n      \"severity\": \"low\",\n      \"file\": \"apps/api/src/lib/auth.ts\",\n      \"line\": 28,\n      \"description\": \"Email template URLs may not be properly URI-encoded, though current escapeHtml() implementation provides some protection. encodeURI() recommended for URLs.\"\n    },\n    {\n      \"severity\": \"low\",\n      \"file\": \"apps/api/src/\",\n      \"line\": 0,\n      \"description\": \"Field-level input size limits not consistently enforced. Some text fields (bios, descriptions, comments) lack maxLength validation.\"\n    },\n    {\n      \"severity\": \"low\",\n      \"file\": \"apps/api/src/server/storage.ts\",\n      \"line\": 40,\n      \"description\": \"Presigned URLs expire in 5 minutes. While reasonable, no per-user rate limiting on file access or IP restrictions implemented.\"\n    }\n  ],\n  \"riskScore\": 42,\n  \"recommendations\": [\n    \"CRITICAL: Implement per-connection WebSocket rate limiting (100-150 messages/60sec) to prevent flooding attacks\",\n    \"CRITICAL: Increase minPasswordLength from 6 to 12 characters in auth configuration\",\n    \"HIGH: Add structured logging (Winston/Pino) replacing console.error() to prevent sensitive data leakage in logs\",\n    \"HIGH: Implement file upload whitelist with magic number verification and MIME type validation (ALLOWED_MIMES approach)\",\n    \"HIGH: Add login rate limiting to authentication endpoints (5 attempts/minute per IP recommended)\",\n    \"MEDIUM: Add security headers middleware (CSP, X-Frame-Options, HSTS, X-Content-Type-Options)\",\n    \"MEDIUM: Document BETTER_AUTH_SECRET generation requirement (openssl rand -base64 32 minimum) and verify cookieSecure=true in production\",\n    \"MEDIUM: Implement explicit CSRF token validation for POST/PUT/PATCH/DELETE endpoints beyond CORS\",\n    \"MEDIUM: Add field-level maxLength validation to all user-input string fields (maxLength: 5000 for content, 500 for bios)\",\n    \"MEDIUM: Add per-user rate limiting on file access to prevent presigned URL abuse\",\n    \"LOW: Ensure URI encoding in email templates (encodeURI for URLs, already safe with escapeHtml for text)\",\n    \"LOW: Consider reducing presigned URL expiration to 2-3 minutes for sensitive documents\",\n    \"RECOMMENDATION: Deploy with single API instance to prevent distributed session issues (multi-instance deployment would require shared memory for rate limits/presence)\",\n    \"RECOMMENDATION: Implement virus/malware scanning for file uploads in production (ClamAV integration)\"\n  ],\n  \"securityStrengths\": {\n    \"multiTenantIsolation\": \"Excellent - ZenStack policies enforce tenant isolation at database level, not just UI\",\n    \"accessControl\": \"Strong RBAC with organization and group-level permissions\",\n    \"secureDefaults\": \"Policy-enforcing authDb client for user input; unscoped db never exposed\",\n    \"errorHandling\": \"Sensitive details never leaked to clients\",\n    \"websocketAuth\": \"Requires valid session cookie, rejects unauthenticated connections\",\n    \"fileUploadSecurity\": \"MIME type blacklist + presigned URLs + execution type blocking\",\n    \"htmlEscaping\": \"User text properly escaped before rendering\",\n    \"sqlInjection\": \"Protected - ZenStack prevents raw SQL queries\",\n    \"testCoverage\": \"Comprehensive policy tests verify tenant isolation with real database\"\n  },\n  \"deploymentNotes\": [\n    \"Ensure BETTER_AUTH_SECRET is generated with high entropy (32+ bytes)\",\n    \"Set BETTER_AUTH_SECURE_COOKIES=true in production for HttpOnly/Secure flags\",\n    \"Verify CORS origins in WEB_ORIGIN match only your trusted domains\",\n    \"Use HTTPS in production (Strict-Transport-Security enforced by recommendations)\",\n    \"Deploy as single process instance (not serverless) for session and presence consistency\",\n    \"Monitor WebSocket connection count and implement graceful degradation at capacity\"\n  ]\n}\n```\n\n## Key Findings Summary\n\n**Risk Score: 42/100** (Moderate - well-designed but requires hardening)\n\n### Critical Issues:\n1. **WebSocket DoS vulnerability** - No rate limiting on message handling\n2. **Weak password policy** - 6 character minimum is dangerously low\n\n### Strengths:\n- ✅ Excellent multi-tenant isolation architecture\n- ✅ Strong access control with ZenStack policies\n- ✅ Proper error sanitization for clients\n- ✅ Secure WebSocket authentication\n- ✅ No SQL injection vulnerabilities\n\nThe codebase demonstrates mature security practices overall, with the main improvements needed in rate limiting, password requirements, and production hardening.\n",
+  "parsedOutput": {
+    "vulnerabilities": [
+      {
+        "severity": "high",
+        "file": "apps/api/src/websocket/index.ts",
+        "line": 44,
+        "description": "Missing per-connection rate limiting on WebSocket messages, allowing potential message flooding/DoS attacks. The dispatch() call accepts unlimited messages per connection without throttling."
+      },
+      {
+        "severity": "high",
+        "file": "apps/api/src/lib/auth.ts",
+        "line": 73,
+        "description": "Minimum password length set to 6 characters (minPasswordLength: 6) is below NIST/OWASP recommendations of 12+. Significantly weakens account security."
+      },
+      {
+        "severity": "medium",
+        "file": "apps/api/src/lib/auth.ts",
+        "line": 49,
+        "description": "JWT token storage via cookieCache strategy. While better-auth handles this securely, insufficient verification that BETTER_AUTH_SECRET meets minimum entropy (32+ bytes recommended) in documentation."
+      },
+      {
+        "severity": "medium",
+        "file": "apps/api/src/lib/errors.ts",
+        "line": 84,
+        "description": "Full error objects logged to console, potentially exposing sensitive database details (SQL queries, column names, internal error codes) if server logs accessed by unauthorized users."
+      },
+      {
+        "severity": "medium",
+        "file": "apps/api/src/routes/uploads.ts",
+        "line": 9,
+        "description": "File type validation uses MIME type blacklist only, vulnerable to MIME type spoofing. No magic number verification or file signature validation performed."
+      },
+      {
+        "severity": "medium",
+        "file": "apps/api/src/app.ts",
+        "line": 22,
+        "description": "CORS configured with credentials: true and wildcard origin expansion, but no explicit CSRF token requirement on state-changing operations beyond implicit CORS validation."
+      },
+      {
+        "severity": "medium",
+        "file": "apps/api/src/plugins/auth.ts",
+        "line": 1,
+        "description": "Missing rate limiting on authentication endpoints (/sign-in, /sign-up). No brute-force protection against repeated login attempts from same IP/user."
+      },
+      {
+        "severity": "low",
+        "file": "apps/api/src/app.ts",
+        "line": 1,
+        "description": "Missing security headers (CSP, X-Frame-Options, X-Content-Type-Options, Strict-Transport-Security). Increases vulnerability to clickjacking and MIME sniffing attacks."
+      },
+      {
+        "severity": "low",
+        "file": "apps/api/src/lib/auth.ts",
+        "line": 28,
+        "description": "Email template URLs may not be properly URI-encoded, though current escapeHtml() implementation provides some protection. encodeURI() recommended for URLs."
+      },
+      {
+        "severity": "low",
+        "file": "apps/api/src/",
+        "line": 0,
+        "description": "Field-level input size limits not consistently enforced. Some text fields (bios, descriptions, comments) lack maxLength validation."
+      },
+      {
+        "severity": "low",
+        "file": "apps/api/src/server/storage.ts",
+        "line": 40,
+        "description": "Presigned URLs expire in 5 minutes. While reasonable, no per-user rate limiting on file access or IP restrictions implemented."
+      }
+    ],
+    "riskScore": 42,
+    "recommendations": [
+      "CRITICAL: Implement per-connection WebSocket rate limiting (100-150 messages/60sec) to prevent flooding attacks",
+      "CRITICAL: Increase minPasswordLength from 6 to 12 characters in auth configuration",
+      "HIGH: Add structured logging (Winston/Pino) replacing console.error() to prevent sensitive data leakage in logs",
+      "HIGH: Implement file upload whitelist with magic number verification and MIME type validation (ALLOWED_MIMES approach)",
+      "HIGH: Add login rate limiting to authentication endpoints (5 attempts/minute per IP recommended)",
+      "MEDIUM: Add security headers middleware (CSP, X-Frame-Options, HSTS, X-Content-Type-Options)",
+      "MEDIUM: Document BETTER_AUTH_SECRET generation requirement (openssl rand -base64 32 minimum) and verify cookieSecure=true in production",
+      "MEDIUM: Implement explicit CSRF token validation for POST/PUT/PATCH/DELETE endpoints beyond CORS",
+      "MEDIUM: Add field-level maxLength validation to all user-input string fields (maxLength: 5000 for content, 500 for bios)",
+      "MEDIUM: Add per-user rate limiting on file access to prevent presigned URL abuse",
+      "LOW: Ensure URI encoding in email templates (encodeURI for URLs, already safe with escapeHtml for text)",
+      "LOW: Consider reducing presigned URL expiration to 2-3 minutes for sensitive documents",
+      "RECOMMENDATION: Deploy with single API instance to prevent distributed session issues (multi-instance deployment would require shared memory for rate limits/presence)",
+      "RECOMMENDATION: Implement virus/malware scanning for file uploads in production (ClamAV integration)"
+    ],
+    "securityStrengths": {
+      "multiTenantIsolation": "Excellent - ZenStack policies enforce tenant isolation at database level, not just UI",
+      "accessControl": "Strong RBAC with organization and group-level permissions",
+      "secureDefaults": "Policy-enforcing authDb client for user input; unscoped db never exposed",
+      "errorHandling": "Sensitive details never leaked to clients",
+      "websocketAuth": "Requires valid session cookie, rejects unauthenticated connections",
+      "fileUploadSecurity": "MIME type blacklist + presigned URLs + execution type blocking",
+      "htmlEscaping": "User text properly escaped before rendering",
+      "sqlInjection": "Protected - ZenStack prevents raw SQL queries",
+      "testCoverage": "Comprehensive policy tests verify tenant isolation with real database"
+    },
+    "deploymentNotes": [
+      "Ensure BETTER_AUTH_SECRET is generated with high entropy (32+ bytes)",
+      "Set BETTER_AUTH_SECURE_COOKIES=true in production for HttpOnly/Secure flags",
+      "Verify CORS origins in WEB_ORIGIN match only your trusted domains",
+      "Use HTTPS in production (Strict-Transport-Security enforced by recommendations)",
+      "Deploy as single process instance (not serverless) for session and presence consistency",
+      "Monitor WebSocket connection count and implement graceful degradation at capacity"
+    ]
+  },
+  "durationMs": 125321,
+  "model": "haiku",
+  "sandboxMode": "strict",
+  "workerType": "audit",
+  "timestamp": "2026-10-16T21:46:35.196Z",
+  "executionId": "audit_1792187069875_ss25uz"
+}

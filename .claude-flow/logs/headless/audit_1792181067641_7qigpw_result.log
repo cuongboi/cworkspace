@@ -1,0 +1,102 @@
+[2026-10-16T20:06:53.743Z] RESULT
+============================================================
+{
+  "success": true,
+  "output": "```json\n{\n  \"vulnerabilities\": [\n    {\n      \"severity\": \"critical\",\n      \"file\": \".env\",\n      \"line\": 2,\n      \"description\": \"Hardcoded BETTER_AUTH_SECRET exposed: 'eb17b69cdd48ad5d500cfca08afe4722c195633a16d1df2cab1c5bb6bdb30f63'. This authentication secret must never be committed to version control. Rotate immediately and use environment variables only in production.\"\n    },\n    {\n      \"severity\": \"critical\",\n      \"file\": \".env\",\n      \"line\": 5,\n      \"description\": \"CORS configuration with wildcard '*' in WEB_ORIGIN: 'http://localhost:3000,https://192.168.1.244,*'. Allows any origin to make cross-origin requests, enabling CSRF attacks and unauthorized access.\"\n    },\n    {\n      \"severity\": \"high\",\n      \"file\": \"apps/api/src/lib/auth.ts\",\n      \"line\": 73,\n      \"description\": \"Weak password requirements: minPasswordLength set to 6 characters. This is insufficient and vulnerable to brute-force attacks. Recommend increasing to 12-16 characters with complexity requirements.\"\n    },\n    {\n      \"severity\": \"high\",\n      \"file\": \".env.example\",\n      \"line\": 26,\n      \"description\": \"Example credentials exposed in version control: S3_ACCESS_KEY_ID='cworkplace' and S3_SECRET_ACCESS_KEY='cworkplace-secret'. Developers may accidentally use example credentials in production.\"\n    },\n    {\n      \"severity\": \"medium\",\n      \"file\": \"apps/web/src/components/ui/chart.tsx\",\n      \"line\": 94,\n      \"description\": \"Use of dangerouslySetInnerHTML for CSS generation. While currently appears safe (generated from config), this pattern is dangerous and vulnerable to future XSS attacks if input sources change.\"\n    },\n    {\n      \"severity\": \"medium\",\n      \"file\": \"apps/api/src/lib/errors.ts\",\n      \"line\": 84,\n      \"description\": \"Sensitive data exposure: console.error(error) logs full error objects which may contain SQL queries, internal paths, or other sensitive information.\"\n    },\n    {\n      \"severity\": \"medium\",\n      \"file\": \"apps/api/src/websocket/index.ts\",\n      \"line\": null,\n      \"description\": \"Sensitive data in logs: Multiple console.error and console.log calls throughout websocket handlers expose internal errors that may reveal sensitive details in production logs.\"\n    },\n    {\n      \"severity\": \"medium\",\n      \"file\": \"apps/api/src/server/rate-limit.ts\",\n      \"line\": null,\n      \"description\": \"Rate limiting is process-local only (in-memory). In multi-instance deployments, attackers can bypass rate limits by distributing requests across different instances. Use distributed backend (Redis) for production.\"\n    },\n    {\n      \"severity\": \"medium\",\n      \"file\": \"apps/api/src/index.ts\",\n      \"line\": 15,\n      \"description\": \"Missing HTTPS enforcement: HTTP connections are accepted without forcing HTTPS redirect. Credentials and session tokens can be intercepted in transit. Enforce HTTPS in production and add HSTS headers.\"\n    },\n    {\n      \"severity\": \"medium\",\n      \"file\": \"apps/api/src/lib/auth.ts\",\n      \"line\": 49,\n      \"description\": \"Insecure session cookie configuration: Cookie security flags (Secure, HttpOnly, SameSite) not explicitly configured. Session tokens could be accessed via JavaScript or sent cross-site. Verify better-auth cookie settings.\"\n    },\n    {\n      \"severity\": \"low\",\n      \"file\": \".env.example\",\n      \"line\": 2,\n      \"description\": \"Database credentials in example file: 'postgresql://cworkplace:cworkplace@localhost:5432/cworkplace' shows credentials. Use generic placeholder names to avoid confusion between example and real credentials.\"\n    }\n  ],\n  \"riskScore\": 72,\n  \"recommendations\": [\n    \"IMMEDIATE: Rotate BETTER_AUTH_SECRET - it is exposed in version control. Regenerate and use environment variables only.\",\n    \"IMMEDIATE: Remove wildcard '*' from CORS WEB_ORIGIN and explicitly specify only trusted domains.\",\n    \"IMMEDIATE: Ensure .env file is in .gitignore and never commit secrets to repository.\",\n    \"URGENT: Increase minimum password length from 6 to 12-16 characters and add complexity requirements.\",\n    \"Before Production: Implement distributed rate limiting using Redis to prevent bypass attacks.\",\n    \"Before Production: Enforce HTTPS and add security headers (HSTS, CSP, X-Frame-Options, X-Content-Type-Options).\",\n    \"Before Production: Verify session cookie configuration includes Secure, HttpOnly, and SameSite=Lax flags.\",\n    \"Before Production: Implement structured logging with input sanitization to prevent sensitive data exposure.\",\n    \"Replace dangerouslySetInnerHTML in chart.tsx with CSS-in-JS library or CSS Modules.\",\n    \"Add centralized error handling that sanitizes error messages before logging - remove console.error from production code.\",\n    \"Use environment-specific configuration to disable debug logging in production.\",\n    \"Add request signing or JWT validation for sensitive API endpoints.\",\n    \"Implement input validation on all frontend forms and API endpoints.\",\n    \"Schedule regular dependency security audits using `npm audit` and keep packages updated.\",\n    \"Add security response headers middleware (CSP, X-Frame-Options, X-Content-Type-Options, etc.)\",\n    \"Review ZenStack access policies regularly to ensure tenant isolation is maintained.\",\n    \"Implement audit logging for sensitive operations (user creation, permission changes, data access).\"\n  ]\n}\n```\n\n## Summary\n\n**Risk Score: 72/100** — The codebase has **good foundational security** with proper use of ZenStack policies and role-based access control, but has **critical vulnerabilities** that must be addressed:\n\n### Critical Issues:\n1. **Exposed secret key** in `.env` — must be rotated immediately\n2. **Permissive CORS configuration** with wildcard — enables CSRF attacks\n3. **Weak password policy** (6 chars) — vulnerable to brute force\n\n### Key Strengths:\n- ✅ Strong multi-tenant isolation via ZenStack policies\n- ✅ Proper file upload validation and MIME type filtering\n- ✅ Short-lived presigned URLs for S3 access\n- ✅ Secure TURN credential generation with expiration\n\n**Next Step**: Use the `/verify` skill to confirm security fixes after remediation.\n",
+  "parsedOutput": {
+    "vulnerabilities": [
+      {
+        "severity": "critical",
+        "file": ".env",
+        "line": 2,
+        "description": "Hardcoded BETTER_AUTH_SECRET exposed: 'eb17b69cdd48ad5d500cfca08afe4722c195633a16d1df2cab1c5bb6bdb30f63'. This authentication secret must never be committed to version control. Rotate immediately and use environment variables only in production."
+      },
+      {
+        "severity": "critical",
+        "file": ".env",
+        "line": 5,
+        "description": "CORS configuration with wildcard '*' in WEB_ORIGIN: 'http://localhost:3000,https://192.168.1.244,*'. Allows any origin to make cross-origin requests, enabling CSRF attacks and unauthorized access."
+      },
+      {
+        "severity": "high",
+        "file": "apps/api/src/lib/auth.ts",
+        "line": 73,
+        "description": "Weak password requirements: minPasswordLength set to 6 characters. This is insufficient and vulnerable to brute-force attacks. Recommend increasing to 12-16 characters with complexity requirements."
+      },
+      {
+        "severity": "high",
+        "file": ".env.example",
+        "line": 26,
+        "description": "Example credentials exposed in version control: S3_ACCESS_KEY_ID='cworkplace' and S3_SECRET_ACCESS_KEY='cworkplace-secret'. Developers may accidentally use example credentials in production."
+      },
+      {
+        "severity": "medium",
+        "file": "apps/web/src/components/ui/chart.tsx",
+        "line": 94,
+        "description": "Use of dangerouslySetInnerHTML for CSS generation. While currently appears safe (generated from config), this pattern is dangerous and vulnerable to future XSS attacks if input sources change."
+      },
+      {
+        "severity": "medium",
+        "file": "apps/api/src/lib/errors.ts",
+        "line": 84,
+        "description": "Sensitive data exposure: console.error(error) logs full error objects which may contain SQL queries, internal paths, or other sensitive information."
+      },
+      {
+        "severity": "medium",
+        "file": "apps/api/src/websocket/index.ts",
+        "line": null,
+        "description": "Sensitive data in logs: Multiple console.error and console.log calls throughout websocket handlers expose internal errors that may reveal sensitive details in production logs."
+      },
+      {
+        "severity": "medium",
+        "file": "apps/api/src/server/rate-limit.ts",
+        "line": null,
+        "description": "Rate limiting is process-local only (in-memory). In multi-instance deployments, attackers can bypass rate limits by distributing requests across different instances. Use distributed backend (Redis) for production."
+      },
+      {
+        "severity": "medium",
+        "file": "apps/api/src/index.ts",
+        "line": 15,
+        "description": "Missing HTTPS enforcement: HTTP connections are accepted without forcing HTTPS redirect. Credentials and session tokens can be intercepted in transit. Enforce HTTPS in production and add HSTS headers."
+      },
+      {
+        "severity": "medium",
+        "file": "apps/api/src/lib/auth.ts",
+        "line": 49,
+        "description": "Insecure session cookie configuration: Cookie security flags (Secure, HttpOnly, SameSite) not explicitly configured. Session tokens could be accessed via JavaScript or sent cross-site. Verify better-auth cookie settings."
+      },
+      {
+        "severity": "low",
+        "file": ".env.example",
+        "line": 2,
+        "description": "Database credentials in example file: 'postgresql://cworkplace:cworkplace@localhost:5432/cworkplace' shows credentials. Use generic placeholder names to avoid confusion between example and real credentials."
+      }
+    ],
+    "riskScore": 72,
+    "recommendations": [
+      "IMMEDIATE: Rotate BETTER_AUTH_SECRET - it is exposed in version control. Regenerate and use environment variables only.",
+      "IMMEDIATE: Remove wildcard '*' from CORS WEB_ORIGIN and explicitly specify only trusted domains.",
+      "IMMEDIATE: Ensure .env file is in .gitignore and never commit secrets to repository.",
+      "URGENT: Increase minimum password length from 6 to 12-16 characters and add complexity requirements.",
+      "Before Production: Implement distributed rate limiting using Redis to prevent bypass attacks.",
+      "Before Production: Enforce HTTPS and add security headers (HSTS, CSP, X-Frame-Options, X-Content-Type-Options).",
+      "Before Production: Verify session cookie configuration includes Secure, HttpOnly, and SameSite=Lax flags.",
+      "Before Production: Implement structured logging with input sanitization to prevent sensitive data exposure.",
+      "Replace dangerouslySetInnerHTML in chart.tsx with CSS-in-JS library or CSS Modules.",
+      "Add centralized error handling that sanitizes error messages before logging - remove console.error from production code.",
+      "Use environment-specific configuration to disable debug logging in production.",
+      "Add request signing or JWT validation for sensitive API endpoints.",
+      "Implement input validation on all frontend forms and API endpoints.",
+      "Schedule regular dependency security audits using `npm audit` and keep packages updated.",
+      "Add security response headers middleware (CSP, X-Frame-Options, X-Content-Type-Options, etc.)",
+      "Review ZenStack access policies regularly to ensure tenant isolation is maintained.",
+      "Implement audit logging for sensitive operations (user creation, permission changes, data access)."
+    ]
+  },
+  "durationMs": 146101,
+  "model": "haiku",
+  "sandboxMode": "strict",
+  "workerType": "audit",
+  "timestamp": "2026-10-16T20:06:53.742Z",
+  "executionId": "audit_1792181067641_7qigpw"
+}

@@ -1,0 +1,91 @@
+[2026-10-16T22:52:18.021Z] RESULT
+============================================================
+{
+  "success": true,
+  "output": "# Security Analysis Report: cworkplace Codebase\n\n```json\n{\n  \"vulnerabilities\": [\n    {\n      \"severity\": \"high\",\n      \"file\": \"apps/api/zenstack/schema.zmodel\",\n      \"line\": null,\n      \"description\": \"Potential tenant isolation bypass: ZenStack policies rely on 'auth()' context. Verify all mutations enforce organizationId checks. Any policy missing '@@deny(\\\"all\\\", !(organization.members?[userId == auth().id]))' on top-level entities could leak data across tenants.\"\n    },\n    {\n      \"severity\": \"high\",\n      \"file\": \"apps/api/src/server/session.ts\",\n      \"line\": null,\n      \"description\": \"Policy enforcement depends on dbFor(user) being used for all user-driven input. If any route uses the unscoped 'db' client for user queries, tenant isolation is bypassed. Verify no policy-enforced operations use 'db' instead of 'userDb'.\"\n    },\n    {\n      \"severity\": \"medium\",\n      \"file\": \"apps/api/src/websocket/index.ts\",\n      \"line\": null,\n      \"description\": \"WebSocket authentication via session cookie ('auth: true') is secure, but socket event handlers must validate every incoming field. Any handler accepting client payload without schema validation risks injection attacks or state manipulation.\"\n    },\n    {\n      \"severity\": \"medium\",\n      \"file\": \"apps/api/src/routes/execute.ts\",\n      \"line\": null,\n      \"description\": \"'/api/execute' allow-lists models and operators, but rate-limiting is per-user (300/min). Verify the cap is enforced at request level, not batch level—a single /api/execute call with 100 operations could evade the rate limit.\"\n    },\n    {\n      \"severity\": \"medium\",\n      \"file\": \"apps/api/zenstack/schema.zmodel\",\n      \"line\": null,\n      \"description\": \"Field-level @deny('update', true) on admin-only fields (role, banned, permissions) is correct, but verify tests cover all sensitive fields. Missing one causes privilege escalation.\"\n    },\n    {\n      \"severity\": \"medium\",\n      \"file\": \"apps/web/src/lib/api-client.ts\",\n      \"line\": null,\n      \"description\": \"Frontend API client must never expose 'db' (unscoped) operations. All data fetches must go through 'db.<model>.<operation>' which enforces ZenStack policies. Verify no direct fetch() calls bypass this.\"\n    },\n    {\n      \"severity\": \"low\",\n      \"file\": \"apps/api/src/server/storage.ts (S3 setup)\",\n      \"line\": null,\n      \"description\": \"S3 presigned URLs (presigned POST/GET) are time-limited, but verify: (1) presigned URLs expire quickly, (2) upload ACLs prevent cross-org access, (3) file listings require auth.\"\n    },\n    {\n      \"severity\": \"low\",\n      \"file\": \"apps/api/src/routes/conversations.ts\",\n      \"line\": null,\n      \"description\": \"Typing indicators and read receipts expose user presence. Verify these are only sent to authorized group/conversation members to prevent user enumeration.\"\n    },\n    {\n      \"severity\": \"low\",\n      \"file\": \"apps/web/src/components/chat/\",\n      \"line\": null,\n      \"description\": \"Rich text rendering (RichText component) could render unsanitized HTML if user content isn't escaped. Verify dangerouslySetInnerHTML is never used; use React's JSX (auto-escapes) or a sanitizer like DOMPurify.\"\n    },\n    {\n      \"severity\": \"low\",\n      \"file\": \".env.example\",\n      \"line\": null,\n      \"description\": \"Environment variables for S3, TURN, and Resend API keys are required at runtime. Ensure these are never committed to .env (should stay in .env.example only). CI/CD must inject them securely.\"\n    }\n  ],\n  \"riskScore\": 62,\n  \"recommendations\": [\n    \"**Audit ZenStack policies**: Run `bun --cwd apps/api run test` and verify `tests/policies.test.ts` covers all multi-tenant entities. Check that every top-level model (Group, Conversation, Event, Call, Attachment, Notification) has `@@deny('all', !(organization.members?[...]))`. Missing guards = data leaks.\",\n    \"**Verify db vs. userDb usage**: Grep the codebase for `const db =` and `userDb =` in route handlers. Every user-driven operation must use `userDb = dbFor(user)`. Any `db` used for user input bypasses policies.\",\n    \"**Validate WebSocket handlers**: In `src/websocket/hub.ts`, `index.ts`, and `calls.ts`, check that socket event handlers validate incoming payloads against Zod/Elysia schemas. Test with malformed/oversized messages.\",\n    \"**Rate-limit verification**: Test `/api/execute` rate limit (300/min) by sending a batch with 100 operations in one request. Confirm the server rejects or queues it, not allows 100 ops in one call.\",\n    \"**Admin field protection test**: Add a test in `tests/user-admin-fields.test.ts` that attempts to update `role`, `banned`, and `permissions` fields as a regular user. Should fail with 403 or not-found.\",\n    \"**Sanitize rich text**: If RichText components render user posts/comments, audit `src/components/chat/` and `feed/` to ensure no `dangerouslySetInnerHTML`. Use DOMPurify if HTML is needed.\",\n    \"**S3 access control**: Verify S3 bucket policy: (1) presigned URLs are read-only or write-only scoped, (2) cross-tenant uploads are blocked (test uploading to another org's files), (3) list-objects is denied for anonymous/cross-org users.\",\n    \"**Secrets management**: Ensure `.env` is in `.gitignore` and never committed. Use separate `.env.local` for development. In CI/CD, inject secrets via environment variables or secret management (AWS Secrets Manager, etc.).\",\n    \"**Dependency scanning**: Run `npm audit` (or `bun install --production` then audit) monthly. Pin versions in package.json and use Dependabot or Snyk for automated checks.\",\n    \"**CSRF protection**: Verify POST/PUT/DELETE routes use the SameSite cookie flag (better-auth should do this). Test with a cross-origin form POST to confirm rejection.\",\n    \"**Input validation**: All route handlers should validate body/query with Elysia `t` schemas. Fuzz test with SQLi payloads (`'; DROP TABLE --`), XXS payloads (`<img src=x onerror=alert(1)>`), and oversized arrays.\",\n    \"**Audit tenant-switching logic**: In `src/server/org.ts` and auth hooks, verify org membership changes (add/remove members) immediately update active groups and conversation memberships. Test removing a user and confirming they can't read old messages.\"\n  ]\n}\n```\n\n---\n\n## Key Findings\n\n**Risk Score: 62/100** — Medium-High Risk\n\n### Most Critical Issues\n\n1. **Tenant Isolation (High)**: The codebase's core security depends on ZenStack policies enforcing `@@deny` rules. Any missing guard or incorrect `auth()` check in the schema breaks data isolation across organizations. The tests must be comprehensive.\n\n2. **Policy Enforcement Path (High)**: All user-driven queries must use `dbFor(user)` (yielding `userDb`). Accidentally using the unscoped `db` client in a route handler would bypass all policies. This requires code review discipline.\n\n3. **WebSocket Validation (Medium)**: Real-time events and WebRTC signaling rely on socket handlers; unvalidated payloads could corrupt state or trigger unauthorized actions.\n\n### Secondary Issues\n\n- Rate-limit bypass risk if `/api/execute` counts batch size as 1 request instead of N operations.\n- S3 presigned URL scope and expiry need verification to prevent cross-tenant file access.\n- Rich text rendering could XSS if user content isn't escaped (React JSX auto-escapes, but verify no `dangerouslySetInnerHTML`).\n\n### What's Done Right\n\n✅ Tenant isolation design is sound (ZenStack policies + per-user auth context)  \n✅ Admin-only fields marked with `@deny('update', true)`  \n✅ Rate-limiting in place  \n✅ React auto-escapes text content (XSS resistant)  \n✅ Authentication via better-auth (standard, secure library)\n\n---\n\n**Next Step**: Run `bun --cwd apps/api run test` to verify policy tests, then conduct a code review of `routes/` and `websocket/` handlers for validation gaps.\n",
+  "parsedOutput": {
+    "vulnerabilities": [
+      {
+        "severity": "high",
+        "file": "apps/api/zenstack/schema.zmodel",
+        "line": null,
+        "description": "Potential tenant isolation bypass: ZenStack policies rely on 'auth()' context. Verify all mutations enforce organizationId checks. Any policy missing '@@deny(\"all\", !(organization.members?[userId == auth().id]))' on top-level entities could leak data across tenants."
+      },
+      {
+        "severity": "high",
+        "file": "apps/api/src/server/session.ts",
+        "line": null,
+        "description": "Policy enforcement depends on dbFor(user) being used for all user-driven input. If any route uses the unscoped 'db' client for user queries, tenant isolation is bypassed. Verify no policy-enforced operations use 'db' instead of 'userDb'."
+      },
+      {
+        "severity": "medium",
+        "file": "apps/api/src/websocket/index.ts",
+        "line": null,
+        "description": "WebSocket authentication via session cookie ('auth: true') is secure, but socket event handlers must validate every incoming field. Any handler accepting client payload without schema validation risks injection attacks or state manipulation."
+      },
+      {
+        "severity": "medium",
+        "file": "apps/api/src/routes/execute.ts",
+        "line": null,
+        "description": "'/api/execute' allow-lists models and operators, but rate-limiting is per-user (300/min). Verify the cap is enforced at request level, not batch level—a single /api/execute call with 100 operations could evade the rate limit."
+      },
+      {
+        "severity": "medium",
+        "file": "apps/api/zenstack/schema.zmodel",
+        "line": null,
+        "description": "Field-level @deny('update', true) on admin-only fields (role, banned, permissions) is correct, but verify tests cover all sensitive fields. Missing one causes privilege escalation."
+      },
+      {
+        "severity": "medium",
+        "file": "apps/web/src/lib/api-client.ts",
+        "line": null,
+        "description": "Frontend API client must never expose 'db' (unscoped) operations. All data fetches must go through 'db.<model>.<operation>' which enforces ZenStack policies. Verify no direct fetch() calls bypass this."
+      },
+      {
+        "severity": "low",
+        "file": "apps/api/src/server/storage.ts (S3 setup)",
+        "line": null,
+        "description": "S3 presigned URLs (presigned POST/GET) are time-limited, but verify: (1) presigned URLs expire quickly, (2) upload ACLs prevent cross-org access, (3) file listings require auth."
+      },
+      {
+        "severity": "low",
+        "file": "apps/api/src/routes/conversations.ts",
+        "line": null,
+        "description": "Typing indicators and read receipts expose user presence. Verify these are only sent to authorized group/conversation members to prevent user enumeration."
+      },
+      {
+        "severity": "low",
+        "file": "apps/web/src/components/chat/",
+        "line": null,
+        "description": "Rich text rendering (RichText component) could render unsanitized HTML if user content isn't escaped. Verify dangerouslySetInnerHTML is never used; use React's JSX (auto-escapes) or a sanitizer like DOMPurify."
+      },
+      {
+        "severity": "low",
+        "file": ".env.example",
+        "line": null,
+        "description": "Environment variables for S3, TURN, and Resend API keys are required at runtime. Ensure these are never committed to .env (should stay in .env.example only). CI/CD must inject them securely."
+      }
+    ],
+    "riskScore": 62,
+    "recommendations": [
+      "**Audit ZenStack policies**: Run `bun --cwd apps/api run test` and verify `tests/policies.test.ts` covers all multi-tenant entities. Check that every top-level model (Group, Conversation, Event, Call, Attachment, Notification) has `@@deny('all', !(organization.members?[...]))`. Missing guards = data leaks.",
+      "**Verify db vs. userDb usage**: Grep the codebase for `const db =` and `userDb =` in route handlers. Every user-driven operation must use `userDb = dbFor(user)`. Any `db` used for user input bypasses policies.",
+      "**Validate WebSocket handlers**: In `src/websocket/hub.ts`, `index.ts`, and `calls.ts`, check that socket event handlers validate incoming payloads against Zod/Elysia schemas. Test with malformed/oversized messages.",
+      "**Rate-limit verification**: Test `/api/execute` rate limit (300/min) by sending a batch with 100 operations in one request. Confirm the server rejects or queues it, not allows 100 ops in one call.",
+      "**Admin field protection test**: Add a test in `tests/user-admin-fields.test.ts` that attempts to update `role`, `banned`, and `permissions` fields as a regular user. Should fail with 403 or not-found.",
+      "**Sanitize rich text**: If RichText components render user posts/comments, audit `src/components/chat/` and `feed/` to ensure no `dangerouslySetInnerHTML`. Use DOMPurify if HTML is needed.",
+      "**S3 access control**: Verify S3 bucket policy: (1) presigned URLs are read-only or write-only scoped, (2) cross-tenant uploads are blocked (test uploading to another org's files), (3) list-objects is denied for anonymous/cross-org users.",
+      "**Secrets management**: Ensure `.env` is in `.gitignore` and never committed. Use separate `.env.local` for development. In CI/CD, inject secrets via environment variables or secret management (AWS Secrets Manager, etc.).",
+      "**Dependency scanning**: Run `npm audit` (or `bun install --production` then audit) monthly. Pin versions in package.json and use Dependabot or Snyk for automated checks.",
+      "**CSRF protection**: Verify POST/PUT/DELETE routes use the SameSite cookie flag (better-auth should do this). Test with a cross-origin form POST to confirm rejection.",
+      "**Input validation**: All route handlers should validate body/query with Elysia `t` schemas. Fuzz test with SQLi payloads (`'; DROP TABLE --`), XXS payloads (`<img src=x onerror=alert(1)>`), and oversized arrays.",
+      "**Audit tenant-switching logic**: In `src/server/org.ts` and auth hooks, verify org membership changes (add/remove members) immediately update active groups and conversation memberships. Test removing a user and confirming they can't read old messages."
+    ]
+  },
+  "durationMs": 41421,
+  "model": "haiku",
+  "sandboxMode": "strict",
+  "workerType": "audit",
+  "timestamp": "2026-10-16T22:52:18.021Z",
+  "executionId": "audit_1792191096600_a2aoca"
+}

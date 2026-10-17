@@ -1,0 +1,65 @@
+[2026-10-16T22:53:24.725Z] RESULT
+============================================================
+{
+  "success": true,
+  "output": "# Security Analysis Report\n\n**Note:** The provided files are **minified compiled assets** (production build output), not source code. A comprehensive security audit requires analysis of:\n- Backend source code (`apps/api/src/**/*.ts`)\n- Database schema and policies (`apps/api/zenstack/schema.zmodel`)\n- Environment configuration and secrets management\n- Actual dependency versions in `package.json`\n\nBased on the available context from AGENTS.md and compiled assets, here's the analysis:\n\n```json\n{\n  \"vulnerabilities\": [\n    {\n      \"severity\": \"medium\",\n      \"file\": \"apps/api/src/websocket/index.ts\",\n      \"line\": null,\n      \"description\": \"WebSocket endpoint at /ws authenticates via session cookie. No visible token refresh or rate limiting mentioned. Risk: session fixation or DoS attacks if not rate-limited.\"\n    },\n    {\n      \"severity\": \"medium\",\n      \"file\": \"apps/api/src/lib/db.ts\",\n      \"line\": null,\n      \"description\": \"Unrestricted `db` client bypasses ZenStack policies. If this is ever exposed via /api/execute or user-accessible routes, complete tenant isolation breaks. AGENTS.md states 'Never expose it to /api/execute' but no automated enforcement visible.\"\n    },\n    {\n      \"severity\": \"medium\",\n      \"file\": \"apps/api/src/routes/uploads.ts\",\n      \"line\": null,\n      \"description\": \"S3 presigned URLs for uploads. Risk: if signing secret is weak or URL validation is missing, attackers could forge URLs. Requires verification of S3 credential handling and bucket policies.\"\n    },\n    {\n      \"severity\": \"low\",\n      \"file\": \"apps/web/src/components/rich-text-Bkev6nic.js\",\n      \"line\": null,\n      \"description\": \"Rich text rendering component. If backend stores unsanitized HTML/markdown, could enable XSS. Depends on sanitization at API layer (not visible in minified assets).\"\n    },\n    {\n      \"severity\": \"low\",\n      \"file\": \"apps/api/src/lib/auth.ts\",\n      \"line\": null,\n      \"description\": \"better-auth org hooks auto-add new members to 'All company' group. If group membership query is vulnerable, could leak data across tenants.\"\n    },\n    {\n      \"severity\": \"low\",\n      \"file\": \"apps/api/src/websocket/calls.ts\",\n      \"line\": null,\n      \"description\": \"WebRTC signaling via WebSocket. ICE candidates may reveal internal IP addresses if STUN/TURN not properly configured. Risk: information disclosure.\"\n    }\n  ],\n  \"riskScore\": 38,\n  \"recommendations\": [\n    \"✅ **Source code audit required** — Analyze actual TypeScript source in `apps/api/src/**` and `apps/web/src/**` to identify SQL injection, XSS, and auth bypass vectors. Minified assets hide implementation.\",\n    \"✅ **Verify ZenStack policies** — Audit `apps/api/zenstack/schema.zmodel` for missing `@@allow` rules and `@@deny` bypass. Run existing `apps/api/tests/policies.test.ts` against real database and add cases for new models.\",\n    \"✅ **Enforce db client isolation** — Add compile-time checks or linting to prevent `db` (unrestricted) client leaking into user-facing routes. Currently relies on manual discipline.\",\n    \"✅ **Rate limiting & abuse prevention** — Verify `/api/execute` rate limits (docs say 300/min), WebSocket backpressure, and file upload quotas. No evidence of per-endpoint or per-tenant limits.\",\n    \"✅ **Input validation & sanitization** — Verify all user inputs (POST bodies, WebSocket messages) are validated with Elysia schemas before database write. Check rich-text XSS prevention.\",\n    \"✅ **S3 security hardening** — Confirm presigned URLs use short TTL (~15min), bucket blocks public access, and upload validation checks MIME type + size server-side.\",\n    \"✅ **Dependency audit** — Run `npm audit` / `bun audit` and fix known CVEs in better-auth, ZenStack, React, and vendor libraries. Check for typosquatting.\",\n    \"✅ **Session & token security** — Verify JWT uses HS256+ (not `none`), refresh token rotation, secure cookie flags (`httpOnly`, `sameSite=strict`), and no tokens in URLs.\",\n    \"✅ **Tenant isolation regression tests** — Add integration tests confirming user A cannot read/write org B data via `/api/execute`, WebSocket, or file endpoints.\",\n    \"✅ **Environment secrets** — Ensure `.env` is in `.gitignore`, secrets use a vault (not hardcoded), and `BETTER_AUTH_SECRET` is rotated regularly.\"\n  ]\n}\n```\n\n## Key Findings\n\n| Category | Status | Notes |\n|----------|--------|-------|\n| **Hardcoded secrets** | ✅ None detected | `.env` vars properly externalized per AGENTS.md |\n| **SQL injection** | ⚠️ Low risk | ZenStack ORM + Elysia validation reduce risk, but source audit needed |\n| **XSS** | ⚠️ Medium risk | React auto-escapes, but rich-text component requires manual audit |\n| **Tenant isolation** | ⚠️ Critical (enforced) | ZenStack policies enforce multi-tenancy by design; requires test coverage |\n| **Auth/Authz** | ✅ Well-designed | better-auth + org plugin + field-level policies; implementation audit needed |\n| **Dependencies** | ❓ Unknown | Minified assets hide versions; `npm audit` required |\n\n**Next step:** Run `bun run check-types`, `bun run lint`, and `bun --cwd apps/api run test` to verify the policy and auth flows work as intended.\n",
+  "parsedOutput": {
+    "vulnerabilities": [
+      {
+        "severity": "medium",
+        "file": "apps/api/src/websocket/index.ts",
+        "line": null,
+        "description": "WebSocket endpoint at /ws authenticates via session cookie. No visible token refresh or rate limiting mentioned. Risk: session fixation or DoS attacks if not rate-limited."
+      },
+      {
+        "severity": "medium",
+        "file": "apps/api/src/lib/db.ts",
+        "line": null,
+        "description": "Unrestricted `db` client bypasses ZenStack policies. If this is ever exposed via /api/execute or user-accessible routes, complete tenant isolation breaks. AGENTS.md states 'Never expose it to /api/execute' but no automated enforcement visible."
+      },
+      {
+        "severity": "medium",
+        "file": "apps/api/src/routes/uploads.ts",
+        "line": null,
+        "description": "S3 presigned URLs for uploads. Risk: if signing secret is weak or URL validation is missing, attackers could forge URLs. Requires verification of S3 credential handling and bucket policies."
+      },
+      {
+        "severity": "low",
+        "file": "apps/web/src/components/rich-text-Bkev6nic.js",
+        "line": null,
+        "description": "Rich text rendering component. If backend stores unsanitized HTML/markdown, could enable XSS. Depends on sanitization at API layer (not visible in minified assets)."
+      },
+      {
+        "severity": "low",
+        "file": "apps/api/src/lib/auth.ts",
+        "line": null,
+        "description": "better-auth org hooks auto-add new members to 'All company' group. If group membership query is vulnerable, could leak data across tenants."
+      },
+      {
+        "severity": "low",
+        "file": "apps/api/src/websocket/calls.ts",
+        "line": null,
+        "description": "WebRTC signaling via WebSocket. ICE candidates may reveal internal IP addresses if STUN/TURN not properly configured. Risk: information disclosure."
+      }
+    ],
+    "riskScore": 38,
+    "recommendations": [
+      "✅ **Source code audit required** — Analyze actual TypeScript source in `apps/api/src/**` and `apps/web/src/**` to identify SQL injection, XSS, and auth bypass vectors. Minified assets hide implementation.",
+      "✅ **Verify ZenStack policies** — Audit `apps/api/zenstack/schema.zmodel` for missing `@@allow` rules and `@@deny` bypass. Run existing `apps/api/tests/policies.test.ts` against real database and add cases for new models.",
+      "✅ **Enforce db client isolation** — Add compile-time checks or linting to prevent `db` (unrestricted) client leaking into user-facing routes. Currently relies on manual discipline.",
+      "✅ **Rate limiting & abuse prevention** — Verify `/api/execute` rate limits (docs say 300/min), WebSocket backpressure, and file upload quotas. No evidence of per-endpoint or per-tenant limits.",
+      "✅ **Input validation & sanitization** — Verify all user inputs (POST bodies, WebSocket messages) are validated with Elysia schemas before database write. Check rich-text XSS prevention.",
+      "✅ **S3 security hardening** — Confirm presigned URLs use short TTL (~15min), bucket blocks public access, and upload validation checks MIME type + size server-side.",
+      "✅ **Dependency audit** — Run `npm audit` / `bun audit` and fix known CVEs in better-auth, ZenStack, React, and vendor libraries. Check for typosquatting.",
+      "✅ **Session & token security** — Verify JWT uses HS256+ (not `none`), refresh token rotation, secure cookie flags (`httpOnly`, `sameSite=strict`), and no tokens in URLs.",
+      "✅ **Tenant isolation regression tests** — Add integration tests confirming user A cannot read/write org B data via `/api/execute`, WebSocket, or file endpoints.",
+      "✅ **Environment secrets** — Ensure `.env` is in `.gitignore`, secrets use a vault (not hardcoded), and `BETTER_AUTH_SECRET` is rotated regularly."
+    ]
+  },
+  "durationMs": 29597,
+  "model": "haiku",
+  "sandboxMode": "strict",
+  "workerType": "audit",
+  "timestamp": "2026-10-16T22:53:24.725Z",
+  "executionId": "audit_1792191175128_om3ln9"
+}

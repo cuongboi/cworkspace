@@ -1,0 +1,48 @@
+{
+  "name": "@app/api",
+  "version": "1.0.50",
+  "description": "",
+  "module": "src/index.js",
+  "exports": {
+    "./zenstack/*": "./zenstack/*.ts",
+    "./lib/*": "./src/lib/*.ts"
+  },
+  "scripts": {
+    "test": "dotenv -e ../../.env -- bun test",
+    "dev": "dotenv -e ../../.env -- bun run --watch src/index.ts",
+    "zen": "dotenv -e ../../.env -- zen",
+    "db:generate": "bun run zen generate",
+    "db:push": "bun run zen db push",
+    "build": "bun build ./src/index.ts --compile --minify --asset ./src/public --outfile server",
+    "lint": "oxlint .",
+    "lint:fix": "oxlint . --fix",
+    "format": "oxfmt .",
+    "check-types": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@app/shared": "workspace:*",
+    "@aws-sdk/client-s3": "^3.1152.0",
+    "@aws-sdk/s3-presigned-post": "^3.1152.0",
+    "@aws-sdk/s3-request-presigner": "^3.1152.0",
+    "@elysia/cors": "^1.4.2",
+    "@elysia/openapi": "^1.4.16",
+    "@elysia/static": "^1.4.11",
+    "@paralleldrive/cuid2": "^3.3.0",
+    "@types/pg": "^8.23.1",
+    "@zenstackhq/better-auth": "^3.9.7",
+    "@zenstackhq/orm": "^3.9.7",
+    "@zenstackhq/plugin-policy": "^3.9.7",
+    "@zenstackhq/schema": "^3.9.7",
+    "argparse": "^3.0.3",
+    "better-auth": "^1.7.10",
+    "elysia": "latest",
+    "elysia-local-https": "^1.0.2",
+    "pg": "^8.23.1",
+    "resend": "^6.33.0"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.4.3",
+    "@zenstackhq/cli": "^3.9.7",
+    "bun-types": "latest"
+  }
+}
