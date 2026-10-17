@@ -44,7 +44,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip"
-import { useOrg } from "@/hooks/use-org"
+import { useApp } from "@/hooks/use-app"
 import { toPlainText } from "@/lib/mentions"
 import type { ReactionType } from "@app/api/zenstack/models"
 import {
@@ -165,7 +165,7 @@ function TextMessage({
   status,
   actions,
 }: Omit<Props, "conversationId">) {
-  const { me } = useOrg()
+  const { me } = useApp()
   const [active, setActive] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
   const mine = message.senderId === me.id

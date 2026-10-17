@@ -14,7 +14,7 @@ import { Field, FieldGroup, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { Spinner } from "@/components/ui/spinner"
 import { Textarea } from "@/components/ui/textarea"
-import { useOrg } from "@/hooks/use-org"
+import { useApp } from "@/hooks/use-app"
 import { ApiError, db } from "@/lib/api-client"
 import { useDbMutation } from "@/lib/query"
 import { slugify } from "@/lib/slug"
@@ -31,7 +31,7 @@ export function CreateGroupDialog({
   onOpenChange: (open: boolean) => void
 }) {
   const navigate = useNavigate()
-  const { org, me, href } = useOrg()
+  const { me } = useApp()
   const [draft, setDraft] = useState<Draft>({
     name: "",
     description: "",
@@ -44,7 +44,6 @@ export function CreateGroupDialog({
       const attempt = (slug: string) =>
         db.group.create({
           data: {
-            organizationId: org.id,
             name: d.name.trim(),
             slug,
             description: d.description.trim() || null,
@@ -73,7 +72,7 @@ export function CreateGroupDialog({
         toast.success("Group created")
         // navigating away unmounts the dialog (and drops `?create=1`)
         setDraft({ name: "", description: "", privacy: GroupPrivacy.PUBLIC })
-        void navigate(href(`/groups/${group.slug}`))
+        void navigate(`/groups/${group.slug}`)
       },
       onError: (err) => toast.error(err.message),
     })

@@ -11,6 +11,7 @@ import { conversationsRoute } from "./routes/conversations";
 import { executeRoute } from "./routes/execute";
 import { filesRoute } from "./routes/files";
 import { groupsRoute } from "./routes/groups";
+import { invitationsRoute } from "./routes/invitations";
 import { rtcRoute } from "./routes/rtc";
 import { uploadsRoute } from "./routes/uploads";
 import { webSocketPlugin } from "./websocket";
@@ -58,6 +59,7 @@ export const app = new Elysia()
   .use(filesRoute)
   .use(conversationsRoute)
   .use(groupsRoute)
+  .use(invitationsRoute)
   .use(rtcRoute)
   .use(webSocketPlugin())
   // unknown API paths answer with the JSON envelope, not the SPA's index.html

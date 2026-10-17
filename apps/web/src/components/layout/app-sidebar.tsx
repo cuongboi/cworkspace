@@ -20,7 +20,6 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuLabel,
   DropdownMenuRadioGroup,
   DropdownMenuRadioItem,
   DropdownMenuSeparator,
@@ -44,20 +43,21 @@ import {
   SidebarMenuItem,
   SidebarRail,
 } from "@/components/ui/sidebar"
-import { useOrg } from "@/hooks/use-org"
+import { useApp } from "@/hooks/use-app"
 import { accentFor } from "@/lib/accent"
+import { COMPANY_NAME } from "@/lib/company"
 import { db } from "@/lib/api-client"
 import { authClient } from "@/lib/auth-client"
 import { useDbQuery } from "@/lib/query"
 
 /** Unread conversations: last message newer than my read marker. */
 function useUnreadChats() {
-  const { org, me } = useOrg()
+  const { me } = useApp()
   const { data = [] } = useDbQuery(
-    ["conversationMember", "findMany", "unread", org.id],
+    ["conversationMember", "findMany", "unread"],
     () =>
       db.conversationMember.findMany({
-        where: { userId: me.id, conversation: { organizationId: org.id } },
+        where: { userId: me.id },
         select: {
           lastReadAt: true,
           conversation: { select: { lastMessageAt: true } },
@@ -69,17 +69,16 @@ function useUnreadChats() {
 
 export function AppSidebar() {
   const { pathname } = useLocation()
-  const { org, me, href, isAdmin } = useOrg()
+  const { me, isAdmin } = useApp()
   const unreadChats = useUnreadChats()
 
   const { data: groups = [] } = useDbQuery(
-    ["groupMember", "findMany", "sidebar", org.id],
+    ["groupMember", "findMany", "sidebar"],
     () =>
       db.groupMember.findMany({
         where: {
           userId: me.id,
           status: "ACTIVE",
-          group: { organizationId: org.id },
         },
         select: {
           group: {
@@ -104,14 +103,14 @@ export function AppSidebar() {
     { label: "People", icon: UserIcon, path: "/people" },
   ]
   const isActive = (path: string) => {
-    const full = href(path)
+    const full = path
     return path === "/" ? pathname === full : pathname.startsWith(full)
   }
 
   return (
     <Sidebar collapsible="icon">
       <SidebarHeader>
-        <OrgSwitcher />
+        <Brand />
       </SidebarHeader>
       <SidebarContent>
         <SidebarGroup>
@@ -124,7 +123,7 @@ export function AppSidebar() {
                     isActive={isActive(item.path)}
                     tooltip={item.label}
                   >
-                    <Link to={href(item.path)}>
+                    <Link to={item.path}>
                       <item.icon />
                       <span>{item.label}</span>
                     </Link>
@@ -142,7 +141,7 @@ export function AppSidebar() {
         <SidebarGroup className="group-data-[collapsible=icon]:hidden">
           <SidebarGroupLabel>Your groups</SidebarGroupLabel>
           <SidebarGroupAction asChild title="Create group">
-            <Link to={href("/groups?create=1")}>
+            <Link to={"/groups?create=1"}>
               <PlusIcon />
               <span className="sr-only">Create group</span>
             </Link>
@@ -156,7 +155,7 @@ export function AppSidebar() {
                     size="sm"
                     isActive={isActive(`/groups/${group.slug}`)}
                   >
-                    <Link to={href(`/groups/${group.slug}`)}>
+                    <Link to={`/groups/${group.slug}`}>
                       <span
                         className="flex size-5 items-center justify-center rounded-md text-[10px] font-semibold text-white"
                         style={{ backgroundColor: accentFor(group.id) }}
@@ -181,7 +180,7 @@ export function AppSidebar() {
                     isActive={isActive("/settings")}
                     tooltip="Admin settings"
                   >
-                    <Link to={href("/settings")}>
+                    <Link to={"/settings"}>
                       <SettingsIcon />
                       <span>Admin settings</span>
                     </Link>
@@ -205,53 +204,23 @@ export function AppSidebar() {
   )
 }
 
-function OrgSwitcher() {
-  const navigate = useNavigate()
-  const { org } = useOrg()
-  const { data: orgs } = authClient.useListOrganizations()
+function Brand() {
   return (
     <SidebarMenu>
       <SidebarMenuItem>
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <SidebarMenuButton
-              size="lg"
-              className="data-[state=open]:bg-sidebar-accent"
-            >
-              <span className="flex aspect-square size-8 items-center justify-center rounded-lg bg-primary font-bold text-primary-foreground">
-                {org.name[0]?.toUpperCase()}
+        <SidebarMenuButton size="lg" asChild>
+          <Link to="/">
+            <span className="flex aspect-square size-8 items-center justify-center rounded-lg bg-primary font-bold text-primary-foreground">
+              {COMPANY_NAME[0]?.toUpperCase()}
+            </span>
+            <span className="grid flex-1 text-left leading-tight">
+              <span className="truncate font-semibold">{COMPANY_NAME}</span>
+              <span className="truncate text-xs text-muted-foreground">
+                Workplace
               </span>
-              <span className="grid flex-1 text-left leading-tight">
-                <span className="truncate font-semibold">{org.name}</span>
-                <span className="truncate text-xs text-muted-foreground">
-                  Workplace
-                </span>
-              </span>
-              <ChevronsUpDownIcon className="ml-auto" />
-            </SidebarMenuButton>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent className="min-w-56" align="start">
-            <DropdownMenuLabel className="text-xs text-muted-foreground">
-              Organizations
-            </DropdownMenuLabel>
-            {(orgs ?? []).map((o) => (
-              <DropdownMenuItem
-                key={o.id}
-                onSelect={() => navigate(`/${o.slug}`)}
-              >
-                <span className="flex size-6 items-center justify-center rounded-md border text-xs font-semibold">
-                  {o.name[0]?.toUpperCase()}
-                </span>
-                {o.name}
-              </DropdownMenuItem>
-            ))}
-            <DropdownMenuSeparator />
-            <DropdownMenuItem onSelect={() => navigate("/onboarding")}>
-              <PlusIcon />
-              Create organization
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
+            </span>
+          </Link>
+        </SidebarMenuButton>
       </SidebarMenuItem>
     </SidebarMenu>
   )
@@ -269,7 +238,6 @@ function UserMenu({
   image: string | null
 }) {
   const navigate = useNavigate()
-  const { href } = useOrg()
   const { theme, setTheme } = useTheme()
   return (
     <SidebarMenu>
@@ -291,7 +259,7 @@ function UserMenu({
             </SidebarMenuButton>
           </DropdownMenuTrigger>
           <DropdownMenuContent className="min-w-56" side="top" align="start">
-            <DropdownMenuItem onSelect={() => navigate(href(`/people/${id}`))}>
+            <DropdownMenuItem onSelect={() => navigate(`/people/${id}`)}>
               <UserIcon />
               Profile
             </DropdownMenuItem>

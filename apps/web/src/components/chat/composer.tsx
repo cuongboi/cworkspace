@@ -18,7 +18,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip"
-import { useOrg } from "@/hooks/use-org"
+import { useApp } from "@/hooks/use-app"
 import { useSocket } from "@/hooks/use-socket"
 import type { useUploads } from "@/hooks/use-uploads"
 import { ApiError, db } from "@/lib/api-client"
@@ -58,7 +58,7 @@ export function Composer({
   uploads,
   disabled,
 }: Props) {
-  const { me } = useOrg()
+  const { me } = useApp()
   const qc = useQueryClient()
   const socket = useSocket()
   const { scrollToEnd } = useThreadScroll()

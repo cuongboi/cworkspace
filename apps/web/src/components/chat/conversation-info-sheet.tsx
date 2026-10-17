@@ -51,7 +51,7 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet"
 import { Spinner } from "@/components/ui/spinner"
-import { useOrg } from "@/hooks/use-org"
+import { useApp } from "@/hooks/use-app"
 import { useIsOnline } from "@/hooks/use-presence"
 import { ApiError, db } from "@/lib/api-client"
 import { invalidateModels } from "@/lib/query"
@@ -91,7 +91,7 @@ export function ConversationInfoSheet({
   conversation,
   members,
 }: Props) {
-  const { me, href } = useOrg()
+  const { me } = useApp()
   const navigate = useNavigate()
   const qc = useQueryClient()
   const isGroup = conversation.type === "GROUP"
@@ -224,7 +224,7 @@ export function ConversationInfoSheet({
         select: { id: true },
       })
       onOpenChange(false)
-      await navigate(href("/chat"))
+      await navigate("/chat")
       await refresh()
       toast.success("You left the conversation")
     } catch (err) {
@@ -259,7 +259,7 @@ export function ConversationInfoSheet({
               </SheetDescription>
               {other ? (
                 <Button asChild variant="secondary" size="sm" className="mt-2">
-                  <Link to={href(`/people/${other.id}`)}>
+                  <Link to={`/people/${other.id}`}>
                     <UserRoundIcon /> View profile
                   </Link>
                 </Button>
@@ -397,7 +397,7 @@ export function ConversationInfoSheet({
                           <UserAvatar user={m.user} presence />
                           <div className="min-w-0 flex-1">
                             <Link
-                              to={href(`/people/${m.userId}`)}
+                              to={`/people/${m.userId}`}
                               className="block truncate text-sm font-medium hover:underline"
                             >
                               {m.user.name}
@@ -454,7 +454,7 @@ export function ConversationInfoSheet({
                   <Separator />
                   {linkedGroup ? (
                     <Button asChild variant="secondary">
-                      <Link to={href(`/groups/${linkedGroup.slug}`)}>
+                      <Link to={`/groups/${linkedGroup.slug}`}>
                         <UsersRoundIcon /> Open group
                       </Link>
                     </Button>

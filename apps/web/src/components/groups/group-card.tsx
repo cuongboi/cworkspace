@@ -1,24 +1,22 @@
 import { Link } from "react-router-dom"
 import { Card } from "@/components/ui/card"
 import { Skeleton } from "@/components/ui/skeleton"
-import { useOrg } from "@/hooks/use-org"
 import type { GroupWithMe } from "./group-query"
 import { GroupCover, PrivacyLabel } from "./group-visuals"
 import { MembershipButton } from "./membership-button"
 
 export function GroupCard({ group }: { group: GroupWithMe }) {
-  const { href } = useOrg()
   const membership = group.members[0]
   const count = group._count.members
 
   return (
     <Card className="gap-0 py-0">
-      <Link to={href(`/groups/${group.slug}`)} tabIndex={-1} aria-hidden>
+      <Link to={`/groups/${group.slug}`} tabIndex={-1} aria-hidden>
         <GroupCover group={group} className="h-24" />
       </Link>
       <div className="flex flex-1 flex-col gap-1 p-4">
         <Link
-          to={href(`/groups/${group.slug}`)}
+          to={`/groups/${group.slug}`}
           className="line-clamp-1 text-base font-semibold hover:underline"
         >
           {group.name}

@@ -57,8 +57,8 @@ async function prepare(
 
 export async function uploadFile(
   file: File,
-  organizationId: string,
-  opts?: { orgVisible?: boolean }
+  /** `isPublic`: avatars and group covers, readable by every signed-in user (images only) */
+  opts?: { isPublic?: boolean }
 ): Promise<UploadedAttachment> {
   const { blob, width, height } = await prepare(file)
   if (blob.size > MAX_UPLOAD_BYTES)
@@ -70,7 +70,6 @@ export async function uploadFile(
     credentials: "include",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      organizationId,
       name: file.name,
       mimeType,
       size: blob.size,

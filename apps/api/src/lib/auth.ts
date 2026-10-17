@@ -1,9 +1,9 @@
 import { betterAuth } from "better-auth";
-import { admin, bearer, jwt, openAPI, organization } from "better-auth/plugins";
+import { admin, bearer, jwt, openAPI } from "better-auth/plugins";
 import { env } from "@/env";
-import { createDefaultGroup, joinDefaultGroup, removeFromOrganization } from "@/server/org";
+import { acceptPendingInvitation, joinDefaultGroup } from "@/server/company";
 import { db, dbAdapter } from "./db";
-import { escapeHtml, sendMail } from "./mail";
+import { sendMail } from "./mail";
 
 export const auth = betterAuth({
   database: dbAdapter,
@@ -17,33 +17,6 @@ export const auth = betterAuth({
     admin(),
     bearer(),
     openAPI(),
-    // Tenants. Mutate orgs, members and invitations only through `authClient.organization.*`.
-    organization({
-      sendInvitationEmail: async ({ id, email, organization, inviter }) => {
-        const url = `${env.APP_URL}/invite/${id}`;
-        await sendMail({
-          to: email,
-          subject: `${inviter.user.name} invited you to ${organization.name} on cworkplace`,
-          // Names are user-controlled: escape them before putting them in HTML.
-          html: `<p>${escapeHtml(inviter.user.name)} invited you to join <b>${escapeHtml(organization.name)}</b>.</p><p><a href="${url}">Accept invitation</a></p>`,
-          text: `${inviter.user.name} invited you to join ${organization.name}: ${url}`,
-        });
-      },
-      organizationHooks: {
-        afterCreateOrganization: async ({ organization, user }) => {
-          await createDefaultGroup(organization.id, user.id);
-        },
-        afterAddMember: async ({ organization, user }) => {
-          await joinDefaultGroup(organization.id, user.id);
-        },
-        afterAcceptInvitation: async ({ organization, user }) => {
-          await joinDefaultGroup(organization.id, user.id);
-        },
-        afterRemoveMember: async ({ organization, user }) => {
-          await removeFromOrganization(organization.id, user.id);
-        },
-      },
-    }),
   ],
   trustedOrigins: env.WEB_ORIGIN.split(","),
   session: {
@@ -52,17 +25,23 @@ export const auth = betterAuth({
     updateAge: 60,
     cookieCache: { enabled: true, strategy: "jwt", maxAge: 60 },
   },
+  user: {
+    // Exposed on the session so `dbFor` can bind it to `auth().permissions` without a lookup.
+    additionalFields: {
+      permissions: { type: "json", required: false, input: false },
+    },
+  },
   databaseHooks: {
-    session: {
+    user: {
       create: {
-        // Land new sessions in the user's first organization so `/` can redirect to `/:orgSlug`.
-        before: async (session) => {
-          const member = await db.member.findFirst({
-            where: { userId: session.userId },
-            orderBy: { createdAt: "asc" },
-            select: { organizationId: true },
-          });
-          return { data: { ...session, activeOrganizationId: member?.organizationId ?? null } };
+        // Open sign-up: the very first account administers the instance.
+        before: async (user) => {
+          const count = await db.user.count();
+          return { data: { ...user, role: count === 0 ? "admin" : (user.role ?? "user") } };
+        },
+        after: async (user) => {
+          await joinDefaultGroup(user.id);
+          await acceptPendingInvitation(user);
         },
       },
     },

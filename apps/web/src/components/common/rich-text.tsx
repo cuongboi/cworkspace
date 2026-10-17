@@ -1,6 +1,5 @@
 import { cn } from "cn"
 import { Link } from "react-router-dom"
-import { useOrg } from "@/hooks/use-org"
 import { parseText } from "@/lib/mentions"
 
 /** Renders user text: preserves line breaks, links URLs and `@[Name](userId)` mentions. */
@@ -11,7 +10,6 @@ export function RichText({
   text: string
   className?: string
 }) {
-  const { href } = useOrg()
   return (
     <p className={cn("break-words whitespace-pre-wrap", className)}>
       {parseText(text).map((seg, i) => {
@@ -20,7 +18,7 @@ export function RichText({
           return (
             <Link
               key={key}
-              to={href(`/people/${seg.userId}`)}
+              to={`/people/${seg.userId}`}
               className="font-medium text-primary hover:underline"
             >
               @{seg.name}

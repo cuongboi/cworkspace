@@ -29,26 +29,27 @@ import {
   EmptyTitle,
 } from "@/components/ui/empty"
 import { Skeleton } from "@/components/ui/skeleton"
-import { useOrg } from "@/hooks/use-org"
+import { useApp } from "@/hooks/use-app"
 import { useIsOnline } from "@/hooks/use-presence"
 import { db } from "@/lib/api-client"
 import { useDbQuery } from "@/lib/query"
+import { COMPANY_NAME } from "@/lib/company"
 
-const ROLE_LABEL: Record<string, string> = { owner: "Owner", admin: "Admin" }
+const ROLE_LABEL: Record<string, string> = { admin: "Admin" }
 
 const ProfilePage = () => {
   const params = useParams()
-  const { org, me, href } = useOrg()
+  const { me } = useApp()
   const userId = params.userId ?? ""
   const [editing, setEditing] = useState(false)
   const online = useIsOnline(userId)
   const isMe = userId === me.id
 
   const { data: user, isPending } = useDbQuery(
-    ["user", "findFirst", "profile", org.id, userId],
+    ["user", "findFirst", "profile", userId],
     () =>
       db.user.findFirst({
-        where: { id: userId, members: { some: { organizationId: org.id } } },
+        where: { id: userId },
         select: {
           id: true,
           name: true,
@@ -59,10 +60,8 @@ const ProfilePage = () => {
           location: true,
           phone: true,
           bio: true,
-          members: {
-            where: { organizationId: org.id },
-            select: { role: true, createdAt: true },
-          },
+          role: true,
+          createdAt: true,
         },
       })
   )
@@ -87,19 +86,20 @@ const ProfilePage = () => {
             <UserXIcon />
           </EmptyMedia>
           <EmptyTitle>Person not found</EmptyTitle>
-          <EmptyDescription>They may have left {org.name}.</EmptyDescription>
+          <EmptyDescription>
+            They may have left {COMPANY_NAME}.
+          </EmptyDescription>
         </EmptyHeader>
         <EmptyContent>
           <Button asChild variant="outline">
-            <Link to={href("/people")}>Browse people</Link>
+            <Link to={"/people"}>Browse people</Link>
           </Button>
         </EmptyContent>
       </Empty>
     )
   }
 
-  const membership = user.members[0]
-  const roleLabel = membership ? ROLE_LABEL[membership.role] : undefined
+  const roleLabel = user.role ? ROLE_LABEL[user.role] : undefined
 
   return (
     <FeedShell>
@@ -124,7 +124,7 @@ const ProfilePage = () => {
                 </Button>
               ) : (
                 <Button asChild>
-                  <Link to={href(`/chat?with=${user.id}`)}>
+                  <Link to={`/chat?with=${user.id}`}>
                     <MessageCircleIcon />
                     Message
                   </Link>
@@ -187,13 +187,11 @@ const ProfilePage = () => {
                 ) : null
               }
             />
-            {membership ? (
-              <Detail
-                icon={<CalendarIcon />}
-                label="Joined"
-                value={`Joined ${org.name} in ${format(membership.createdAt, "MMMM yyyy")}`}
-              />
-            ) : null}
+            <Detail
+              icon={<CalendarIcon />}
+              label="Joined"
+              value={`Joined ${COMPANY_NAME} in ${format(user.createdAt, "MMMM yyyy")}`}
+            />
           </dl>
         </CardContent>
       </Card>
@@ -202,8 +200,8 @@ const ProfilePage = () => {
         {isMe ? "Your posts" : `Posts by ${user.name.split(" ")[0]}`}
       </h2>
       <PostFeed
-        scope={["author", org.id, user.id, me.id]}
-        where={{ authorId: user.id, group: { organizationId: org.id } }}
+        scope={["author", user.id, me.id]}
+        where={{ authorId: user.id }}
         empty={
           <p className="rounded-xl border border-dashed bg-card p-8 text-center text-sm text-muted-foreground">
             No posts you can see yet.

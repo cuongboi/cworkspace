@@ -12,21 +12,20 @@ import {
   EmptyMedia,
   EmptyTitle,
 } from "@/components/ui/empty"
-import { useOrg } from "@/hooks/use-org"
+import { useApp } from "@/hooks/use-app"
 
 /** News feed: posts from every group I'm an active member of, newest first. */
 const HomePage = () => {
-  const { org, me, href } = useOrg()
+  const { me } = useApp()
 
   return (
     <FeedShell>
       <h1 className="sr-only">News feed</h1>
       <PostComposer />
       <PostFeed
-        scope={["home", org.id, me.id]}
+        scope={["home", me.id]}
         where={{
           group: {
-            organizationId: org.id,
             members: { some: { userId: me.id, status: "ACTIVE" } },
           },
         }}
@@ -44,7 +43,7 @@ const HomePage = () => {
             </EmptyHeader>
             <EmptyContent>
               <Button asChild variant="outline">
-                <Link to={href("/groups")}>
+                <Link to={"/groups"}>
                   <UsersIcon />
                   Discover groups
                 </Link>

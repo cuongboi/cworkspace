@@ -5,7 +5,6 @@ import { NotificationBell } from "@/components/notifications/notification-bell"
 import { Input } from "@/components/ui/input"
 import { Separator } from "@/components/ui/separator"
 import { SidebarTrigger } from "@/components/ui/sidebar"
-import { useOrg } from "@/hooks/use-org"
 
 export function AppHeader() {
   const [searchParams] = useSearchParams()
@@ -26,15 +25,13 @@ export function AppHeader() {
 
 function SearchForm({ initial }: { initial: string }) {
   const navigate = useNavigate()
-  const { href } = useOrg()
   const [q, setQ] = useState(initial)
   return (
     <form
       className="relative w-full max-w-md"
       onSubmit={(e) => {
         e.preventDefault()
-        if (q.trim())
-          void navigate(href(`/search?q=${encodeURIComponent(q.trim())}`))
+        if (q.trim()) void navigate(`/search?q=${encodeURIComponent(q.trim())}`)
       }}
     >
       <SearchIcon className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />

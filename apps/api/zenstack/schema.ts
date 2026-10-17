@@ -123,17 +123,11 @@ export class SchemaType implements SchemaDef {
                     array: true,
                     relation: { opposite: "user" }
                 },
-                members: {
-                    name: "members",
-                    type: "Member",
-                    array: true,
-                    relation: { opposite: "user" }
-                },
-                invitations: {
-                    name: "invitations",
+                invitationsSent: {
+                    name: "invitationsSent",
                     type: "Invitation",
                     array: true,
-                    relation: { opposite: "user" }
+                    relation: { opposite: "invitedBy" }
                 },
                 groupsCreated: {
                     name: "groupsCreated",
@@ -260,8 +254,7 @@ export class SchemaType implements SchemaDef {
                 }
             },
             attributes: [
-                { name: "@@allow", args: [{ name: "operation", value: ExpressionUtils.literal("read") }, { name: "condition", value: ExpressionUtils.binary(ExpressionUtils.field("id"), "==", ExpressionUtils.member(ExpressionUtils.call("auth"), ["id"])) }] },
-                { name: "@@allow", args: [{ name: "operation", value: ExpressionUtils.literal("read") }, { name: "condition", value: ExpressionUtils.binary(ExpressionUtils.field("members"), "?", ExpressionUtils.binary(ExpressionUtils.member(ExpressionUtils.field("organization"), ["members"]), "?", ExpressionUtils.binary(ExpressionUtils.field("userId"), "==", ExpressionUtils.member(ExpressionUtils.call("auth"), ["id"])))) }] },
+                { name: "@@allow", args: [{ name: "operation", value: ExpressionUtils.literal("read") }, { name: "condition", value: ExpressionUtils.binary(ExpressionUtils.call("auth"), "!=", ExpressionUtils._null()) }] },
                 { name: "@@allow", args: [{ name: "operation", value: ExpressionUtils.literal("update") }, { name: "condition", value: ExpressionUtils.binary(ExpressionUtils.field("id"), "==", ExpressionUtils.member(ExpressionUtils.call("auth"), ["id"])) }] },
                 { name: "@@map", args: [{ name: "name", value: ExpressionUtils.literal("user") }] }
             ] as readonly AttributeApplication[],
@@ -324,11 +317,6 @@ export class SchemaType implements SchemaDef {
                     type: "User",
                     attributes: [{ name: "@relation", args: [{ name: "fields", value: ExpressionUtils.array("String", [ExpressionUtils.field("userId")]) }, { name: "references", value: ExpressionUtils.array("String", [ExpressionUtils.field("id")]) }, { name: "onDelete", value: ExpressionUtils.literal("Cascade") }] }] as readonly AttributeApplication[],
                     relation: { opposite: "sessions", fields: ["userId"], references: ["id"], onDelete: "Cascade" }
-                },
-                activeOrganizationId: {
-                    name: "activeOrganizationId",
-                    type: "String",
-                    optional: true
                 },
                 impersonatedBy: {
                     name: "impersonatedBy",
@@ -523,176 +511,6 @@ export class SchemaType implements SchemaDef {
                 id: { type: "String" }
             }
         },
-        Organization: {
-            name: "Organization",
-            fields: {
-                id: {
-                    name: "id",
-                    type: "String",
-                    id: true,
-                    attributes: [{ name: "@id" }] as readonly AttributeApplication[]
-                },
-                name: {
-                    name: "name",
-                    type: "String"
-                },
-                slug: {
-                    name: "slug",
-                    type: "String",
-                    unique: true,
-                    attributes: [{ name: "@unique" }] as readonly AttributeApplication[]
-                },
-                logo: {
-                    name: "logo",
-                    type: "String",
-                    optional: true
-                },
-                createdAt: {
-                    name: "createdAt",
-                    type: "DateTime"
-                },
-                metadata: {
-                    name: "metadata",
-                    type: "String",
-                    optional: true
-                },
-                members: {
-                    name: "members",
-                    type: "Member",
-                    array: true,
-                    relation: { opposite: "organization" }
-                },
-                permissions: {
-                    name: "permissions",
-                    type: "MemberPermission",
-                    array: true,
-                    relation: { opposite: "organization" }
-                },
-                invitations: {
-                    name: "invitations",
-                    type: "Invitation",
-                    array: true,
-                    relation: { opposite: "organization" }
-                },
-                groups: {
-                    name: "groups",
-                    type: "Group",
-                    array: true,
-                    relation: { opposite: "organization" }
-                },
-                conversations: {
-                    name: "conversations",
-                    type: "Conversation",
-                    array: true,
-                    relation: { opposite: "organization" }
-                },
-                events: {
-                    name: "events",
-                    type: "Event",
-                    array: true,
-                    relation: { opposite: "organization" }
-                },
-                calls: {
-                    name: "calls",
-                    type: "Call",
-                    array: true,
-                    relation: { opposite: "organization" }
-                },
-                attachments: {
-                    name: "attachments",
-                    type: "Attachment",
-                    array: true,
-                    relation: { opposite: "organization" }
-                },
-                notifications: {
-                    name: "notifications",
-                    type: "Notification",
-                    array: true,
-                    relation: { opposite: "organization" }
-                }
-            },
-            attributes: [
-                { name: "@@allow", args: [{ name: "operation", value: ExpressionUtils.literal("read") }, { name: "condition", value: ExpressionUtils.binary(ExpressionUtils.field("members"), "?", ExpressionUtils.binary(ExpressionUtils.field("userId"), "==", ExpressionUtils.member(ExpressionUtils.call("auth"), ["id"]))) }] },
-                { name: "@@map", args: [{ name: "name", value: ExpressionUtils.literal("organization") }] }
-            ] as readonly AttributeApplication[],
-            idFields: ["id"],
-            uniqueFields: {
-                id: { type: "String" },
-                slug: { type: "String" }
-            }
-        },
-        Member: {
-            name: "Member",
-            fields: {
-                id: {
-                    name: "id",
-                    type: "String",
-                    id: true,
-                    attributes: [{ name: "@id" }] as readonly AttributeApplication[]
-                },
-                organizationId: {
-                    name: "organizationId",
-                    type: "String",
-                    foreignKeyFor: [
-                        "organization"
-                    ] as readonly string[]
-                },
-                organization: {
-                    name: "organization",
-                    type: "Organization",
-                    attributes: [{ name: "@relation", args: [{ name: "fields", value: ExpressionUtils.array("String", [ExpressionUtils.field("organizationId")]) }, { name: "references", value: ExpressionUtils.array("String", [ExpressionUtils.field("id")]) }, { name: "onDelete", value: ExpressionUtils.literal("Cascade") }] }] as readonly AttributeApplication[],
-                    relation: { opposite: "members", fields: ["organizationId"], references: ["id"], onDelete: "Cascade" }
-                },
-                userId: {
-                    name: "userId",
-                    type: "String",
-                    foreignKeyFor: [
-                        "user"
-                    ] as readonly string[]
-                },
-                user: {
-                    name: "user",
-                    type: "User",
-                    attributes: [{ name: "@relation", args: [{ name: "fields", value: ExpressionUtils.array("String", [ExpressionUtils.field("userId")]) }, { name: "references", value: ExpressionUtils.array("String", [ExpressionUtils.field("id")]) }, { name: "onDelete", value: ExpressionUtils.literal("Cascade") }] }] as readonly AttributeApplication[],
-                    relation: { opposite: "members", fields: ["userId"], references: ["id"], onDelete: "Cascade" }
-                },
-                role: {
-                    name: "role",
-                    type: "String",
-                    attributes: [{ name: "@default", args: [{ name: "value", value: ExpressionUtils.literal("member") }] }] as readonly AttributeApplication[],
-                    default: "member" as FieldDefault
-                },
-                createdAt: {
-                    name: "createdAt",
-                    type: "DateTime"
-                },
-                permissionId: {
-                    name: "permissionId",
-                    type: "String",
-                    optional: true,
-                    foreignKeyFor: [
-                        "permissions"
-                    ] as readonly string[]
-                },
-                permissions: {
-                    name: "permissions",
-                    type: "MemberPermission",
-                    optional: true,
-                    attributes: [{ name: "@relation", args: [{ name: "fields", value: ExpressionUtils.array("String", [ExpressionUtils.field("permissionId")]) }, { name: "references", value: ExpressionUtils.array("String", [ExpressionUtils.field("id")]) }, { name: "onDelete", value: ExpressionUtils.literal("Cascade") }] }] as readonly AttributeApplication[],
-                    relation: { opposite: "members", fields: ["permissionId"], references: ["id"], onDelete: "Cascade" }
-                }
-            },
-            attributes: [
-                { name: "@@allow", args: [{ name: "operation", value: ExpressionUtils.literal("read") }, { name: "condition", value: ExpressionUtils.binary(ExpressionUtils.member(ExpressionUtils.field("organization"), ["members"]), "?", ExpressionUtils.binary(ExpressionUtils.field("userId"), "==", ExpressionUtils.member(ExpressionUtils.call("auth"), ["id"]))) }] },
-                { name: "@@index", args: [{ name: "fields", value: ExpressionUtils.array("String", [ExpressionUtils.field("organizationId"), ExpressionUtils.field("userId")]) }] },
-                { name: "@@index", args: [{ name: "fields", value: ExpressionUtils.array("String", [ExpressionUtils.field("userId")]) }] },
-                { name: "@@map", args: [{ name: "name", value: ExpressionUtils.literal("member") }] }
-            ] as readonly AttributeApplication[],
-            idFields: ["id"],
-            uniqueFields: {
-                id: { type: "String" }
-            }
-        },
         Invitation: {
             name: "Invitation",
             fields: {
@@ -700,20 +518,8 @@ export class SchemaType implements SchemaDef {
                     name: "id",
                     type: "String",
                     id: true,
-                    attributes: [{ name: "@id" }] as readonly AttributeApplication[]
-                },
-                organizationId: {
-                    name: "organizationId",
-                    type: "String",
-                    foreignKeyFor: [
-                        "organization"
-                    ] as readonly string[]
-                },
-                organization: {
-                    name: "organization",
-                    type: "Organization",
-                    attributes: [{ name: "@relation", args: [{ name: "fields", value: ExpressionUtils.array("String", [ExpressionUtils.field("organizationId")]) }, { name: "references", value: ExpressionUtils.array("String", [ExpressionUtils.field("id")]) }, { name: "onDelete", value: ExpressionUtils.literal("Cascade") }] }] as readonly AttributeApplication[],
-                    relation: { opposite: "invitations", fields: ["organizationId"], references: ["id"], onDelete: "Cascade" }
+                    attributes: [{ name: "@id" }, { name: "@default", args: [{ name: "value", value: ExpressionUtils.call("cuid") }] }] as readonly AttributeApplication[],
+                    default: ExpressionUtils.call("cuid") as FieldDefault
                 },
                 email: {
                     name: "email",
@@ -722,103 +528,43 @@ export class SchemaType implements SchemaDef {
                 role: {
                     name: "role",
                     type: "String",
-                    optional: true
+                    attributes: [{ name: "@default", args: [{ name: "value", value: ExpressionUtils.literal("user") }] }] as readonly AttributeApplication[],
+                    default: "user" as FieldDefault
                 },
                 status: {
                     name: "status",
-                    type: "String",
-                    attributes: [{ name: "@default", args: [{ name: "value", value: ExpressionUtils.literal("pending") }] }] as readonly AttributeApplication[],
-                    default: "pending" as FieldDefault
+                    type: "InvitationStatus",
+                    attributes: [{ name: "@default", args: [{ name: "value", value: ExpressionUtils.literal("PENDING") }] }] as readonly AttributeApplication[],
+                    default: "PENDING" as FieldDefault
                 },
                 expiresAt: {
                     name: "expiresAt",
                     type: "DateTime"
                 },
-                createdAt: {
-                    name: "createdAt",
-                    type: "DateTime",
-                    attributes: [{ name: "@default", args: [{ name: "value", value: ExpressionUtils.call("now") }] }] as readonly AttributeApplication[],
-                    default: ExpressionUtils.call("now") as FieldDefault
-                },
-                inviterId: {
-                    name: "inviterId",
+                invitedById: {
+                    name: "invitedById",
                     type: "String",
                     foreignKeyFor: [
-                        "user"
+                        "invitedBy"
                     ] as readonly string[]
                 },
-                user: {
-                    name: "user",
+                invitedBy: {
+                    name: "invitedBy",
                     type: "User",
-                    attributes: [{ name: "@relation", args: [{ name: "fields", value: ExpressionUtils.array("String", [ExpressionUtils.field("inviterId")]) }, { name: "references", value: ExpressionUtils.array("String", [ExpressionUtils.field("id")]) }, { name: "onDelete", value: ExpressionUtils.literal("Cascade") }] }] as readonly AttributeApplication[],
-                    relation: { opposite: "invitations", fields: ["inviterId"], references: ["id"], onDelete: "Cascade" }
-                }
-            },
-            attributes: [
-                { name: "@@allow", args: [{ name: "operation", value: ExpressionUtils.literal("read") }, { name: "condition", value: ExpressionUtils.binary(ExpressionUtils.member(ExpressionUtils.field("organization"), ["members"]), "?", ExpressionUtils.binary(ExpressionUtils.binary(ExpressionUtils.field("userId"), "==", ExpressionUtils.member(ExpressionUtils.call("auth"), ["id"])), "&&", ExpressionUtils.binary(ExpressionUtils.field("role"), "in", ExpressionUtils.array("String", [ExpressionUtils.literal("owner"), ExpressionUtils.literal("admin")])))) }] },
-                { name: "@@allow", args: [{ name: "operation", value: ExpressionUtils.literal("read") }, { name: "condition", value: ExpressionUtils.binary(ExpressionUtils.field("email"), "==", ExpressionUtils.member(ExpressionUtils.call("auth"), ["email"])) }] },
-                { name: "@@map", args: [{ name: "name", value: ExpressionUtils.literal("invitation") }] }
-            ] as readonly AttributeApplication[],
-            idFields: ["id"],
-            uniqueFields: {
-                id: { type: "String" }
-            }
-        },
-        MemberPermission: {
-            name: "MemberPermission",
-            fields: {
-                id: {
-                    name: "id",
-                    type: "String",
-                    id: true,
-                    attributes: [{ name: "@id" }] as readonly AttributeApplication[]
-                },
-                name: {
-                    name: "name",
-                    type: "String"
-                },
-                permissions: {
-                    name: "permissions",
-                    type: "PermissionType",
-                    array: true,
-                    attributes: [{ name: "@json" }] as readonly AttributeApplication[]
-                },
-                organization: {
-                    name: "organization",
-                    type: "Organization",
-                    attributes: [{ name: "@relation", args: [{ name: "fields", value: ExpressionUtils.array("String", [ExpressionUtils.field("organizationId")]) }, { name: "references", value: ExpressionUtils.array("String", [ExpressionUtils.field("id")]) }, { name: "onDelete", value: ExpressionUtils.literal("Cascade") }] }] as readonly AttributeApplication[],
-                    relation: { opposite: "permissions", fields: ["organizationId"], references: ["id"], onDelete: "Cascade" }
-                },
-                organizationId: {
-                    name: "organizationId",
-                    type: "String",
-                    foreignKeyFor: [
-                        "organization"
-                    ] as readonly string[]
+                    attributes: [{ name: "@relation", args: [{ name: "fields", value: ExpressionUtils.array("String", [ExpressionUtils.field("invitedById")]) }, { name: "references", value: ExpressionUtils.array("String", [ExpressionUtils.field("id")]) }, { name: "onDelete", value: ExpressionUtils.literal("Cascade") }] }] as readonly AttributeApplication[],
+                    relation: { opposite: "invitationsSent", fields: ["invitedById"], references: ["id"], onDelete: "Cascade" }
                 },
                 createdAt: {
                     name: "createdAt",
                     type: "DateTime",
                     attributes: [{ name: "@default", args: [{ name: "value", value: ExpressionUtils.call("now") }] }] as readonly AttributeApplication[],
                     default: ExpressionUtils.call("now") as FieldDefault
-                },
-                updatedAt: {
-                    name: "updatedAt",
-                    type: "DateTime",
-                    updatedAt: true,
-                    attributes: [{ name: "@default", args: [{ name: "value", value: ExpressionUtils.call("now") }] }, { name: "@updatedAt" }] as readonly AttributeApplication[],
-                    default: ExpressionUtils.call("now") as FieldDefault
-                },
-                members: {
-                    name: "members",
-                    type: "Member",
-                    array: true,
-                    relation: { opposite: "permissions" }
                 }
             },
             attributes: [
-                { name: "@@allow", args: [{ name: "operation", value: ExpressionUtils.literal("read") }, { name: "condition", value: ExpressionUtils.binary(ExpressionUtils.member(ExpressionUtils.field("organization"), ["members"]), "?", ExpressionUtils.binary(ExpressionUtils.field("userId"), "==", ExpressionUtils.member(ExpressionUtils.call("auth"), ["id"]))) }] },
-                { name: "@@map", args: [{ name: "name", value: ExpressionUtils.literal("member_permissions") }] }
+                { name: "@@allow", args: [{ name: "operation", value: ExpressionUtils.literal("read") }, { name: "condition", value: ExpressionUtils.binary(ExpressionUtils.binary(ExpressionUtils.member(ExpressionUtils.call("auth"), ["role"]), "==", ExpressionUtils.literal("admin")), "||", ExpressionUtils.binary(ExpressionUtils.field("email"), "==", ExpressionUtils.member(ExpressionUtils.call("auth"), ["email"]))) }] },
+                { name: "@@index", args: [{ name: "fields", value: ExpressionUtils.array("String", [ExpressionUtils.field("email"), ExpressionUtils.field("status")]) }] },
+                { name: "@@map", args: [{ name: "name", value: ExpressionUtils.literal("invitation") }] }
             ] as readonly AttributeApplication[],
             idFields: ["id"],
             uniqueFields: {
@@ -835,26 +581,15 @@ export class SchemaType implements SchemaDef {
                     attributes: [{ name: "@id" }, { name: "@default", args: [{ name: "value", value: ExpressionUtils.call("cuid") }] }] as readonly AttributeApplication[],
                     default: ExpressionUtils.call("cuid") as FieldDefault
                 },
-                organizationId: {
-                    name: "organizationId",
-                    type: "String",
-                    foreignKeyFor: [
-                        "organization"
-                    ] as readonly string[]
-                },
-                organization: {
-                    name: "organization",
-                    type: "Organization",
-                    attributes: [{ name: "@relation", args: [{ name: "fields", value: ExpressionUtils.array("String", [ExpressionUtils.field("organizationId")]) }, { name: "references", value: ExpressionUtils.array("String", [ExpressionUtils.field("id")]) }, { name: "onDelete", value: ExpressionUtils.literal("Cascade") }] }] as readonly AttributeApplication[],
-                    relation: { opposite: "groups", fields: ["organizationId"], references: ["id"], onDelete: "Cascade" }
-                },
                 name: {
                     name: "name",
                     type: "String"
                 },
                 slug: {
                     name: "slug",
-                    type: "String"
+                    type: "String",
+                    unique: true,
+                    attributes: [{ name: "@unique" }] as readonly AttributeApplication[]
                 },
                 description: {
                     name: "description",
@@ -949,22 +684,18 @@ export class SchemaType implements SchemaDef {
                 }
             },
             attributes: [
-                { name: "@@deny", args: [{ name: "operation", value: ExpressionUtils.literal("all") }, { name: "condition", value: ExpressionUtils.unary("!", ExpressionUtils.binary(ExpressionUtils.member(ExpressionUtils.field("organization"), ["members"]), "?", ExpressionUtils.binary(ExpressionUtils.field("userId"), "==", ExpressionUtils.member(ExpressionUtils.call("auth"), ["id"])))) }] },
+                { name: "@@deny", args: [{ name: "operation", value: ExpressionUtils.literal("all") }, { name: "condition", value: ExpressionUtils.binary(ExpressionUtils.call("auth"), "==", ExpressionUtils._null()) }] },
                 { name: "@@allow", args: [{ name: "operation", value: ExpressionUtils.literal("read") }, { name: "condition", value: ExpressionUtils.binary(ExpressionUtils.binary(ExpressionUtils.field("privacy"), "!=", ExpressionUtils.literal("SECRET")), "||", ExpressionUtils.binary(ExpressionUtils.field("members"), "?", ExpressionUtils.binary(ExpressionUtils.binary(ExpressionUtils.field("userId"), "==", ExpressionUtils.member(ExpressionUtils.call("auth"), ["id"])), "&&", ExpressionUtils.binary(ExpressionUtils.field("status"), "==", ExpressionUtils.literal("ACTIVE"))))) }] },
                 { name: "@@allow", args: [{ name: "operation", value: ExpressionUtils.literal("create") }, { name: "condition", value: ExpressionUtils.binary(ExpressionUtils.binary(ExpressionUtils.field("createdById"), "==", ExpressionUtils.member(ExpressionUtils.call("auth"), ["id"])), "&&", ExpressionUtils.unary("!", ExpressionUtils.field("isDefault"))) }] },
-                { name: "@@allow", args: [{ name: "operation", value: ExpressionUtils.literal("update") }, { name: "condition", value: ExpressionUtils.binary(ExpressionUtils.field("members"), "?", ExpressionUtils.binary(ExpressionUtils.binary(ExpressionUtils.binary(ExpressionUtils.field("userId"), "==", ExpressionUtils.member(ExpressionUtils.call("auth"), ["id"])), "&&", ExpressionUtils.binary(ExpressionUtils.field("status"), "==", ExpressionUtils.literal("ACTIVE"))), "&&", ExpressionUtils.binary(ExpressionUtils.field("role"), "==", ExpressionUtils.literal("ADMIN")))) }] },
-                { name: "@@allow", args: [{ name: "operation", value: ExpressionUtils.literal("update") }, { name: "condition", value: ExpressionUtils.binary(ExpressionUtils.member(ExpressionUtils.field("organization"), ["members"]), "?", ExpressionUtils.binary(ExpressionUtils.binary(ExpressionUtils.field("userId"), "==", ExpressionUtils.member(ExpressionUtils.call("auth"), ["id"])), "&&", ExpressionUtils.binary(ExpressionUtils.field("role"), "in", ExpressionUtils.array("String", [ExpressionUtils.literal("owner"), ExpressionUtils.literal("admin")])))) }] },
-                { name: "@@allow", args: [{ name: "operation", value: ExpressionUtils.literal("delete") }, { name: "condition", value: ExpressionUtils.binary(ExpressionUtils.unary("!", ExpressionUtils.field("isDefault")), "&&", ExpressionUtils.binary(ExpressionUtils.field("members"), "?", ExpressionUtils.binary(ExpressionUtils.binary(ExpressionUtils.binary(ExpressionUtils.field("userId"), "==", ExpressionUtils.member(ExpressionUtils.call("auth"), ["id"])), "&&", ExpressionUtils.binary(ExpressionUtils.field("status"), "==", ExpressionUtils.literal("ACTIVE"))), "&&", ExpressionUtils.binary(ExpressionUtils.field("role"), "==", ExpressionUtils.literal("ADMIN"))))) }] },
-                { name: "@@allow", args: [{ name: "operation", value: ExpressionUtils.literal("delete") }, { name: "condition", value: ExpressionUtils.binary(ExpressionUtils.unary("!", ExpressionUtils.field("isDefault")), "&&", ExpressionUtils.binary(ExpressionUtils.member(ExpressionUtils.field("organization"), ["members"]), "?", ExpressionUtils.binary(ExpressionUtils.binary(ExpressionUtils.field("userId"), "==", ExpressionUtils.member(ExpressionUtils.call("auth"), ["id"])), "&&", ExpressionUtils.binary(ExpressionUtils.field("role"), "in", ExpressionUtils.array("String", [ExpressionUtils.literal("owner"), ExpressionUtils.literal("admin")]))))) }] },
-                { name: "@@deny", args: [{ name: "operation", value: ExpressionUtils.literal("post-update") }, { name: "condition", value: ExpressionUtils.binary(ExpressionUtils.binary(ExpressionUtils.field("organizationId"), "!=", ExpressionUtils.member(ExpressionUtils.call("before"), ["organizationId"])), "||", ExpressionUtils.binary(ExpressionUtils.field("createdById"), "!=", ExpressionUtils.member(ExpressionUtils.call("before"), ["createdById"]))) }] },
-                { name: "@@unique", args: [{ name: "fields", value: ExpressionUtils.array("String", [ExpressionUtils.field("organizationId"), ExpressionUtils.field("slug")]) }] },
-                { name: "@@index", args: [{ name: "fields", value: ExpressionUtils.array("String", [ExpressionUtils.field("organizationId")]) }] },
+                { name: "@@allow", args: [{ name: "operation", value: ExpressionUtils.literal("update") }, { name: "condition", value: ExpressionUtils.binary(ExpressionUtils.binary(ExpressionUtils.field("members"), "?", ExpressionUtils.binary(ExpressionUtils.binary(ExpressionUtils.binary(ExpressionUtils.field("userId"), "==", ExpressionUtils.member(ExpressionUtils.call("auth"), ["id"])), "&&", ExpressionUtils.binary(ExpressionUtils.field("status"), "==", ExpressionUtils.literal("ACTIVE"))), "&&", ExpressionUtils.binary(ExpressionUtils.field("role"), "==", ExpressionUtils.literal("ADMIN")))), "||", ExpressionUtils.binary(ExpressionUtils.binary(ExpressionUtils.member(ExpressionUtils.call("auth"), ["role"]), "==", ExpressionUtils.literal("admin")), "||", ExpressionUtils.binary(ExpressionUtils.member(ExpressionUtils.call("auth"), ["permissions"]), "?", ExpressionUtils.binary(ExpressionUtils.binary(ExpressionUtils.field("model"), "==", ExpressionUtils.call("currentModel")), "&&", ExpressionUtils.binary(ExpressionUtils.call("currentOperation"), "in", ExpressionUtils.field("actions")))))) }] },
+                { name: "@@allow", args: [{ name: "operation", value: ExpressionUtils.literal("delete") }, { name: "condition", value: ExpressionUtils.binary(ExpressionUtils.unary("!", ExpressionUtils.field("isDefault")), "&&", ExpressionUtils.binary(ExpressionUtils.binary(ExpressionUtils.field("members"), "?", ExpressionUtils.binary(ExpressionUtils.binary(ExpressionUtils.binary(ExpressionUtils.field("userId"), "==", ExpressionUtils.member(ExpressionUtils.call("auth"), ["id"])), "&&", ExpressionUtils.binary(ExpressionUtils.field("status"), "==", ExpressionUtils.literal("ACTIVE"))), "&&", ExpressionUtils.binary(ExpressionUtils.field("role"), "==", ExpressionUtils.literal("ADMIN")))), "||", ExpressionUtils.binary(ExpressionUtils.binary(ExpressionUtils.member(ExpressionUtils.call("auth"), ["role"]), "==", ExpressionUtils.literal("admin")), "||", ExpressionUtils.binary(ExpressionUtils.member(ExpressionUtils.call("auth"), ["permissions"]), "?", ExpressionUtils.binary(ExpressionUtils.binary(ExpressionUtils.field("model"), "==", ExpressionUtils.call("currentModel")), "&&", ExpressionUtils.binary(ExpressionUtils.call("currentOperation"), "in", ExpressionUtils.field("actions"))))))) }] },
+                { name: "@@deny", args: [{ name: "operation", value: ExpressionUtils.literal("post-update") }, { name: "condition", value: ExpressionUtils.binary(ExpressionUtils.field("createdById"), "!=", ExpressionUtils.member(ExpressionUtils.call("before"), ["createdById"])) }] },
                 { name: "@@map", args: [{ name: "name", value: ExpressionUtils.literal("group") }] }
             ] as readonly AttributeApplication[],
             idFields: ["id"],
             uniqueFields: {
                 id: { type: "String" },
-                organizationId_slug: { organizationId: { type: "String" }, slug: { type: "String" } }
+                slug: { type: "String" }
             }
         },
         GroupMember: {
@@ -1024,15 +755,11 @@ export class SchemaType implements SchemaDef {
             },
             attributes: [
                 { name: "@@allow", args: [{ name: "operation", value: ExpressionUtils.literal("read") }, { name: "condition", value: ExpressionUtils.call("check", [ExpressionUtils.field("group"), ExpressionUtils.literal("read")]) }] },
-                { name: "@@deny", args: [{ name: "operation", value: ExpressionUtils.literal("create") }, { name: "condition", value: ExpressionUtils.unary("!", ExpressionUtils.binary(ExpressionUtils.member(ExpressionUtils.field("user"), ["members"]), "?", ExpressionUtils.binary(ExpressionUtils.field("organizationId"), "==", ExpressionUtils.member(ExpressionUtils._this(), ["group", "organizationId"])))) }] },
                 { name: "@@allow", args: [{ name: "operation", value: ExpressionUtils.literal("create") }, { name: "condition", value: ExpressionUtils.binary(ExpressionUtils.binary(ExpressionUtils.field("userId"), "==", ExpressionUtils.member(ExpressionUtils.call("auth"), ["id"])), "&&", ExpressionUtils.binary(ExpressionUtils.member(ExpressionUtils.field("group"), ["createdById"]), "==", ExpressionUtils.member(ExpressionUtils.call("auth"), ["id"]))) }] },
                 { name: "@@allow", args: [{ name: "operation", value: ExpressionUtils.literal("create") }, { name: "condition", value: ExpressionUtils.binary(ExpressionUtils.binary(ExpressionUtils.binary(ExpressionUtils.binary(ExpressionUtils.field("userId"), "==", ExpressionUtils.member(ExpressionUtils.call("auth"), ["id"])), "&&", ExpressionUtils.binary(ExpressionUtils.field("role"), "==", ExpressionUtils.literal("MEMBER"))), "&&", ExpressionUtils.unary("!", ExpressionUtils.member(ExpressionUtils.field("group"), ["isDefault"]))), "&&", ExpressionUtils.binary(ExpressionUtils.binary(ExpressionUtils.binary(ExpressionUtils.member(ExpressionUtils.field("group"), ["privacy"]), "==", ExpressionUtils.literal("PUBLIC")), "&&", ExpressionUtils.binary(ExpressionUtils.field("status"), "==", ExpressionUtils.literal("ACTIVE"))), "||", ExpressionUtils.binary(ExpressionUtils.binary(ExpressionUtils.member(ExpressionUtils.field("group"), ["privacy"]), "==", ExpressionUtils.literal("CLOSED")), "&&", ExpressionUtils.binary(ExpressionUtils.field("status"), "==", ExpressionUtils.literal("PENDING"))))) }] },
                 { name: "@@allow", args: [{ name: "operation", value: ExpressionUtils.literal("create") }, { name: "condition", value: ExpressionUtils.binary(ExpressionUtils.member(ExpressionUtils.field("group"), ["members"]), "?", ExpressionUtils.binary(ExpressionUtils.binary(ExpressionUtils.binary(ExpressionUtils.field("userId"), "==", ExpressionUtils.member(ExpressionUtils.call("auth"), ["id"])), "&&", ExpressionUtils.binary(ExpressionUtils.field("status"), "==", ExpressionUtils.literal("ACTIVE"))), "&&", ExpressionUtils.binary(ExpressionUtils.field("role"), "in", ExpressionUtils.array("GroupRole", [ExpressionUtils.literal("ADMIN"), ExpressionUtils.literal("MODERATOR")])))) }] },
-                { name: "@@allow", args: [{ name: "operation", value: ExpressionUtils.literal("update") }, { name: "condition", value: ExpressionUtils.binary(ExpressionUtils.member(ExpressionUtils.field("group"), ["members"]), "?", ExpressionUtils.binary(ExpressionUtils.binary(ExpressionUtils.binary(ExpressionUtils.field("userId"), "==", ExpressionUtils.member(ExpressionUtils.call("auth"), ["id"])), "&&", ExpressionUtils.binary(ExpressionUtils.field("status"), "==", ExpressionUtils.literal("ACTIVE"))), "&&", ExpressionUtils.binary(ExpressionUtils.field("role"), "==", ExpressionUtils.literal("ADMIN")))) }] },
-                { name: "@@allow", args: [{ name: "operation", value: ExpressionUtils.literal("update") }, { name: "condition", value: ExpressionUtils.binary(ExpressionUtils.member(ExpressionUtils.field("group"), ["organization", "members"]), "?", ExpressionUtils.binary(ExpressionUtils.binary(ExpressionUtils.field("userId"), "==", ExpressionUtils.member(ExpressionUtils.call("auth"), ["id"])), "&&", ExpressionUtils.binary(ExpressionUtils.field("role"), "in", ExpressionUtils.array("String", [ExpressionUtils.literal("owner"), ExpressionUtils.literal("admin")])))) }] },
-                { name: "@@allow", args: [{ name: "operation", value: ExpressionUtils.literal("delete") }, { name: "condition", value: ExpressionUtils.binary(ExpressionUtils.binary(ExpressionUtils.field("userId"), "==", ExpressionUtils.member(ExpressionUtils.call("auth"), ["id"])), "&&", ExpressionUtils.unary("!", ExpressionUtils.member(ExpressionUtils.field("group"), ["isDefault"]))) }] },
-                { name: "@@allow", args: [{ name: "operation", value: ExpressionUtils.literal("delete") }, { name: "condition", value: ExpressionUtils.binary(ExpressionUtils.unary("!", ExpressionUtils.member(ExpressionUtils.field("group"), ["isDefault"])), "&&", ExpressionUtils.binary(ExpressionUtils.member(ExpressionUtils.field("group"), ["members"]), "?", ExpressionUtils.binary(ExpressionUtils.binary(ExpressionUtils.binary(ExpressionUtils.field("userId"), "==", ExpressionUtils.member(ExpressionUtils.call("auth"), ["id"])), "&&", ExpressionUtils.binary(ExpressionUtils.field("status"), "==", ExpressionUtils.literal("ACTIVE"))), "&&", ExpressionUtils.binary(ExpressionUtils.field("role"), "in", ExpressionUtils.array("GroupRole", [ExpressionUtils.literal("ADMIN"), ExpressionUtils.literal("MODERATOR")]))))) }] },
-                { name: "@@allow", args: [{ name: "operation", value: ExpressionUtils.literal("delete") }, { name: "condition", value: ExpressionUtils.binary(ExpressionUtils.unary("!", ExpressionUtils.member(ExpressionUtils.field("group"), ["isDefault"])), "&&", ExpressionUtils.binary(ExpressionUtils.member(ExpressionUtils.field("group"), ["organization", "members"]), "?", ExpressionUtils.binary(ExpressionUtils.binary(ExpressionUtils.field("userId"), "==", ExpressionUtils.member(ExpressionUtils.call("auth"), ["id"])), "&&", ExpressionUtils.binary(ExpressionUtils.field("role"), "in", ExpressionUtils.array("String", [ExpressionUtils.literal("owner"), ExpressionUtils.literal("admin")]))))) }] },
+                { name: "@@allow", args: [{ name: "operation", value: ExpressionUtils.literal("update") }, { name: "condition", value: ExpressionUtils.binary(ExpressionUtils.binary(ExpressionUtils.member(ExpressionUtils.field("group"), ["members"]), "?", ExpressionUtils.binary(ExpressionUtils.binary(ExpressionUtils.binary(ExpressionUtils.field("userId"), "==", ExpressionUtils.member(ExpressionUtils.call("auth"), ["id"])), "&&", ExpressionUtils.binary(ExpressionUtils.field("status"), "==", ExpressionUtils.literal("ACTIVE"))), "&&", ExpressionUtils.binary(ExpressionUtils.field("role"), "==", ExpressionUtils.literal("ADMIN")))), "||", ExpressionUtils.binary(ExpressionUtils.binary(ExpressionUtils.member(ExpressionUtils.call("auth"), ["role"]), "==", ExpressionUtils.literal("admin")), "||", ExpressionUtils.binary(ExpressionUtils.member(ExpressionUtils.call("auth"), ["permissions"]), "?", ExpressionUtils.binary(ExpressionUtils.binary(ExpressionUtils.field("model"), "==", ExpressionUtils.call("currentModel")), "&&", ExpressionUtils.binary(ExpressionUtils.call("currentOperation"), "in", ExpressionUtils.field("actions")))))) }] },
+                { name: "@@allow", args: [{ name: "operation", value: ExpressionUtils.literal("delete") }, { name: "condition", value: ExpressionUtils.binary(ExpressionUtils.unary("!", ExpressionUtils.member(ExpressionUtils.field("group"), ["isDefault"])), "&&", ExpressionUtils.binary(ExpressionUtils.binary(ExpressionUtils.binary(ExpressionUtils.field("userId"), "==", ExpressionUtils.member(ExpressionUtils.call("auth"), ["id"])), "||", ExpressionUtils.binary(ExpressionUtils.member(ExpressionUtils.field("group"), ["members"]), "?", ExpressionUtils.binary(ExpressionUtils.binary(ExpressionUtils.binary(ExpressionUtils.field("userId"), "==", ExpressionUtils.member(ExpressionUtils.call("auth"), ["id"])), "&&", ExpressionUtils.binary(ExpressionUtils.field("status"), "==", ExpressionUtils.literal("ACTIVE"))), "&&", ExpressionUtils.binary(ExpressionUtils.field("role"), "in", ExpressionUtils.array("GroupRole", [ExpressionUtils.literal("ADMIN"), ExpressionUtils.literal("MODERATOR")]))))), "||", ExpressionUtils.binary(ExpressionUtils.binary(ExpressionUtils.member(ExpressionUtils.call("auth"), ["role"]), "==", ExpressionUtils.literal("admin")), "||", ExpressionUtils.binary(ExpressionUtils.member(ExpressionUtils.call("auth"), ["permissions"]), "?", ExpressionUtils.binary(ExpressionUtils.binary(ExpressionUtils.field("model"), "==", ExpressionUtils.call("currentModel")), "&&", ExpressionUtils.binary(ExpressionUtils.call("currentOperation"), "in", ExpressionUtils.field("actions"))))))) }] },
                 { name: "@@deny", args: [{ name: "operation", value: ExpressionUtils.literal("post-update") }, { name: "condition", value: ExpressionUtils.binary(ExpressionUtils.binary(ExpressionUtils.field("groupId"), "!=", ExpressionUtils.member(ExpressionUtils.call("before"), ["groupId"])), "||", ExpressionUtils.binary(ExpressionUtils.field("userId"), "!=", ExpressionUtils.member(ExpressionUtils.call("before"), ["userId"]))) }] },
                 { name: "@@unique", args: [{ name: "fields", value: ExpressionUtils.array("String", [ExpressionUtils.field("groupId"), ExpressionUtils.field("userId")]) }] },
                 { name: "@@index", args: [{ name: "fields", value: ExpressionUtils.array("String", [ExpressionUtils.field("userId"), ExpressionUtils.field("status")]) }] },
@@ -1157,8 +884,7 @@ export class SchemaType implements SchemaDef {
                 { name: "@@allow", args: [{ name: "operation", value: ExpressionUtils.literal("read") }, { name: "condition", value: ExpressionUtils.binary(ExpressionUtils.call("check", [ExpressionUtils.field("group"), ExpressionUtils.literal("read")]), "&&", ExpressionUtils.binary(ExpressionUtils.binary(ExpressionUtils.member(ExpressionUtils.field("group"), ["privacy"]), "==", ExpressionUtils.literal("PUBLIC")), "||", ExpressionUtils.binary(ExpressionUtils.member(ExpressionUtils.field("group"), ["members"]), "?", ExpressionUtils.binary(ExpressionUtils.binary(ExpressionUtils.field("userId"), "==", ExpressionUtils.member(ExpressionUtils.call("auth"), ["id"])), "&&", ExpressionUtils.binary(ExpressionUtils.field("status"), "==", ExpressionUtils.literal("ACTIVE")))))) }] },
                 { name: "@@allow", args: [{ name: "operation", value: ExpressionUtils.literal("create") }, { name: "condition", value: ExpressionUtils.binary(ExpressionUtils.binary(ExpressionUtils.field("authorId"), "==", ExpressionUtils.member(ExpressionUtils.call("auth"), ["id"])), "&&", ExpressionUtils.binary(ExpressionUtils.member(ExpressionUtils.field("group"), ["members"]), "?", ExpressionUtils.binary(ExpressionUtils.binary(ExpressionUtils.field("userId"), "==", ExpressionUtils.member(ExpressionUtils.call("auth"), ["id"])), "&&", ExpressionUtils.binary(ExpressionUtils.field("status"), "==", ExpressionUtils.literal("ACTIVE"))))) }] },
                 { name: "@@allow", args: [{ name: "operation", value: ExpressionUtils.literal("update") }, { name: "condition", value: ExpressionUtils.binary(ExpressionUtils.field("authorId"), "==", ExpressionUtils.member(ExpressionUtils.call("auth"), ["id"])) }] },
-                { name: "@@allow", args: [{ name: "operation", value: ExpressionUtils.literal("update,delete") }, { name: "condition", value: ExpressionUtils.binary(ExpressionUtils.member(ExpressionUtils.field("group"), ["members"]), "?", ExpressionUtils.binary(ExpressionUtils.binary(ExpressionUtils.binary(ExpressionUtils.field("userId"), "==", ExpressionUtils.member(ExpressionUtils.call("auth"), ["id"])), "&&", ExpressionUtils.binary(ExpressionUtils.field("status"), "==", ExpressionUtils.literal("ACTIVE"))), "&&", ExpressionUtils.binary(ExpressionUtils.field("role"), "in", ExpressionUtils.array("GroupRole", [ExpressionUtils.literal("ADMIN"), ExpressionUtils.literal("MODERATOR")])))) }] },
-                { name: "@@allow", args: [{ name: "operation", value: ExpressionUtils.literal("update,delete") }, { name: "condition", value: ExpressionUtils.binary(ExpressionUtils.member(ExpressionUtils.field("group"), ["organization", "members"]), "?", ExpressionUtils.binary(ExpressionUtils.binary(ExpressionUtils.field("userId"), "==", ExpressionUtils.member(ExpressionUtils.call("auth"), ["id"])), "&&", ExpressionUtils.binary(ExpressionUtils.field("role"), "in", ExpressionUtils.array("String", [ExpressionUtils.literal("owner"), ExpressionUtils.literal("admin")])))) }] },
+                { name: "@@allow", args: [{ name: "operation", value: ExpressionUtils.literal("update,delete") }, { name: "condition", value: ExpressionUtils.binary(ExpressionUtils.binary(ExpressionUtils.member(ExpressionUtils.field("group"), ["members"]), "?", ExpressionUtils.binary(ExpressionUtils.binary(ExpressionUtils.binary(ExpressionUtils.field("userId"), "==", ExpressionUtils.member(ExpressionUtils.call("auth"), ["id"])), "&&", ExpressionUtils.binary(ExpressionUtils.field("status"), "==", ExpressionUtils.literal("ACTIVE"))), "&&", ExpressionUtils.binary(ExpressionUtils.field("role"), "in", ExpressionUtils.array("GroupRole", [ExpressionUtils.literal("ADMIN"), ExpressionUtils.literal("MODERATOR")])))), "||", ExpressionUtils.binary(ExpressionUtils.binary(ExpressionUtils.member(ExpressionUtils.call("auth"), ["role"]), "==", ExpressionUtils.literal("admin")), "||", ExpressionUtils.binary(ExpressionUtils.member(ExpressionUtils.call("auth"), ["permissions"]), "?", ExpressionUtils.binary(ExpressionUtils.binary(ExpressionUtils.field("model"), "==", ExpressionUtils.call("currentModel")), "&&", ExpressionUtils.binary(ExpressionUtils.call("currentOperation"), "in", ExpressionUtils.field("actions")))))) }] },
                 { name: "@@allow", args: [{ name: "operation", value: ExpressionUtils.literal("delete") }, { name: "condition", value: ExpressionUtils.binary(ExpressionUtils.field("authorId"), "==", ExpressionUtils.member(ExpressionUtils.call("auth"), ["id"])) }] },
                 { name: "@@deny", args: [{ name: "operation", value: ExpressionUtils.literal("post-update") }, { name: "condition", value: ExpressionUtils.binary(ExpressionUtils.binary(ExpressionUtils.field("groupId"), "!=", ExpressionUtils.member(ExpressionUtils.call("before"), ["groupId"])), "||", ExpressionUtils.binary(ExpressionUtils.field("authorId"), "!=", ExpressionUtils.member(ExpressionUtils.call("before"), ["authorId"]))) }] },
                 { name: "@@index", args: [{ name: "fields", value: ExpressionUtils.array("String", [ExpressionUtils.field("groupId"), ExpressionUtils.field("createdAt")]) }] },
@@ -1619,19 +1345,6 @@ export class SchemaType implements SchemaDef {
                     attributes: [{ name: "@id" }, { name: "@default", args: [{ name: "value", value: ExpressionUtils.call("cuid") }] }] as readonly AttributeApplication[],
                     default: ExpressionUtils.call("cuid") as FieldDefault
                 },
-                organizationId: {
-                    name: "organizationId",
-                    type: "String",
-                    foreignKeyFor: [
-                        "organization"
-                    ] as readonly string[]
-                },
-                organization: {
-                    name: "organization",
-                    type: "Organization",
-                    attributes: [{ name: "@relation", args: [{ name: "fields", value: ExpressionUtils.array("String", [ExpressionUtils.field("organizationId")]) }, { name: "references", value: ExpressionUtils.array("String", [ExpressionUtils.field("id")]) }, { name: "onDelete", value: ExpressionUtils.literal("Cascade") }] }] as readonly AttributeApplication[],
-                    relation: { opposite: "attachments", fields: ["organizationId"], references: ["id"], onDelete: "Cascade" }
-                },
                 uploaderId: {
                     name: "uploaderId",
                     type: "String",
@@ -1676,8 +1389,8 @@ export class SchemaType implements SchemaDef {
                     type: "Int",
                     optional: true
                 },
-                orgVisible: {
-                    name: "orgVisible",
+                isPublic: {
+                    name: "isPublic",
                     type: "Boolean",
                     attributes: [{ name: "@default", args: [{ name: "value", value: ExpressionUtils.literal(false) }] }, { name: "@deny", args: [{ name: "operation", value: ExpressionUtils.literal("update") }, { name: "condition", value: ExpressionUtils.literal(true) }] }] as readonly AttributeApplication[],
                     default: false as FieldDefault
@@ -1735,10 +1448,10 @@ export class SchemaType implements SchemaDef {
                 }
             },
             attributes: [
-                { name: "@@deny", args: [{ name: "operation", value: ExpressionUtils.literal("all") }, { name: "condition", value: ExpressionUtils.unary("!", ExpressionUtils.binary(ExpressionUtils.member(ExpressionUtils.field("organization"), ["members"]), "?", ExpressionUtils.binary(ExpressionUtils.field("userId"), "==", ExpressionUtils.member(ExpressionUtils.call("auth"), ["id"])))) }] },
-                { name: "@@allow", args: [{ name: "operation", value: ExpressionUtils.literal("read") }, { name: "condition", value: ExpressionUtils.binary(ExpressionUtils.binary(ExpressionUtils.binary(ExpressionUtils.binary(ExpressionUtils.binary(ExpressionUtils.field("uploaderId"), "==", ExpressionUtils.member(ExpressionUtils.call("auth"), ["id"])), "||", ExpressionUtils.field("orgVisible")), "||", ExpressionUtils.call("check", [ExpressionUtils.field("post"), ExpressionUtils.literal("read")])), "||", ExpressionUtils.call("check", [ExpressionUtils.field("comment"), ExpressionUtils.literal("read")])), "||", ExpressionUtils.call("check", [ExpressionUtils.field("message"), ExpressionUtils.literal("read")])) }] },
+                { name: "@@deny", args: [{ name: "operation", value: ExpressionUtils.literal("all") }, { name: "condition", value: ExpressionUtils.binary(ExpressionUtils.call("auth"), "==", ExpressionUtils._null()) }] },
+                { name: "@@allow", args: [{ name: "operation", value: ExpressionUtils.literal("read") }, { name: "condition", value: ExpressionUtils.binary(ExpressionUtils.binary(ExpressionUtils.binary(ExpressionUtils.binary(ExpressionUtils.binary(ExpressionUtils.field("uploaderId"), "==", ExpressionUtils.member(ExpressionUtils.call("auth"), ["id"])), "||", ExpressionUtils.field("isPublic")), "||", ExpressionUtils.call("check", [ExpressionUtils.field("post"), ExpressionUtils.literal("read")])), "||", ExpressionUtils.call("check", [ExpressionUtils.field("comment"), ExpressionUtils.literal("read")])), "||", ExpressionUtils.call("check", [ExpressionUtils.field("message"), ExpressionUtils.literal("read")])) }] },
                 { name: "@@allow", args: [{ name: "operation", value: ExpressionUtils.literal("create,update,delete") }, { name: "condition", value: ExpressionUtils.binary(ExpressionUtils.field("uploaderId"), "==", ExpressionUtils.member(ExpressionUtils.call("auth"), ["id"])) }] },
-                { name: "@@deny", args: [{ name: "operation", value: ExpressionUtils.literal("post-update") }, { name: "condition", value: ExpressionUtils.binary(ExpressionUtils.binary(ExpressionUtils.binary(ExpressionUtils.binary(ExpressionUtils.field("organizationId"), "!=", ExpressionUtils.member(ExpressionUtils.call("before"), ["organizationId"])), "||", ExpressionUtils.binary(ExpressionUtils.field("uploaderId"), "!=", ExpressionUtils.member(ExpressionUtils.call("before"), ["uploaderId"]))), "||", ExpressionUtils.binary(ExpressionUtils.field("key"), "!=", ExpressionUtils.member(ExpressionUtils.call("before"), ["key"]))), "||", ExpressionUtils.binary(ExpressionUtils.field("mimeType"), "!=", ExpressionUtils.member(ExpressionUtils.call("before"), ["mimeType"]))) }] },
+                { name: "@@deny", args: [{ name: "operation", value: ExpressionUtils.literal("post-update") }, { name: "condition", value: ExpressionUtils.binary(ExpressionUtils.binary(ExpressionUtils.binary(ExpressionUtils.field("uploaderId"), "!=", ExpressionUtils.member(ExpressionUtils.call("before"), ["uploaderId"])), "||", ExpressionUtils.binary(ExpressionUtils.field("key"), "!=", ExpressionUtils.member(ExpressionUtils.call("before"), ["key"]))), "||", ExpressionUtils.binary(ExpressionUtils.field("mimeType"), "!=", ExpressionUtils.member(ExpressionUtils.call("before"), ["mimeType"]))) }] },
                 { name: "@@index", args: [{ name: "fields", value: ExpressionUtils.array("String", [ExpressionUtils.field("postId")]) }] },
                 { name: "@@index", args: [{ name: "fields", value: ExpressionUtils.array("String", [ExpressionUtils.field("commentId")]) }] },
                 { name: "@@index", args: [{ name: "fields", value: ExpressionUtils.array("String", [ExpressionUtils.field("messageId")]) }] },
@@ -1759,19 +1472,6 @@ export class SchemaType implements SchemaDef {
                     id: true,
                     attributes: [{ name: "@id" }, { name: "@default", args: [{ name: "value", value: ExpressionUtils.call("cuid") }] }] as readonly AttributeApplication[],
                     default: ExpressionUtils.call("cuid") as FieldDefault
-                },
-                organizationId: {
-                    name: "organizationId",
-                    type: "String",
-                    foreignKeyFor: [
-                        "organization"
-                    ] as readonly string[]
-                },
-                organization: {
-                    name: "organization",
-                    type: "Organization",
-                    attributes: [{ name: "@relation", args: [{ name: "fields", value: ExpressionUtils.array("String", [ExpressionUtils.field("organizationId")]) }, { name: "references", value: ExpressionUtils.array("String", [ExpressionUtils.field("id")]) }, { name: "onDelete", value: ExpressionUtils.literal("Cascade") }] }] as readonly AttributeApplication[],
-                    relation: { opposite: "conversations", fields: ["organizationId"], references: ["id"], onDelete: "Cascade" }
                 },
                 type: {
                     name: "type",
@@ -1855,15 +1555,15 @@ export class SchemaType implements SchemaDef {
                 }
             },
             attributes: [
-                { name: "@@deny", args: [{ name: "operation", value: ExpressionUtils.literal("all") }, { name: "condition", value: ExpressionUtils.unary("!", ExpressionUtils.binary(ExpressionUtils.member(ExpressionUtils.field("organization"), ["members"]), "?", ExpressionUtils.binary(ExpressionUtils.field("userId"), "==", ExpressionUtils.member(ExpressionUtils.call("auth"), ["id"])))) }] },
+                { name: "@@deny", args: [{ name: "operation", value: ExpressionUtils.literal("all") }, { name: "condition", value: ExpressionUtils.binary(ExpressionUtils.call("auth"), "==", ExpressionUtils._null()) }] },
                 { name: "@@allow", args: [{ name: "operation", value: ExpressionUtils.literal("read") }, { name: "condition", value: ExpressionUtils.binary(ExpressionUtils.binary(ExpressionUtils.field("groupId"), "==", ExpressionUtils._null()), "&&", ExpressionUtils.binary(ExpressionUtils.field("members"), "?", ExpressionUtils.binary(ExpressionUtils.field("userId"), "==", ExpressionUtils.member(ExpressionUtils.call("auth"), ["id"])))) }] },
                 { name: "@@allow", args: [{ name: "operation", value: ExpressionUtils.literal("read") }, { name: "condition", value: ExpressionUtils.binary(ExpressionUtils.binary(ExpressionUtils.field("groupId"), "!=", ExpressionUtils._null()), "&&", ExpressionUtils.binary(ExpressionUtils.member(ExpressionUtils.field("group"), ["members"]), "?", ExpressionUtils.binary(ExpressionUtils.binary(ExpressionUtils.field("userId"), "==", ExpressionUtils.member(ExpressionUtils.call("auth"), ["id"])), "&&", ExpressionUtils.binary(ExpressionUtils.field("status"), "==", ExpressionUtils.literal("ACTIVE"))))) }] },
                 { name: "@@allow", args: [{ name: "operation", value: ExpressionUtils.literal("create") }, { name: "condition", value: ExpressionUtils.binary(ExpressionUtils.field("createdById"), "==", ExpressionUtils.member(ExpressionUtils.call("auth"), ["id"])) }] },
                 { name: "@@allow", args: [{ name: "operation", value: ExpressionUtils.literal("update") }, { name: "condition", value: ExpressionUtils.binary(ExpressionUtils.binary(ExpressionUtils.field("type"), "==", ExpressionUtils.literal("GROUP")), "&&", ExpressionUtils.binary(ExpressionUtils.field("members"), "?", ExpressionUtils.binary(ExpressionUtils.field("userId"), "==", ExpressionUtils.member(ExpressionUtils.call("auth"), ["id"])))) }] },
                 { name: "@@allow", args: [{ name: "operation", value: ExpressionUtils.literal("delete") }, { name: "condition", value: ExpressionUtils.binary(ExpressionUtils.binary(ExpressionUtils.field("type"), "==", ExpressionUtils.literal("GROUP")), "&&", ExpressionUtils.binary(ExpressionUtils.field("members"), "?", ExpressionUtils.binary(ExpressionUtils.binary(ExpressionUtils.field("userId"), "==", ExpressionUtils.member(ExpressionUtils.call("auth"), ["id"])), "&&", ExpressionUtils.binary(ExpressionUtils.field("role"), "==", ExpressionUtils.literal("ADMIN"))))) }] },
-                { name: "@@deny", args: [{ name: "operation", value: ExpressionUtils.literal("post-update") }, { name: "condition", value: ExpressionUtils.binary(ExpressionUtils.binary(ExpressionUtils.binary(ExpressionUtils.binary(ExpressionUtils.field("organizationId"), "!=", ExpressionUtils.member(ExpressionUtils.call("before"), ["organizationId"])), "||", ExpressionUtils.binary(ExpressionUtils.field("directKey"), "!=", ExpressionUtils.member(ExpressionUtils.call("before"), ["directKey"]))), "||", ExpressionUtils.binary(ExpressionUtils.field("createdById"), "!=", ExpressionUtils.member(ExpressionUtils.call("before"), ["createdById"]))), "||", ExpressionUtils.binary(ExpressionUtils.field("groupId"), "!=", ExpressionUtils.member(ExpressionUtils.call("before"), ["groupId"]))) }] },
+                { name: "@@deny", args: [{ name: "operation", value: ExpressionUtils.literal("post-update") }, { name: "condition", value: ExpressionUtils.binary(ExpressionUtils.binary(ExpressionUtils.binary(ExpressionUtils.field("directKey"), "!=", ExpressionUtils.member(ExpressionUtils.call("before"), ["directKey"])), "||", ExpressionUtils.binary(ExpressionUtils.field("createdById"), "!=", ExpressionUtils.member(ExpressionUtils.call("before"), ["createdById"]))), "||", ExpressionUtils.binary(ExpressionUtils.field("groupId"), "!=", ExpressionUtils.member(ExpressionUtils.call("before"), ["groupId"]))) }] },
                 { name: "@@deny", args: [{ name: "operation", value: ExpressionUtils.literal("create,update,delete") }, { name: "condition", value: ExpressionUtils.binary(ExpressionUtils.field("groupId"), "!=", ExpressionUtils._null()) }] },
-                { name: "@@index", args: [{ name: "fields", value: ExpressionUtils.array("String", [ExpressionUtils.field("organizationId"), ExpressionUtils.field("lastMessageAt")]) }] },
+                { name: "@@index", args: [{ name: "fields", value: ExpressionUtils.array("DateTime", [ExpressionUtils.field("lastMessageAt")]) }] },
                 { name: "@@map", args: [{ name: "name", value: ExpressionUtils.literal("conversation") }] }
             ] as readonly AttributeApplication[],
             idFields: ["id"],
@@ -1935,7 +1635,6 @@ export class SchemaType implements SchemaDef {
             },
             attributes: [
                 { name: "@@allow", args: [{ name: "operation", value: ExpressionUtils.literal("read") }, { name: "condition", value: ExpressionUtils.call("check", [ExpressionUtils.field("conversation"), ExpressionUtils.literal("read")]) }] },
-                { name: "@@deny", args: [{ name: "operation", value: ExpressionUtils.literal("create") }, { name: "condition", value: ExpressionUtils.unary("!", ExpressionUtils.binary(ExpressionUtils.member(ExpressionUtils.field("user"), ["members"]), "?", ExpressionUtils.binary(ExpressionUtils.field("organizationId"), "==", ExpressionUtils.member(ExpressionUtils._this(), ["conversation", "organizationId"])))) }] },
                 { name: "@@allow", args: [{ name: "operation", value: ExpressionUtils.literal("create") }, { name: "condition", value: ExpressionUtils.binary(ExpressionUtils.member(ExpressionUtils.field("conversation"), ["createdById"]), "==", ExpressionUtils.member(ExpressionUtils.call("auth"), ["id"])) }] },
                 { name: "@@allow", args: [{ name: "operation", value: ExpressionUtils.literal("create") }, { name: "condition", value: ExpressionUtils.binary(ExpressionUtils.binary(ExpressionUtils.member(ExpressionUtils.field("conversation"), ["type"]), "==", ExpressionUtils.literal("GROUP")), "&&", ExpressionUtils.binary(ExpressionUtils.member(ExpressionUtils.field("conversation"), ["members"]), "?", ExpressionUtils.binary(ExpressionUtils.binary(ExpressionUtils.field("userId"), "==", ExpressionUtils.member(ExpressionUtils.call("auth"), ["id"])), "&&", ExpressionUtils.binary(ExpressionUtils.field("role"), "==", ExpressionUtils.literal("ADMIN"))))) }] },
                 { name: "@@allow", args: [{ name: "operation", value: ExpressionUtils.literal("update") }, { name: "condition", value: ExpressionUtils.binary(ExpressionUtils.binary(ExpressionUtils.field("userId"), "==", ExpressionUtils.member(ExpressionUtils.call("auth"), ["id"])), "||", ExpressionUtils.binary(ExpressionUtils.member(ExpressionUtils.field("conversation"), ["members"]), "?", ExpressionUtils.binary(ExpressionUtils.binary(ExpressionUtils.field("userId"), "==", ExpressionUtils.member(ExpressionUtils.call("auth"), ["id"])), "&&", ExpressionUtils.binary(ExpressionUtils.field("role"), "==", ExpressionUtils.literal("ADMIN"))))) }] },
@@ -2146,19 +1845,6 @@ export class SchemaType implements SchemaDef {
                     attributes: [{ name: "@id" }, { name: "@default", args: [{ name: "value", value: ExpressionUtils.call("cuid") }] }] as readonly AttributeApplication[],
                     default: ExpressionUtils.call("cuid") as FieldDefault
                 },
-                organizationId: {
-                    name: "organizationId",
-                    type: "String",
-                    foreignKeyFor: [
-                        "organization"
-                    ] as readonly string[]
-                },
-                organization: {
-                    name: "organization",
-                    type: "Organization",
-                    attributes: [{ name: "@relation", args: [{ name: "fields", value: ExpressionUtils.array("String", [ExpressionUtils.field("organizationId")]) }, { name: "references", value: ExpressionUtils.array("String", [ExpressionUtils.field("id")]) }, { name: "onDelete", value: ExpressionUtils.literal("Cascade") }] }] as readonly AttributeApplication[],
-                    relation: { opposite: "notifications", fields: ["organizationId"], references: ["id"], onDelete: "Cascade" }
-                },
                 userId: {
                     name: "userId",
                     type: "String",
@@ -2280,9 +1966,10 @@ export class SchemaType implements SchemaDef {
                 }
             },
             attributes: [
+                { name: "@@deny", args: [{ name: "operation", value: ExpressionUtils.literal("all") }, { name: "condition", value: ExpressionUtils.binary(ExpressionUtils.call("auth"), "==", ExpressionUtils._null()) }] },
                 { name: "@@allow", args: [{ name: "operation", value: ExpressionUtils.literal("read,update,delete") }, { name: "condition", value: ExpressionUtils.binary(ExpressionUtils.field("userId"), "==", ExpressionUtils.member(ExpressionUtils.call("auth"), ["id"])) }] },
-                { name: "@@deny", args: [{ name: "operation", value: ExpressionUtils.literal("post-update") }, { name: "condition", value: ExpressionUtils.binary(ExpressionUtils.binary(ExpressionUtils.binary(ExpressionUtils.field("userId"), "!=", ExpressionUtils.member(ExpressionUtils.call("before"), ["userId"])), "||", ExpressionUtils.binary(ExpressionUtils.field("organizationId"), "!=", ExpressionUtils.member(ExpressionUtils.call("before"), ["organizationId"]))), "||", ExpressionUtils.binary(ExpressionUtils.field("actorId"), "!=", ExpressionUtils.member(ExpressionUtils.call("before"), ["actorId"]))) }] },
-                { name: "@@index", args: [{ name: "fields", value: ExpressionUtils.array("String", [ExpressionUtils.field("userId"), ExpressionUtils.field("organizationId"), ExpressionUtils.field("readAt"), ExpressionUtils.field("createdAt")]) }] },
+                { name: "@@deny", args: [{ name: "operation", value: ExpressionUtils.literal("post-update") }, { name: "condition", value: ExpressionUtils.binary(ExpressionUtils.binary(ExpressionUtils.field("userId"), "!=", ExpressionUtils.member(ExpressionUtils.call("before"), ["userId"])), "||", ExpressionUtils.binary(ExpressionUtils.field("actorId"), "!=", ExpressionUtils.member(ExpressionUtils.call("before"), ["actorId"]))) }] },
+                { name: "@@index", args: [{ name: "fields", value: ExpressionUtils.array("String", [ExpressionUtils.field("userId"), ExpressionUtils.field("readAt"), ExpressionUtils.field("createdAt")]) }] },
                 { name: "@@map", args: [{ name: "name", value: ExpressionUtils.literal("notification") }] }
             ] as readonly AttributeApplication[],
             idFields: ["id"],
@@ -2299,19 +1986,6 @@ export class SchemaType implements SchemaDef {
                     id: true,
                     attributes: [{ name: "@id" }, { name: "@default", args: [{ name: "value", value: ExpressionUtils.call("cuid") }] }] as readonly AttributeApplication[],
                     default: ExpressionUtils.call("cuid") as FieldDefault
-                },
-                organizationId: {
-                    name: "organizationId",
-                    type: "String",
-                    foreignKeyFor: [
-                        "organization"
-                    ] as readonly string[]
-                },
-                organization: {
-                    name: "organization",
-                    type: "Organization",
-                    attributes: [{ name: "@relation", args: [{ name: "fields", value: ExpressionUtils.array("String", [ExpressionUtils.field("organizationId")]) }, { name: "references", value: ExpressionUtils.array("String", [ExpressionUtils.field("id")]) }, { name: "onDelete", value: ExpressionUtils.literal("Cascade") }] }] as readonly AttributeApplication[],
-                    relation: { opposite: "events", fields: ["organizationId"], references: ["id"], onDelete: "Cascade" }
                 },
                 groupId: {
                     name: "groupId",
@@ -2443,16 +2117,16 @@ export class SchemaType implements SchemaDef {
                 }
             },
             attributes: [
-                { name: "@@deny", args: [{ name: "operation", value: ExpressionUtils.literal("all") }, { name: "condition", value: ExpressionUtils.unary("!", ExpressionUtils.binary(ExpressionUtils.member(ExpressionUtils.field("organization"), ["members"]), "?", ExpressionUtils.binary(ExpressionUtils.field("userId"), "==", ExpressionUtils.member(ExpressionUtils.call("auth"), ["id"])))) }] },
+                { name: "@@deny", args: [{ name: "operation", value: ExpressionUtils.literal("all") }, { name: "condition", value: ExpressionUtils.binary(ExpressionUtils.call("auth"), "==", ExpressionUtils._null()) }] },
                 { name: "@@allow", args: [{ name: "operation", value: ExpressionUtils.literal("read") }, { name: "condition", value: ExpressionUtils.binary(ExpressionUtils.binary(ExpressionUtils.binary(ExpressionUtils.field("creatorId"), "==", ExpressionUtils.member(ExpressionUtils.call("auth"), ["id"])), "||", ExpressionUtils.binary(ExpressionUtils.field("attendees"), "?", ExpressionUtils.binary(ExpressionUtils.field("userId"), "==", ExpressionUtils.member(ExpressionUtils.call("auth"), ["id"])))), "||", ExpressionUtils.binary(ExpressionUtils.field("type"), "==", ExpressionUtils.literal("OUT_OF_OFFICE"))) }] },
                 { name: "@@allow", args: [{ name: "operation", value: ExpressionUtils.literal("read") }, { name: "condition", value: ExpressionUtils.binary(ExpressionUtils.binary(ExpressionUtils.binary(ExpressionUtils.field("groupId"), "!=", ExpressionUtils._null()), "&&", ExpressionUtils.call("check", [ExpressionUtils.field("group"), ExpressionUtils.literal("read")])), "&&", ExpressionUtils.binary(ExpressionUtils.binary(ExpressionUtils.member(ExpressionUtils.field("group"), ["privacy"]), "==", ExpressionUtils.literal("PUBLIC")), "||", ExpressionUtils.binary(ExpressionUtils.member(ExpressionUtils.field("group"), ["members"]), "?", ExpressionUtils.binary(ExpressionUtils.binary(ExpressionUtils.field("userId"), "==", ExpressionUtils.member(ExpressionUtils.call("auth"), ["id"])), "&&", ExpressionUtils.binary(ExpressionUtils.field("status"), "==", ExpressionUtils.literal("ACTIVE")))))) }] },
                 { name: "@@allow", args: [{ name: "operation", value: ExpressionUtils.literal("create") }, { name: "condition", value: ExpressionUtils.binary(ExpressionUtils.binary(ExpressionUtils.field("creatorId"), "==", ExpressionUtils.member(ExpressionUtils.call("auth"), ["id"])), "&&", ExpressionUtils.binary(ExpressionUtils.binary(ExpressionUtils.field("groupId"), "==", ExpressionUtils._null()), "||", ExpressionUtils.binary(ExpressionUtils.member(ExpressionUtils.field("group"), ["members"]), "?", ExpressionUtils.binary(ExpressionUtils.binary(ExpressionUtils.field("userId"), "==", ExpressionUtils.member(ExpressionUtils.call("auth"), ["id"])), "&&", ExpressionUtils.binary(ExpressionUtils.field("status"), "==", ExpressionUtils.literal("ACTIVE")))))) }] },
                 { name: "@@allow", args: [{ name: "operation", value: ExpressionUtils.literal("update,delete") }, { name: "condition", value: ExpressionUtils.binary(ExpressionUtils.field("creatorId"), "==", ExpressionUtils.member(ExpressionUtils.call("auth"), ["id"])) }] },
                 { name: "@@allow", args: [{ name: "operation", value: ExpressionUtils.literal("update,delete") }, { name: "condition", value: ExpressionUtils.binary(ExpressionUtils.binary(ExpressionUtils.field("groupId"), "!=", ExpressionUtils._null()), "&&", ExpressionUtils.binary(ExpressionUtils.member(ExpressionUtils.field("group"), ["members"]), "?", ExpressionUtils.binary(ExpressionUtils.binary(ExpressionUtils.binary(ExpressionUtils.field("userId"), "==", ExpressionUtils.member(ExpressionUtils.call("auth"), ["id"])), "&&", ExpressionUtils.binary(ExpressionUtils.field("status"), "==", ExpressionUtils.literal("ACTIVE"))), "&&", ExpressionUtils.binary(ExpressionUtils.field("role"), "in", ExpressionUtils.array("GroupRole", [ExpressionUtils.literal("ADMIN"), ExpressionUtils.literal("MODERATOR")]))))) }] },
-                { name: "@@deny", args: [{ name: "operation", value: ExpressionUtils.literal("post-update") }, { name: "condition", value: ExpressionUtils.binary(ExpressionUtils.binary(ExpressionUtils.field("organizationId"), "!=", ExpressionUtils.member(ExpressionUtils.call("before"), ["organizationId"])), "||", ExpressionUtils.binary(ExpressionUtils.field("creatorId"), "!=", ExpressionUtils.member(ExpressionUtils.call("before"), ["creatorId"]))) }] },
+                { name: "@@deny", args: [{ name: "operation", value: ExpressionUtils.literal("post-update") }, { name: "condition", value: ExpressionUtils.binary(ExpressionUtils.field("creatorId"), "!=", ExpressionUtils.member(ExpressionUtils.call("before"), ["creatorId"])) }] },
                 { name: "@@deny", args: [{ name: "operation", value: ExpressionUtils.literal("post-update") }, { name: "condition", value: ExpressionUtils.binary(ExpressionUtils.field("endAt"), "<", ExpressionUtils.field("startAt")) }] },
                 { name: "@@deny", args: [{ name: "operation", value: ExpressionUtils.literal("create") }, { name: "condition", value: ExpressionUtils.binary(ExpressionUtils.field("endAt"), "<", ExpressionUtils.field("startAt")) }] },
-                { name: "@@index", args: [{ name: "fields", value: ExpressionUtils.array("String", [ExpressionUtils.field("organizationId"), ExpressionUtils.field("startAt")]) }] },
+                { name: "@@index", args: [{ name: "fields", value: ExpressionUtils.array("DateTime", [ExpressionUtils.field("startAt")]) }] },
                 { name: "@@index", args: [{ name: "fields", value: ExpressionUtils.array("String", [ExpressionUtils.field("groupId")]) }] },
                 { name: "@@map", args: [{ name: "name", value: ExpressionUtils.literal("event") }] }
             ] as readonly AttributeApplication[],
@@ -2513,7 +2187,6 @@ export class SchemaType implements SchemaDef {
             },
             attributes: [
                 { name: "@@allow", args: [{ name: "operation", value: ExpressionUtils.literal("read") }, { name: "condition", value: ExpressionUtils.call("check", [ExpressionUtils.field("event"), ExpressionUtils.literal("read")]) }] },
-                { name: "@@deny", args: [{ name: "operation", value: ExpressionUtils.literal("create") }, { name: "condition", value: ExpressionUtils.unary("!", ExpressionUtils.binary(ExpressionUtils.member(ExpressionUtils.field("user"), ["members"]), "?", ExpressionUtils.binary(ExpressionUtils.field("organizationId"), "==", ExpressionUtils.member(ExpressionUtils._this(), ["event", "organizationId"])))) }] },
                 { name: "@@allow", args: [{ name: "operation", value: ExpressionUtils.literal("create") }, { name: "condition", value: ExpressionUtils.binary(ExpressionUtils.member(ExpressionUtils.field("event"), ["creatorId"]), "==", ExpressionUtils.member(ExpressionUtils.call("auth"), ["id"])) }] },
                 { name: "@@allow", args: [{ name: "operation", value: ExpressionUtils.literal("create") }, { name: "condition", value: ExpressionUtils.binary(ExpressionUtils.binary(ExpressionUtils.field("userId"), "==", ExpressionUtils.member(ExpressionUtils.call("auth"), ["id"])), "&&", ExpressionUtils.call("check", [ExpressionUtils.field("event"), ExpressionUtils.literal("read")])) }] },
                 { name: "@@allow", args: [{ name: "operation", value: ExpressionUtils.literal("update") }, { name: "condition", value: ExpressionUtils.binary(ExpressionUtils.binary(ExpressionUtils.field("userId"), "==", ExpressionUtils.member(ExpressionUtils.call("auth"), ["id"])), "||", ExpressionUtils.binary(ExpressionUtils.member(ExpressionUtils.field("event"), ["creatorId"]), "==", ExpressionUtils.member(ExpressionUtils.call("auth"), ["id"]))) }] },
@@ -2538,19 +2211,6 @@ export class SchemaType implements SchemaDef {
                     id: true,
                     attributes: [{ name: "@id" }, { name: "@default", args: [{ name: "value", value: ExpressionUtils.call("cuid") }] }] as readonly AttributeApplication[],
                     default: ExpressionUtils.call("cuid") as FieldDefault
-                },
-                organizationId: {
-                    name: "organizationId",
-                    type: "String",
-                    foreignKeyFor: [
-                        "organization"
-                    ] as readonly string[]
-                },
-                organization: {
-                    name: "organization",
-                    type: "Organization",
-                    attributes: [{ name: "@relation", args: [{ name: "fields", value: ExpressionUtils.array("String", [ExpressionUtils.field("organizationId")]) }, { name: "references", value: ExpressionUtils.array("String", [ExpressionUtils.field("id")]) }, { name: "onDelete", value: ExpressionUtils.literal("Cascade") }] }] as readonly AttributeApplication[],
-                    relation: { opposite: "calls", fields: ["organizationId"], references: ["id"], onDelete: "Cascade" }
                 },
                 conversationId: {
                     name: "conversationId",
@@ -2626,7 +2286,7 @@ export class SchemaType implements SchemaDef {
                 }
             },
             attributes: [
-                { name: "@@deny", args: [{ name: "operation", value: ExpressionUtils.literal("all") }, { name: "condition", value: ExpressionUtils.unary("!", ExpressionUtils.binary(ExpressionUtils.member(ExpressionUtils.field("organization"), ["members"]), "?", ExpressionUtils.binary(ExpressionUtils.field("userId"), "==", ExpressionUtils.member(ExpressionUtils.call("auth"), ["id"])))) }] },
+                { name: "@@deny", args: [{ name: "operation", value: ExpressionUtils.literal("all") }, { name: "condition", value: ExpressionUtils.binary(ExpressionUtils.call("auth"), "==", ExpressionUtils._null()) }] },
                 { name: "@@allow", args: [{ name: "operation", value: ExpressionUtils.literal("read") }, { name: "condition", value: ExpressionUtils.binary(ExpressionUtils.binary(ExpressionUtils.binary(ExpressionUtils.field("participants"), "?", ExpressionUtils.binary(ExpressionUtils.field("userId"), "==", ExpressionUtils.member(ExpressionUtils.call("auth"), ["id"]))), "||", ExpressionUtils.call("check", [ExpressionUtils.field("conversation"), ExpressionUtils.literal("read")])), "||", ExpressionUtils.call("check", [ExpressionUtils.field("event"), ExpressionUtils.literal("read")])) }] },
                 { name: "@@index", args: [{ name: "fields", value: ExpressionUtils.array("String", [ExpressionUtils.field("conversationId")]) }] },
                 { name: "@@index", args: [{ name: "fields", value: ExpressionUtils.array("String", [ExpressionUtils.field("eventId")]) }] },
@@ -2799,10 +2459,8 @@ export class SchemaType implements SchemaDef {
             },
             attributes: [
                 { name: "@@allow", args: [{ name: "operation", value: ExpressionUtils.literal("read") }, { name: "condition", value: ExpressionUtils.binary(ExpressionUtils.call("check", [ExpressionUtils.field("group"), ExpressionUtils.literal("read")]), "&&", ExpressionUtils.binary(ExpressionUtils.binary(ExpressionUtils.member(ExpressionUtils.field("group"), ["privacy"]), "==", ExpressionUtils.literal("PUBLIC")), "||", ExpressionUtils.binary(ExpressionUtils.member(ExpressionUtils.field("group"), ["members"]), "?", ExpressionUtils.binary(ExpressionUtils.binary(ExpressionUtils.field("userId"), "==", ExpressionUtils.member(ExpressionUtils.call("auth"), ["id"])), "&&", ExpressionUtils.binary(ExpressionUtils.field("status"), "==", ExpressionUtils.literal("ACTIVE")))))) }] },
-                { name: "@@allow", args: [{ name: "operation", value: ExpressionUtils.literal("create,update") }, { name: "condition", value: ExpressionUtils.binary(ExpressionUtils.member(ExpressionUtils.field("group"), ["members"]), "?", ExpressionUtils.binary(ExpressionUtils.binary(ExpressionUtils.binary(ExpressionUtils.field("userId"), "==", ExpressionUtils.member(ExpressionUtils.call("auth"), ["id"])), "&&", ExpressionUtils.binary(ExpressionUtils.field("status"), "==", ExpressionUtils.literal("ACTIVE"))), "&&", ExpressionUtils.binary(ExpressionUtils.binary(ExpressionUtils.member(ExpressionUtils.field("group"), ["wikiEditPolicy"]), "==", ExpressionUtils.literal("MEMBERS")), "||", ExpressionUtils.binary(ExpressionUtils.field("role"), "in", ExpressionUtils.array("GroupRole", [ExpressionUtils.literal("ADMIN"), ExpressionUtils.literal("MODERATOR")]))))) }] },
-                { name: "@@allow", args: [{ name: "operation", value: ExpressionUtils.literal("create,update") }, { name: "condition", value: ExpressionUtils.binary(ExpressionUtils.member(ExpressionUtils.field("group"), ["organization", "members"]), "?", ExpressionUtils.binary(ExpressionUtils.binary(ExpressionUtils.field("userId"), "==", ExpressionUtils.member(ExpressionUtils.call("auth"), ["id"])), "&&", ExpressionUtils.binary(ExpressionUtils.field("role"), "in", ExpressionUtils.array("String", [ExpressionUtils.literal("owner"), ExpressionUtils.literal("admin")])))) }] },
-                { name: "@@allow", args: [{ name: "operation", value: ExpressionUtils.literal("delete") }, { name: "condition", value: ExpressionUtils.binary(ExpressionUtils.member(ExpressionUtils.field("group"), ["members"]), "?", ExpressionUtils.binary(ExpressionUtils.binary(ExpressionUtils.binary(ExpressionUtils.field("userId"), "==", ExpressionUtils.member(ExpressionUtils.call("auth"), ["id"])), "&&", ExpressionUtils.binary(ExpressionUtils.field("status"), "==", ExpressionUtils.literal("ACTIVE"))), "&&", ExpressionUtils.binary(ExpressionUtils.field("role"), "in", ExpressionUtils.array("GroupRole", [ExpressionUtils.literal("ADMIN"), ExpressionUtils.literal("MODERATOR")])))) }] },
-                { name: "@@allow", args: [{ name: "operation", value: ExpressionUtils.literal("delete") }, { name: "condition", value: ExpressionUtils.binary(ExpressionUtils.member(ExpressionUtils.field("group"), ["organization", "members"]), "?", ExpressionUtils.binary(ExpressionUtils.binary(ExpressionUtils.field("userId"), "==", ExpressionUtils.member(ExpressionUtils.call("auth"), ["id"])), "&&", ExpressionUtils.binary(ExpressionUtils.field("role"), "in", ExpressionUtils.array("String", [ExpressionUtils.literal("owner"), ExpressionUtils.literal("admin")])))) }] },
+                { name: "@@allow", args: [{ name: "operation", value: ExpressionUtils.literal("create,update") }, { name: "condition", value: ExpressionUtils.binary(ExpressionUtils.binary(ExpressionUtils.member(ExpressionUtils.field("group"), ["members"]), "?", ExpressionUtils.binary(ExpressionUtils.binary(ExpressionUtils.binary(ExpressionUtils.field("userId"), "==", ExpressionUtils.member(ExpressionUtils.call("auth"), ["id"])), "&&", ExpressionUtils.binary(ExpressionUtils.field("status"), "==", ExpressionUtils.literal("ACTIVE"))), "&&", ExpressionUtils.binary(ExpressionUtils.binary(ExpressionUtils.member(ExpressionUtils.field("group"), ["wikiEditPolicy"]), "==", ExpressionUtils.literal("MEMBERS")), "||", ExpressionUtils.binary(ExpressionUtils.field("role"), "in", ExpressionUtils.array("GroupRole", [ExpressionUtils.literal("ADMIN"), ExpressionUtils.literal("MODERATOR")]))))), "||", ExpressionUtils.binary(ExpressionUtils.binary(ExpressionUtils.member(ExpressionUtils.call("auth"), ["role"]), "==", ExpressionUtils.literal("admin")), "||", ExpressionUtils.binary(ExpressionUtils.member(ExpressionUtils.call("auth"), ["permissions"]), "?", ExpressionUtils.binary(ExpressionUtils.binary(ExpressionUtils.field("model"), "==", ExpressionUtils.call("currentModel")), "&&", ExpressionUtils.binary(ExpressionUtils.call("currentOperation"), "in", ExpressionUtils.field("actions")))))) }] },
+                { name: "@@allow", args: [{ name: "operation", value: ExpressionUtils.literal("delete") }, { name: "condition", value: ExpressionUtils.binary(ExpressionUtils.binary(ExpressionUtils.member(ExpressionUtils.field("group"), ["members"]), "?", ExpressionUtils.binary(ExpressionUtils.binary(ExpressionUtils.binary(ExpressionUtils.field("userId"), "==", ExpressionUtils.member(ExpressionUtils.call("auth"), ["id"])), "&&", ExpressionUtils.binary(ExpressionUtils.field("status"), "==", ExpressionUtils.literal("ACTIVE"))), "&&", ExpressionUtils.binary(ExpressionUtils.field("role"), "in", ExpressionUtils.array("GroupRole", [ExpressionUtils.literal("ADMIN"), ExpressionUtils.literal("MODERATOR")])))), "||", ExpressionUtils.binary(ExpressionUtils.binary(ExpressionUtils.member(ExpressionUtils.call("auth"), ["role"]), "==", ExpressionUtils.literal("admin")), "||", ExpressionUtils.binary(ExpressionUtils.member(ExpressionUtils.call("auth"), ["permissions"]), "?", ExpressionUtils.binary(ExpressionUtils.binary(ExpressionUtils.field("model"), "==", ExpressionUtils.call("currentModel")), "&&", ExpressionUtils.binary(ExpressionUtils.call("currentOperation"), "in", ExpressionUtils.field("actions")))))) }] },
                 { name: "@@allow", args: [{ name: "operation", value: ExpressionUtils.literal("delete") }, { name: "condition", value: ExpressionUtils.binary(ExpressionUtils.binary(ExpressionUtils.field("createdById"), "==", ExpressionUtils.member(ExpressionUtils.call("auth"), ["id"])), "&&", ExpressionUtils.binary(ExpressionUtils.member(ExpressionUtils.field("group"), ["members"]), "?", ExpressionUtils.binary(ExpressionUtils.binary(ExpressionUtils.binary(ExpressionUtils.field("userId"), "==", ExpressionUtils.member(ExpressionUtils.call("auth"), ["id"])), "&&", ExpressionUtils.binary(ExpressionUtils.field("status"), "==", ExpressionUtils.literal("ACTIVE"))), "&&", ExpressionUtils.binary(ExpressionUtils.member(ExpressionUtils.field("group"), ["wikiEditPolicy"]), "==", ExpressionUtils.literal("MEMBERS"))))) }] },
                 { name: "@@deny", args: [{ name: "operation", value: ExpressionUtils.literal("create") }, { name: "condition", value: ExpressionUtils.binary(ExpressionUtils.field("createdById"), "!=", ExpressionUtils.member(ExpressionUtils.call("auth"), ["id"])) }] },
                 { name: "@@deny", args: [{ name: "operation", value: ExpressionUtils.literal("create,post-update") }, { name: "condition", value: ExpressionUtils.binary(ExpressionUtils.binary(ExpressionUtils.field("parentId"), "!=", ExpressionUtils._null()), "&&", ExpressionUtils.binary(ExpressionUtils.member(ExpressionUtils.field("parent"), ["groupId"]), "!=", ExpressionUtils.field("groupId"))) }] },
@@ -2900,6 +2558,14 @@ export class SchemaType implements SchemaDef {
         }
     } as const;
     enums = {
+        InvitationStatus: {
+            name: "InvitationStatus",
+            values: {
+                PENDING: "PENDING",
+                ACCEPTED: "ACCEPTED",
+                CANCELED: "CANCELED"
+            }
+        },
         WikiEditPolicy: {
             name: "WikiEditPolicy",
             values: {

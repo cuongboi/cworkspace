@@ -1,22 +1,21 @@
 import { Link } from "react-router-dom"
 import { UserAvatar } from "@/components/common/user-avatar"
 import { ScrollArea } from "@/components/ui/scroll-area"
-import { useOrg } from "@/hooks/use-org"
+import { useApp } from "@/hooks/use-app"
 import { useOnlineUsers } from "@/hooks/use-presence"
 import { db } from "@/lib/api-client"
 import { useDbQuery } from "@/lib/query"
 
-/** Right rail: org members, online first. Clicking opens a 1:1 chat. */
+/** Right rail: everyone in the company, online first. Clicking opens a 1:1 chat. */
 export function ContactsRail() {
-  const { org, me, href } = useOrg()
+  const { me } = useApp()
   const online = useOnlineUsers()
   const { data: people = [] } = useDbQuery(
-    ["user", "findMany", "contacts", org.id],
+    ["user", "findMany", "contacts"],
     () =>
       db.user.findMany({
         where: {
           id: { not: me.id },
-          members: { some: { organizationId: org.id } },
         },
         select: { id: true, name: true, image: true, title: true },
         orderBy: { name: "asc" },
@@ -38,7 +37,7 @@ export function ContactsRail() {
             {sorted.map((p) => (
               <li key={p.id}>
                 <Link
-                  to={href(`/chat?with=${p.id}`)}
+                  to={`/chat?with=${p.id}`}
                   className="flex items-center gap-3 rounded-md px-2 py-1.5 text-sm hover:bg-accent"
                 >
                   <UserAvatar user={p} size="sm" presence />

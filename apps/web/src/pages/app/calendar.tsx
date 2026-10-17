@@ -37,7 +37,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip"
 import { useIsMobile } from "@/hooks/use-mobile"
-import { useOrg } from "@/hooks/use-org"
+import { useApp } from "@/hooks/use-app"
 import type { EventType } from "@app/api/zenstack/models"
 
 type DialogState = {
@@ -47,7 +47,7 @@ type DialogState = {
 } | null
 
 const CalendarPage = () => {
-  const { me } = useOrg()
+  const { me } = useApp()
   const [view, setView] = useState<CalendarView>("week")
   const [date, setDate] = useState(() => new Date())
   const [types, setTypes] = useState<Set<EventType>>(() => new Set(EVENT_TYPES))

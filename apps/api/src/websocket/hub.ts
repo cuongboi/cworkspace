@@ -26,7 +26,8 @@ type Handler = (payload: never, ack: (res: AckResult<never>) => void) => unknown
 
 export const rooms = {
   user: (userId: string) => `user:${userId}`,
-  org: (organizationId: string) => `org:${organizationId}`,
+  /** every signed-in connection: presence is company-wide */
+  all: "all",
   group: (groupId: string) => `group:${groupId}`,
   call: (callId: string) => `call:${callId}`,
 };

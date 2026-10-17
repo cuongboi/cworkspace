@@ -1,27 +1,27 @@
 # AGENTS.md
 
-Guidance for AI coding agents working in **cworkplace**: a multi-tenant clone of Facebook Workplace. It is a Bun + Turborepo TypeScript monorepo with a React SPA (`apps/web`) and a Bun + Elysia API (`apps/api`) using ZenStack (policy-aware ORM on PostgreSQL) and better-auth.
+Guidance for AI coding agents working in **cworkplace**: a single-company (self-hosted) clone of Facebook Workplace. It is a Bun + Turborepo TypeScript monorepo with a React SPA (`apps/web`) and a Bun + Elysia API (`apps/api`) using ZenStack (policy-aware ORM on PostgreSQL) and better-auth.
 
 ## What we are building
 
-Every tenant is an **Organization** (better-auth `organization` plugin), addressed by path: `/:orgSlug/...`. Inside an organization, members use:
+One deployment is one company. Signed-in users reach every page at a flat path (`/`, `/groups`, `/chat/...`). Everyone uses:
 
-- **Groups**: PUBLIC, CLOSED (visible, members-only posts, join by request) or SECRET; every org has a mandatory "All company" group (`isDefault`) that every member belongs to
+- **Groups**: PUBLIC, CLOSED (visible, members-only posts, join by request) or SECRET; a mandatory "All company" group (`isDefault`) that every user joins on sign-up
 - **Feed**: posts (text, polls, events), comments with one level of replies, reactions, @mentions, attachments
 - **Chat**: 1:1 and group conversations, typing indicators, read receipts, presence
 - **Calls**: 1:1 and group audio/video calls with screen share (WebRTC mesh, max 6 people)
 - **Calendar**: meetings, events, out-of-office, reminders; RSVP; recurrence (RRULE); video meetings
 - **Notifications**: stored and pushed live
-- **Org admin**: members, roles, invitations by email
+- **Admin settings**: people (role, deactivate, delete), invitations by email
 
-**Tenant isolation is the most important invariant.** A user must never read or write another organization's data. It is enforced in the **ZenStack access policies** (not in UI code) and covered by `apps/api/tests/policies.test.ts`.
+**Access control lives in the ZenStack access policies** (not in UI code): anonymous users read nothing, SECRET/CLOSED groups and conversations stay private to their members, and only instance admins (`User.role == 'admin'`) or RBAC grants (`User.permissions`) override moderation rules. Covered by `apps/api/tests/policies.test.ts`.
 
 ## Stack at a glance
 
 - **Runtime / tooling:** Bun 1.4.x, Node ≥ 24, Turborepo, Bun workspaces (`apps/*`, `packages/*`)
 - **API:** Elysia, `@elysia/cors`, `@elysia/openapi` (Scalar), `@elysia/static`, Bun WebSocket at `/ws`
 - **DB / ORM:** PostgreSQL + ZenStack v3 (`@zenstackhq/orm`, access-policy plugin)
-- **Auth:** better-auth (email/password, JWT, bearer, admin, **organization** plugins, ZenStack adapter)
+- **Auth:** better-auth (email/password, JWT, bearer, **admin** plugins, ZenStack adapter); open sign-up, the first user becomes admin
 - **Files / email / calls:** S3-compatible bucket (presigned POST/GET), Resend, WebRTC mesh + coturn TURN
 - **Web:** React 19, Vite 8, React Router 7, nuqs, TanStack Query, Tailwind CSS 4, shadcn/ui (Radix), lucide-react
 - **Shared:** `packages/shared` (`@app/shared`): realtime event contract, mention encoding
@@ -38,10 +38,10 @@ apps/
       index.ts              # Entry: argparse + listen + reminder worker
       app.ts                # The Elysia app (CORS, error envelope, OpenAPI, routes, /ws, static) — importable by tests
       env.ts                # Validated env vars (fail fast)
-      lib/                  # auth.ts (better-auth + org hooks), db.ts (ZenStack clients), errors.ts, mail.ts
+      lib/                  # auth.ts (better-auth + sign-up hooks), db.ts (ZenStack clients), errors.ts, mail.ts
       plugins/auth.ts       # better-auth routes + `auth: true` macro
-      routes/               # execute, uploads, files, conversations, rtc
-      server/               # session (dbFor), org ("All company"), notify, storage (S3), rate-limit,
+      routes/               # execute, uploads, files, conversations, groups, invitations, rtc
+      server/               # session (dbFor), company ("All company", invitations), notify, storage (S3), rate-limit,
                             # plugins/realtime-plugin.ts (mutation side effects), jobs/reminders.ts
       websocket/            # index (/ws endpoint), hub (rooms/emit), presence + typing, calls (signaling)
       public/               # GENERATED web build — do not edit
@@ -51,12 +51,12 @@ apps/
     tests/                  # bun test: policies (real DB), execute contract, admin fields
   web/                      # @app/web
     src/
-      main.tsx, router.tsx  # providers; routes (`/:orgSlug` children use `handle: { rail, bleed }`)
-      components/           # ui/ (shadcn), common/, layout/ (OrgLayout shell), feed/ groups/ people/
+      main.tsx, router.tsx  # providers; routes (`AppLayout` children use `handle: { rail, bleed }`)
+      components/           # ui/ (shadcn), common/, layout/ (AppLayout shell), feed/ groups/ people/
                             # chat/ call/ calendar/ notifications/ settings/
-      hooks/                # use-socket, use-org, use-presence, use-realtime-sync, use-uploads, use-now, use-mobile
-      lib/                  # api-client, auth-client, query, realtime (WS client), upload, accent, rtc/
-      pages/                # auth/, onboarding, invite, root-redirect, org/** (tenant pages)
+      hooks/                # use-socket, use-app, use-presence, use-realtime-sync, use-uploads, use-now, use-mobile
+      lib/                  # api-client, auth-client, company, query, realtime (WS client), upload, accent, rtc/
+      pages/                # auth/, invite, app/** (signed-in pages)
 packages/
   shared/                   # @app/shared: realtime-events.ts, mentions.ts
 ```
@@ -132,23 +132,25 @@ write as
   - `dbFor(user)` (`src/server/session.ts`) = `authDb.$setAuth({ id, email, role })` — policy-enforced; this is `userDb` in route handlers. Use for anything driven by user input.
   - `db` (`src/lib/db.ts`) — bypasses policies. Trusted server code only (auth adapter, realtime plugin, socket handlers after an authorization check, jobs, seeding). **Never expose it to `/api/execute`.**
 
-### Multi-tenancy rules (ZenStack)
+### Access rules (ZenStack)
 
-- **Top-level tenant entities** (Group, Conversation, Event, Call, Attachment, Notification) carry `organizationId` + the guard `@@deny('all', !(organization.members?[userId == auth().id]))`.
-- **Child rows** (GroupMember, Post, Comment, reactions, Poll*, ConversationMember, Message, EventAttendee, CallParticipant) inherit tenancy and visibility from the parent with `check(parent)` / `check(parent, 'read')`.
-- Users added to a tenant entity must belong to its org: `@@deny('create', !(user.members?[organizationId == this.group.organizationId]))` (`this` = outer row).
-- Rows never move between parents/tenants: `@@deny('post-update', groupId != before().groupId || ...)`.
+- **Top-level entities** (Group, Conversation, Event, Call, Attachment, Notification) carry the guard `@@deny('all', auth() == null)`; their own `@@allow` rules decide visibility (group privacy, membership, ownership).
+- **Child rows** (GroupMember, Post, Comment, reactions, Poll*, ConversationMember, Message, EventAttendee, CallParticipant, WikiPage) inherit visibility from the parent with `check(parent)` / `check(parent, 'read')`.
+- **Instance admin / RBAC override**, used wherever a moderator rule applies (Group, GroupMember, Post, WikiPage):
+  `auth().role == 'admin' || auth().permissions?[model == currentModel() && currentOperation() in actions]`.
+  `auth()` is `{ id, email, role, permissions }` (`AuthContext` in `lib/db.ts`, bound by `dbFor`); `permissions` reaches the session through better-auth `user.additionalFields`.
+- Rows never move between parents: `@@deny('post-update', groupId != before().groupId || ...)`.
 - Server-only fields on models users may update (e.g. the admin plugin's `User.role`, `banned`, `permissions`) get a field-level `@deny('update', true)`. Covered by `tests/user-admin-fields.test.ts`.
 - ZModel gotchas (verified):
-  - `!` binds tighter than member access: write `!(organization.members?[...])`, not `!organization.members?[...]`.
+  - `!` binds tighter than member access: write `!(group.members?[...])`, not `!group.members?[...]`.
   - `before()` values are cast to text: use it on **String** fields only. Make enum/boolean/number fields immutable with `@deny('update', true)` instead.
   - No `future()` in v3: use `post-update` rules with `before()`.
   - Updates/deletes filtered out by a policy surface as **not-found** (the row's existence isn't leaked).
   - Optional lists aren't supported: `Type[]` with `@default("[]")`, never `Type[]?`.
-- Roles: org `Member.role` (`owner` | `admin` | `member`); group `GroupMember.role` (ADMIN | MODERATOR | MEMBER); conversation `ConversationMember.role` (ADMIN | MEMBER). Org admin rule: `organization.members?[userId == auth().id && role in ['owner', 'admin']]`. `MemberPermission` is modeled but **not enforced yet**.
-- Server-written models: Notification (create), Call/CallParticipant (all writes), Message type CALL/SYSTEM.
-- better-auth tables are written by better-auth through the **unscoped** adapter. Keep their `@@map` and field names compatible. Session/Account/Verification/Jwks are `@@deny('all', true)` and never routed by `/api/execute`. Mutate orgs, members and invitations through `authClient.organization.*`.
-- Org hooks (`src/server/org.ts`, wired in `lib/auth.ts`): creating an org creates its "All company" group; new and accepted members join it; removed members lose their group/conversation/event memberships. New sessions default `activeOrganizationId` to the user's first membership.
+- Roles: instance `User.role` (`admin` | `user`); group `GroupMember.role` (ADMIN | MODERATOR | MEMBER); conversation `ConversationMember.role` (ADMIN | MEMBER). Instance admin rule: `auth().role == 'admin'`.
+- Server-written models: Notification (create), Call/CallParticipant (all writes), Message type CALL/SYSTEM, Invitation (all writes, via `routes/invitations.ts`).
+- better-auth tables are written by better-auth through the **unscoped** adapter. Keep their `@@map` and field names compatible. Session/Account/Verification/Jwks are `@@deny('all', true)` and never routed by `/api/execute`. Manage users (role, ban, delete) through `authClient.admin.*`.
+- Sign-up hooks (`lib/auth.ts` → `src/server/company.ts`): the first user becomes `admin`; every new user joins the "All company" group (created by the first user); a pending `Invitation` for the email is accepted and grants its role.
 
 ## Backend rules (`apps/api`)
 
@@ -165,10 +167,10 @@ write as
 
 - `packages/shared/src/realtime-events.ts` is the typed contract for both directions **and** the wire protocol. Add events there first.
 - Frames are JSON: server → client `{ e, d }`, `{ e: "hello", d: { socketId } }` on connect, `{ ack, res }` replies; client → server `{ e, d }` (fire-and-forget) or `{ e, d, id }` (request, always answered with an `ack`). `socketId` is the per-connection id; WebRTC signaling is addressed by it.
-- Server: `src/websocket/index.ts` authenticates the upgrade from the session cookie (`auth: true`). On connect a socket joins `user:{id}`, `org:{id}` for each org, and `group:{id}` for each ACTIVE group membership (kept in sync by the realtime plugin).
+- Server: `src/websocket/index.ts` authenticates the upgrade from the session cookie (`auth: true`). On connect a socket joins `user:{id}`, the company-wide `all` room (presence), and `group:{id}` for each ACTIVE group membership (kept in sync by the realtime plugin).
 - **Server code emits only through `src/websocket/hub.ts`** (`emitToUsers`, `emitToRoom`, `emitTo`, `emitToConn`, `joinUserToRoom`, …). Rooms are in-process (deduplicated delivery, sender exclusion), so run **one API instance**; presence and live call state are per process too.
 - Socket handlers register with `conn.on(event, handler)`; payloads come from the client, validate every field.
-- Client: one shared `RealtimeClient` (`src/lib/realtime.ts`, mounted by `SocketProvider`), with auto-reconnect. Listen with `useSocketEvent(event, handler)`, send with `useSocket()?.emit(...)` or `socket.timeout(ms).emitWithAck(...)`. `useRealtimeSync()` (mounted by `OrgLayout`) invalidates React Query keys by model name when events arrive; on reconnect everything is refetched.
+- Client: one shared `RealtimeClient` (`src/lib/realtime.ts`, mounted by `SocketProvider`), with auto-reconnect. Listen with `useSocketEvent(event, handler)`, send with `useSocket()?.emit(...)` or `socket.timeout(ms).emitWithAck(...)`. `useRealtimeSync()` (mounted by `AppLayout`) invalidates React Query keys by model name when events arrive; on reconnect everything is refetched.
 
 ## Frontend rules (`apps/web`)
 
@@ -178,7 +180,7 @@ write as
   - Custom routes: `api.get<T>(path)` / `api.post<T>(path, body)`. Files: `uploadFile()` / `fileUrl()` from `src/lib/upload.ts`.
   - Failures throw `ApiError` with a typed `code`; branch on `code`, not message text. Show errors with `toast.error` (sonner).
 - Auth: use `authClient` from `src/lib/auth-client.ts`. Protected routes sit under `<RequireAuth />`, guest-only pages under `<GuestOnly />` in `src/router.tsx`. `/invite/:id` and `/reset-password` are reachable either way.
-- Tenant pages are children of the `/:orgSlug` route (`OrgLayout`). Use `useOrg()` → `{ org, me, role, isAdmin, href }` and build links with `href("/path")`. Shell options per page go in the route's `handle` (`{ rail: true }` contacts rail, `{ bleed: true }` full-bleed).
+- Signed-in pages are children of the pathless `AppLayout` route. Use `useApp()` → `{ me, isAdmin }` and link with plain paths (`"/groups"`). The company name is `COMPANY_NAME` from `src/lib/company.ts`. Shell options per page go in the route's `handle` (`{ rail: true }` contacts rail, `{ bleed: true }` full-bleed).
 - Keep filter/tab/dialog state in the URL with `nuqs` (see `src/lib/search-params.ts`).
 - Don't read `Date.now()` during render (React Compiler lint): use `useNow()`.
 - Theme follows `design.html`: Tailwind zinc tokens in `src/index.css`, Geist, flat 1px borders (no shadows), buttons 8px / cards 12px radius, avatar and group accents from `src/lib/accent.ts`.
@@ -217,7 +219,7 @@ The binary serves API, auth, WebSocket, and SPA (with deep-link fallback) from o
 
 - Edit generated files (`apps/api/zenstack/*.ts`, `apps/api/src/public/**`).
 - Use the policy-bypassing `db` client for user-driven input or expose it via `/api/execute`.
-- Enforce tenancy or permissions in UI code only.
+- Enforce access control or permissions in UI code only.
 - Read `process.env` directly instead of `env` from `@/env`.
 - Register routes after `staticPlugin`.
 - Call `fetch` directly from web components.

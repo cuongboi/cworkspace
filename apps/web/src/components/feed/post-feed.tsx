@@ -2,7 +2,7 @@ import { useVirtualizer } from "@tanstack/react-virtual"
 import { type ReactNode, useEffect, useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Spinner } from "@/components/ui/spinner"
-import { useOrg } from "@/hooks/use-org"
+import { useApp } from "@/hooks/use-app"
 import { usePageScrollElement } from "@/hooks/use-page-scroll"
 import { useDbInfinite, useDbQuery } from "@/lib/query"
 import type { PostWhereInput } from "@app/api/zenstack/input"
@@ -33,7 +33,7 @@ export function PostFeed({
   showGroup?: boolean
   empty?: ReactNode
 }) {
-  const { me } = useOrg()
+  const { me } = useApp()
   const {
     data,
     isPending,

@@ -9,13 +9,12 @@ import {
   EmptyTitle,
 } from "@/components/ui/empty"
 import { Input } from "@/components/ui/input"
-import { useOrg } from "@/hooks/use-org"
 import { db } from "@/lib/api-client"
 import { useDbQuery } from "@/lib/query"
+import { COMPANY_NAME } from "@/lib/company"
 
 /** Org directory: search by name, title or department. */
 const PeoplePage = () => {
-  const { org } = useOrg()
   const [input, setInput] = useState("")
   const [q, setQ] = useState("")
 
@@ -29,11 +28,10 @@ const PeoplePage = () => {
     isPending,
     isPlaceholderData,
   } = useDbQuery(
-    ["user", "findMany", "directory", org.id, q],
+    ["user", "findMany", "directory", q],
     () =>
       db.user.findMany({
         where: {
-          members: { some: { organizationId: org.id } },
           ...(q
             ? {
                 OR: [
@@ -63,7 +61,7 @@ const PeoplePage = () => {
         <div>
           <h1 className="text-2xl font-bold tracking-tight">People</h1>
           <p className="text-sm text-muted-foreground">
-            Everyone at {org.name}.
+            Everyone at {COMPANY_NAME}.
           </p>
         </div>
         <div className="relative w-full sm:w-80">

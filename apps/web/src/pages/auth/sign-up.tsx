@@ -20,6 +20,8 @@ import { FormError } from "./auth-layout"
 export function SignUpPage() {
   const navigate = useNavigate()
   const [redirect] = useQueryState("redirect", redirectParser)
+  // prefilled from an invitation link (/invite/:id)
+  const [invitedEmail] = useQueryState("email")
   const [error, setError] = useState<string | null>(null)
   const [pending, setPending] = useState(false)
 
@@ -61,6 +63,7 @@ export function SignUpPage() {
               name="email"
               type="email"
               autoComplete="email"
+              defaultValue={invitedEmail ?? undefined}
               required
             />
           </div>

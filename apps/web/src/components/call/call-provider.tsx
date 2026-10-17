@@ -8,15 +8,13 @@ import {
   useState,
 } from "react"
 import { toast } from "sonner"
-import { useOrg } from "@/hooks/use-org"
 import { useSocket, useSocketEvent } from "@/hooks/use-socket"
-import { authClient } from "@/lib/auth-client"
 import type { CallKind } from "@/lib/realtime-events"
 import { type IncomingCall, IncomingCallCard } from "./incoming-call"
 
 /**
  * Call entry points used across features (chat header, calendar, notifications).
- * Mounted by OrgLayout. Also renders the incoming-call UI.
+ * Mounted by AppLayout. Also renders the incoming-call UI.
  */
 
 export type StartCallOptions = {
@@ -43,25 +41,13 @@ const START_TIMEOUT_MS = 10_000
 export function CallProvider({ children }: { children: ReactNode }) {
   const socket = useSocket()
   const navigate = useNavigate()
-  const { org, href } = useOrg()
-  const { data: orgs } = authClient.useListOrganizations()
   const [incoming, setIncoming] = useState<IncomingCall[]>([])
   const starting = useRef(false)
 
-  const currentCallId =
-    useMatch("/:orgSlug/call/:callId")?.params.callId ?? null
-
-  /** The call page URL, in the call's own organization (a call can ring from another tenant). */
-  const callHref = (callId: string, organizationId?: string) => {
-    const slug =
-      organizationId && organizationId !== org.id
-        ? orgs?.find((o) => o.id === organizationId)?.slug
-        : null
-    return slug ? `/${slug}/call/${callId}` : href(`/call/${callId}`)
-  }
+  const currentCallId = useMatch("/call/:callId")?.params.callId ?? null
 
   const joinCall = (callId: string) => {
-    void navigate(callHref(callId))
+    void navigate(`/call/${callId}`)
   }
 
   const startCall = async (opts: StartCallOptions) => {
@@ -123,7 +109,7 @@ export function CallProvider({ children }: { children: ReactNode }) {
 
   const accept = (call: IncomingCall) => {
     remove(call.call.id)
-    void navigate(callHref(call.call.id, call.call.organizationId))
+    void navigate(`/call/${call.call.id}`)
   }
 
   const decline = (call: IncomingCall) => {

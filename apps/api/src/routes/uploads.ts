@@ -20,17 +20,16 @@ export const uploadsRoute = new Elysia({ name: "routes.uploads" }).use(authMacro
     if (!storageConfigured) throw upstreamError("File storage is not configured");
     if (!rateLimit(`upload:${user.id}`, 30, 60_000)) throw tooManyRequests("Too many uploads");
     if (BLOCKED.test(body.mimeType)) throw badRequest("This file type is not allowed");
-    if (body.orgVisible && !body.mimeType.startsWith("image/"))
-      throw badRequest("Only images can be shared organization-wide");
+    if (body.isPublic && !body.mimeType.startsWith("image/"))
+      throw badRequest("Only images can be shared publicly");
 
     const id = createId();
     const safeName = body.name.replace(/[^\w.\- ]+/g, "_").slice(-120) || "file";
-    // the policy client enforces that the uploader belongs to the organization
     const attachment = await userDb.attachment.create({
       data: {
         id,
         ...body,
-        key: `org/${body.organizationId}/${id}/${safeName}`,
+        key: `files/${id}/${safeName}`,
         uploaderId: user.id,
       },
     });
@@ -41,14 +40,13 @@ export const uploadsRoute = new Elysia({ name: "routes.uploads" }).use(authMacro
   {
     auth: true,
     body: t.Object({
-      organizationId: t.String({ minLength: 1 }),
       name: t.String({ minLength: 1, maxLength: 255 }),
       mimeType: t.String({ minLength: 1, maxLength: 127, pattern: "^[\\w.+-]+/[\\w.+-]+$" }),
       size: t.Integer({ minimum: 1, maximum: MAX_UPLOAD_BYTES }),
       width: t.Optional(t.Integer({ minimum: 1 })),
       height: t.Optional(t.Integer({ minimum: 1 })),
       // avatars and group covers; images only
-      orgVisible: t.Optional(t.Boolean()),
+      isPublic: t.Optional(t.Boolean()),
     }),
     detail: { tags: ["Files"], summary: "Create an attachment and a presigned upload" },
   },

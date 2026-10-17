@@ -25,7 +25,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { Spinner } from "@/components/ui/spinner"
-import { useOrg } from "@/hooks/use-org"
+import { useApp } from "@/hooks/use-app"
 import { db } from "@/lib/api-client"
 import { useDbMutation } from "@/lib/query"
 import type { GroupPrivacy } from "@app/api/zenstack/models"
@@ -40,7 +40,7 @@ type GroupLike = {
 
 /** Join (PUBLIC), request (CLOSED), cancel a request, or leave. */
 export function useMembershipActions(group: GroupLike) {
-  const { me } = useOrg()
+  const { me } = useApp()
   const join = useDbMutation(
     () =>
       db.groupMember.create({

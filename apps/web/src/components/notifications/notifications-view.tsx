@@ -19,7 +19,6 @@ import {
 } from "@/components/ui/empty"
 import { Spinner } from "@/components/ui/spinner"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
-import { useOrg } from "@/hooks/use-org"
 import { db } from "@/lib/api-client"
 import { invalidateModels, useDbInfinite, useDbQuery } from "@/lib/query"
 
@@ -27,15 +26,14 @@ const PAGE_SIZE = 20
 type Filter = "all" | "unread"
 
 export function NotificationsView() {
-  const { org } = useOrg()
   const queryClient = useQueryClient()
   const [filter, setFilter] = useState<Filter>("all")
 
   const { data: unread = 0 } = useDbQuery(
-    ["notification", "count", "unread", org.id],
+    ["notification", "count", "unread"],
     () =>
       db.notification.count({
-        where: { organizationId: org.id, readAt: null },
+        where: { readAt: null },
       })
   )
 
@@ -48,11 +46,10 @@ export function NotificationsView() {
     hasNextPage,
     isFetchingNextPage,
   } = useDbInfinite(
-    ["notification", "findMany", "page", org.id, filter],
+    ["notification", "findMany", "page", filter],
     (cursor) =>
       db.notification.findMany({
         where: {
-          organizationId: org.id,
           ...(filter === "unread" ? { readAt: null } : {}),
         },
         orderBy: [{ createdAt: "desc" }, { id: "desc" }],
@@ -83,7 +80,7 @@ export function NotificationsView() {
   const markAllRead = async () => {
     try {
       await db.notification.updateMany({
-        where: { organizationId: org.id, readAt: null },
+        where: { readAt: null },
         data: { readAt: new Date() },
       })
       await invalidateModels(queryClient, ["notification"])

@@ -21,7 +21,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Spinner } from "@/components/ui/spinner"
-import { useOrg } from "@/hooks/use-org"
+import { useApp } from "@/hooks/use-app"
 import { useUploads } from "@/hooks/use-uploads"
 import { db } from "@/lib/api-client"
 import { formatMention } from "@/lib/mentions"
@@ -30,9 +30,9 @@ import type { ReactionType } from "@app/api/zenstack/models"
 import { type FeedComment, type FeedPost, findComments } from "./post-query"
 import { ReactionButton, ReactionSummary, withOptimistic } from "./reactions"
 
-/** Group admins/moderators of the post's group, and org admins, can moderate. */
+/** Group admins/moderators of the post's group, and instance admins, can moderate. */
 export function useCanModerate(post: FeedPost) {
-  const { isAdmin } = useOrg()
+  const { isAdmin } = useApp()
   const role = post.group.members[0]?.role
   return isAdmin || role === "ADMIN" || role === "MODERATOR"
 }
@@ -45,7 +45,7 @@ export function CommentsThread({
   post: FeedPost
   autoFocus?: boolean
 }) {
-  const { me } = useOrg()
+  const { me } = useApp()
   const { data: comments, isPending } = useDbQuery(
     ["comment", "findMany", "post", post.id],
     () => findComments(post.id)
@@ -130,7 +130,7 @@ function CommentItem({
   post: FeedPost
   onReply: () => void
 }) {
-  const { me, href } = useOrg()
+  const { me } = useApp()
   const canModerate = useCanModerate(post)
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState(comment.content)
@@ -186,7 +186,7 @@ function CommentItem({
 
   return (
     <div className="group/comment flex gap-2">
-      <Link to={href(`/people/${comment.author.id}`)} className="shrink-0">
+      <Link to={`/people/${comment.author.id}`} className="shrink-0">
         <UserAvatar user={comment.author} size="sm" />
       </Link>
       <div className="flex min-w-0 flex-1 flex-col gap-1">
@@ -224,7 +224,7 @@ function CommentItem({
           <div className="flex items-start gap-1">
             <div className="relative max-w-full min-w-0 rounded-2xl bg-muted px-3 py-2">
               <Link
-                to={href(`/people/${comment.author.id}`)}
+                to={`/people/${comment.author.id}`}
                 className="text-sm font-semibold hover:underline"
               >
                 {comment.author.name}
@@ -333,9 +333,9 @@ export function CommentComposer({
   placeholder?: string
   onDone?: () => void
 }) {
-  const { org, me } = useOrg()
+  const { me } = useApp()
   const [content, setContent] = useState(initial)
-  const uploads = useUploads(org.id)
+  const uploads = useUploads()
   const fileRef = useRef<HTMLInputElement>(null)
 
   const create = useDbMutation(

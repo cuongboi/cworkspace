@@ -41,7 +41,7 @@ import {
   ItemTitle,
 } from "@/components/ui/item"
 import { Skeleton } from "@/components/ui/skeleton"
-import { useOrg } from "@/hooks/use-org"
+import { useApp } from "@/hooks/use-app"
 import { db } from "@/lib/api-client"
 import { useDbMutation, useDbQuery } from "@/lib/query"
 import {
@@ -59,10 +59,10 @@ const ROLE_LABEL: Record<GroupRole, string> = {
 
 /** Members tab: pending requests (for admins), member list with role management. */
 export function GroupMembers({ group }: { group: GroupWithMe }) {
-  const { me, isAdmin: orgAdmin, href } = useOrg()
+  const { me, isAdmin: orgAdmin } = useApp()
   const myRole =
     group.members[0]?.status === "ACTIVE" ? group.members[0].role : undefined
-  // policies: group ADMIN or org admin update rows (approve, roles); ADMIN/MODERATOR/org admin remove
+  // policies: group ADMIN or instance admin update rows (approve, roles); ADMIN/MODERATOR/instance admin remove
   const canManageRoles = orgAdmin || myRole === "ADMIN"
   const canRemove = orgAdmin || myRole === "ADMIN" || myRole === "MODERATOR"
   const canAdd = myRole === "ADMIN" || myRole === "MODERATOR"
@@ -134,7 +134,7 @@ export function GroupMembers({ group }: { group: GroupWithMe }) {
                   <ItemContent>
                     <ItemTitle>
                       <Link
-                        to={href(`/people/${r.user.id}`)}
+                        to={`/people/${r.user.id}`}
                         className="hover:underline"
                       >
                         {r.user.name}
@@ -235,7 +235,7 @@ export function GroupMembers({ group }: { group: GroupWithMe }) {
                     <ItemContent>
                       <ItemTitle>
                         <Link
-                          to={href(`/people/${r.user.id}`)}
+                          to={`/people/${r.user.id}`}
                           className="hover:underline"
                         >
                           {r.user.name}
@@ -363,14 +363,12 @@ function AddMembersDialog({
   groupId: string
   existing: Set<string>
 }) {
-  const { org } = useOrg()
   const [q, setQ] = useState("")
   const { data: people = [], isPending } = useDbQuery(
-    ["user", "findMany", "group-add", org.id, q.trim()],
+    ["user", "findMany", "group-add", q.trim()],
     () =>
       db.user.findMany({
         where: {
-          members: { some: { organizationId: org.id } },
           ...(q.trim()
             ? { name: { contains: q.trim(), mode: "insensitive" } }
             : {}),

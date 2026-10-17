@@ -34,6 +34,13 @@ describe("guardExecute", () => {
     expect(() => guardExecute("session", "findMany", {})).toThrow();
   });
 
+  it("has no organization models (single-company instance)", () => {
+    for (const m of ["organization", "member", "memberPermission"]) {
+      expect(MODELS.has(m)).toBe(false);
+      expect(() => guardExecute(m, "findMany", {})).toThrow();
+    }
+  });
+
   it("allows only CRUD operators", () => {
     for (const op of ["$queryRaw", "$transaction", "$executeRaw", "constructor", "__proto__"])
       expect(() => guardExecute("user", op, {})).toThrow();

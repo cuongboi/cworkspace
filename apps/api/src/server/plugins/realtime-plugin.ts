@@ -36,13 +36,12 @@ async function mentionedReaders(text: string, groupId: string) {
   const db = await getDb();
   const group = await db.group.findUnique({
     where: { id: groupId },
-    select: { privacy: true, organizationId: true },
+    select: { privacy: true },
   });
   if (!group) return [];
   const users = await db.user.findMany({
     where: {
       id: { in: ids },
-      members: { some: { organizationId: group.organizationId } },
       ...(group.privacy === "PUBLIC"
         ? {}
         : { groupMemberships: { some: { groupId, status: "ACTIVE" } } }),
@@ -64,7 +63,6 @@ async function conversationMemberIds(conversationId: string) {
 const handlers: Partial<Record<string, Handler>> = {
   // ── feed ──────────────────────────────────────────────────────────
   async Post(action, rows) {
-    const db = await getDb();
     for (const post of rows) {
       const groupId = str(post.groupId);
       emitToRoom(rooms.group(groupId), "post:changed", {
@@ -73,15 +71,9 @@ const handlers: Partial<Record<string, Handler>> = {
         action,
       });
       if (action !== "create") continue;
-      const group = await db.group.findUnique({
-        where: { id: groupId },
-        select: { organizationId: true },
-      });
-      if (!group) continue;
       const mentioned = await mentionedReaders(str(post.content), groupId);
       await notify(
         mentioned.map((userId) => ({
-          organizationId: group.organizationId,
           userId,
           actorId: str(post.authorId),
           type: "MENTION",
@@ -101,7 +93,6 @@ const handlers: Partial<Record<string, Handler>> = {
           id: true,
           authorId: true,
           groupId: true,
-          group: { select: { organizationId: true } },
         },
       });
       if (!post) continue;
@@ -114,7 +105,6 @@ const handlers: Partial<Record<string, Handler>> = {
       if (action !== "create") continue;
 
       const base = {
-        organizationId: post.group.organizationId,
         actorId: str(comment.authorId),
         groupId: post.groupId,
         postId: post.id,
@@ -155,7 +145,6 @@ const handlers: Partial<Record<string, Handler>> = {
           id: true,
           authorId: true,
           groupId: true,
-          group: { select: { organizationId: true } },
         },
       });
       if (!post) continue;
@@ -179,7 +168,6 @@ const handlers: Partial<Record<string, Handler>> = {
       if (existing) continue;
       await notify([
         {
-          organizationId: post.group.organizationId,
           userId: post.authorId,
           actorId: str(reaction.userId),
           type: "POST_REACTION",
@@ -250,7 +238,7 @@ const handlers: Partial<Record<string, Handler>> = {
 
       const group = await db.group.findUnique({
         where: { id: groupId },
-        select: { organizationId: true },
+        select: { id: true },
       });
       if (!group) continue;
       if (action === "create" && member.status === "PENDING") {
@@ -264,7 +252,6 @@ const handlers: Partial<Record<string, Handler>> = {
         });
         await notify(
           admins.map((a) => ({
-            organizationId: group.organizationId,
             userId: a.userId,
             actorId: userId,
             type: "GROUP_JOIN_REQUEST",
@@ -285,7 +272,6 @@ const handlers: Partial<Record<string, Handler>> = {
         if (!already && wasRequested) {
           await notify([
             {
-              organizationId: group.organizationId,
               userId,
               type: "GROUP_JOIN_APPROVED",
               groupId,
@@ -413,7 +399,6 @@ const handlers: Partial<Record<string, Handler>> = {
         where: { id: str(row.eventId) },
         select: {
           id: true,
-          organizationId: true,
           creatorId: true,
           title: true,
         },
@@ -425,7 +410,6 @@ const handlers: Partial<Record<string, Handler>> = {
       if (action === "create" && row.userId !== event.creatorId) {
         await notify([
           {
-            organizationId: event.organizationId,
             userId: str(row.userId),
             actorId: event.creatorId,
             type: "EVENT_INVITE",

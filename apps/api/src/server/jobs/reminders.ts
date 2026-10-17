@@ -22,7 +22,6 @@ async function tick() {
     },
     select: {
       id: true,
-      organizationId: true,
       title: true,
       startAt: true,
       creatorId: true,
@@ -43,7 +42,6 @@ async function tick() {
     const userIds = new Set([event.creatorId, ...event.attendees.map((a) => a.userId)]);
     await notify(
       [...userIds].map((userId) => ({
-        organizationId: event.organizationId,
         userId,
         type: "EVENT_REMINDER" as const,
         eventId: event.id,

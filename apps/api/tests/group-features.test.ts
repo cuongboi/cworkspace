@@ -6,9 +6,9 @@ import { ensureGroupConversation } from "@/server/group-chat";
 /**
  * Access policies of the group chat, group calls, Knowledge (wiki) and group events, against the
  * real database (DATABASE_URL from .env).
- * Org A = { alice (owner), bob, dave }, org B = { carol }.
- * Groups in A (admin: alice): PUBLIC `pub` and CLOSED `closed`. bob is an ACTIVE member of both;
- * dave is in neither, except a PENDING request to `closed`.
+ * Users: alice, bob, dave, carol. Groups (admin: alice): PUBLIC `pub` and CLOSED `closed`.
+ * bob is an ACTIVE member of both; dave is in neither, except a PENDING request to `closed`;
+ * carol is in no group at all.
  */
 
 const run = Math.random().toString(36).slice(2, 8);
@@ -20,11 +20,9 @@ const users = {
   dave: { id: id("dave"), email: `dave_${run}@test.local`, name: "Dave" },
   carol: { id: id("carol"), email: `carol_${run}@test.local`, name: "Carol" },
 };
-const orgA = id("orgA");
-const orgB = id("orgB");
 
 const as = (u: keyof typeof users) =>
-  authDb.$setAuth({ id: users[u].id, email: users[u].email, role: null });
+  authDb.$setAuth({ id: users[u].id, email: users[u].email, role: "user", permissions: [] });
 
 async function rejected(p: Promise<unknown>) {
   const err = await p.then(
@@ -43,22 +41,10 @@ let pubChat: string;
 
 beforeAll(async () => {
   for (const u of Object.values(users)) await db.user.create({ data: u });
-  const now = new Date();
-  await db.organization.create({ data: { id: orgA, name: "A", slug: id("a"), createdAt: now } });
-  await db.organization.create({ data: { id: orgB, name: "B", slug: id("b"), createdAt: now } });
-  await db.member.createMany({
-    data: [
-      { id: id("m1"), organizationId: orgA, userId: users.alice.id, role: "owner", createdAt: now },
-      { id: id("m2"), organizationId: orgA, userId: users.bob.id, role: "member", createdAt: now },
-      { id: id("m3"), organizationId: orgA, userId: users.dave.id, role: "member", createdAt: now },
-      { id: id("m4"), organizationId: orgB, userId: users.carol.id, role: "owner", createdAt: now },
-    ],
-  });
 
   const mk = (privacy: "PUBLIC" | "CLOSED") =>
     as("alice").group.create({
       data: {
-        organizationId: orgA,
         name: privacy,
         slug: `gf-${privacy.toLowerCase()}-${run}`,
         privacy,
@@ -75,7 +61,6 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
-  await db.organization.deleteMany({ where: { id: { in: [orgA, orgB] } } });
   await db.user.deleteMany({ where: { id: { in: Object.values(users).map((u) => u.id) } } });
 });
 
@@ -94,7 +79,7 @@ describe("group chat", () => {
     expect(await as("bob").conversation.findUnique({ where: { id: pubChat } })).not.toBeNull();
     await as("bob").message.create({ data: { conversationId: pubChat, content: "hi" } });
 
-    // an org member outside the (public) group, and another tenant, see nothing
+    // users outside the (public) group see nothing
     expect(await as("dave").conversation.findUnique({ where: { id: pubChat } })).toBeNull();
     expect(await as("dave").message.findMany({ where: { conversationId: pubChat } })).toEqual([]);
     await rejected(
@@ -111,7 +96,6 @@ describe("group chat", () => {
   it("cannot be created, renamed, deleted or re-membered by clients", async () => {
     const other = await as("alice").group.create({
       data: {
-        organizationId: orgA,
         name: "other",
         slug: `gf-other-${run}`,
         members: { create: { userId: users.alice.id, role: "ADMIN" } },
@@ -119,7 +103,7 @@ describe("group chat", () => {
     });
     await rejected(
       as("alice").conversation.create({
-        data: { organizationId: orgA, groupId: other.id, type: "GROUP" },
+        data: { groupId: other.id, type: "GROUP" },
       }),
     );
     await rejected(
@@ -152,7 +136,6 @@ describe("group chat", () => {
   it("follows the group membership, not the mirrored rows", async () => {
     const throwaway = await as("alice").group.create({
       data: {
-        organizationId: orgA,
         name: "throwaway",
         slug: `gf-throwaway-${run}`,
         members: {
@@ -178,7 +161,6 @@ describe("group chat", () => {
   it("drops the mirrored membership when someone leaves the group", async () => {
     const g = await as("alice").group.create({
       data: {
-        organizationId: orgA,
         name: "sync",
         slug: `gf-sync-${run}`,
         members: {
@@ -201,7 +183,7 @@ describe("group chat", () => {
 
   it("group calls are visible to active members only", async () => {
     const call = await db.call.create({
-      data: { organizationId: orgA, conversationId: pubChat, startedById: users.alice.id },
+      data: { conversationId: pubChat, startedById: users.alice.id },
     });
     expect(await as("bob").call.findUnique({ where: { id: call.id } })).not.toBeNull();
     expect(await as("dave").call.findUnique({ where: { id: call.id } })).toBeNull();
@@ -233,14 +215,14 @@ describe("knowledge (wiki)", () => {
   });
 
   it("follows group privacy for reads", async () => {
-    // PUBLIC: the whole org reads
+    // PUBLIC: everyone reads
     expect(await as("dave").wikiPage.findUnique({ where: { id: pubPage } })).not.toBeNull();
     expect(await as("dave").wikiRevision.findMany({ where: { pageId: pubPage } })).toHaveLength(1);
     // CLOSED: members only (a pending request is not membership)
     expect(await as("bob").wikiPage.findUnique({ where: { id: closedPage } })).not.toBeNull();
     expect(await as("dave").wikiPage.findUnique({ where: { id: closedPage } })).toBeNull();
-    // other tenants never
-    expect(await as("carol").wikiPage.findUnique({ where: { id: pubPage } })).toBeNull();
+    // anonymous never
+    expect(await authDb.wikiPage.findUnique({ where: { id: pubPage } })).toBeNull();
   });
 
   it("only members write, as themselves", async () => {
@@ -323,7 +305,6 @@ describe("group events", () => {
     eventId = (
       await as("alice").event.create({
         data: {
-          organizationId: orgA,
           groupId: closed,
           title: "Planning",
           type: "EVENT",

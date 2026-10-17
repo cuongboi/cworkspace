@@ -1,4 +1,3 @@
-import { useOrg } from "@/hooks/use-org"
 import { db } from "@/lib/api-client"
 import { useDbQuery } from "@/lib/query"
 import { type CalendarEvent, eventInclude } from "./calendar-utils"
@@ -14,13 +13,11 @@ export function useCalendarEvents(
   end: Date,
   { groupId }: { groupId?: string } = {}
 ) {
-  const { org } = useOrg()
   return useDbQuery(
     [
       "event",
       "findMany",
       "calendar",
-      org.id,
       groupId ?? "all",
       start.getTime(),
       end.getTime(),
@@ -32,7 +29,6 @@ export function useCalendarEvents(
         const cursor = all.at(-1)?.id
         const rows = await db.event.findMany({
           where: {
-            organizationId: org.id,
             ...(groupId ? { groupId } : {}),
             startAt: { lt: end },
             OR: [{ endAt: { gte: start } }, { rrule: { not: null } }],

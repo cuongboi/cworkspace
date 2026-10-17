@@ -4,7 +4,7 @@ import { UserAvatar } from "@/components/common/user-avatar"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Skeleton } from "@/components/ui/skeleton"
-import { useOrg } from "@/hooks/use-org"
+import { useApp } from "@/hooks/use-app"
 
 export type PersonSummary = {
   id: string
@@ -15,8 +15,8 @@ export type PersonSummary = {
 }
 
 export function PersonCard({ person }: { person: PersonSummary }) {
-  const { me, href } = useOrg()
-  const profile = href(`/people/${person.id}`)
+  const { me } = useApp()
+  const profile = `/people/${person.id}`
   return (
     <Card className="items-center gap-3 px-4 py-5 text-center">
       <Link to={profile} tabIndex={-1} aria-hidden>
@@ -39,7 +39,7 @@ export function PersonCard({ person }: { person: PersonSummary }) {
         </Button>
       ) : (
         <Button asChild variant="secondary" size="sm" className="w-full">
-          <Link to={href(`/chat?with=${person.id}`)}>
+          <Link to={`/chat?with=${person.id}`}>
             <MessageCircleIcon />
             Message
           </Link>

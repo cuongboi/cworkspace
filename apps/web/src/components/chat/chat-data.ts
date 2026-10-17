@@ -15,13 +15,13 @@ const groupSummary = {
 
 // ── conversation list ────────────────────────────────────────────────
 
-export const conversationListKey = (orgId: string) =>
-  ["conversationMember", "findMany", "chat-list", orgId] as const
+export const conversationListKey = () =>
+  ["conversationMember", "findMany", "chat-list"] as const
 
-/** My memberships in this org (read state + mute) with the conversation, members and last message. */
-export function fetchConversationList(orgId: string, meId: string) {
+/** My memberships (read state + mute) with the conversation, members and last message. */
+export function fetchConversationList(meId: string) {
   return db.conversationMember.findMany({
-    where: { userId: meId, conversation: { organizationId: orgId } },
+    where: { userId: meId },
     orderBy: { conversation: { lastMessageAt: "desc" } },
     take: 100,
     select: {
@@ -72,7 +72,6 @@ export function fetchConversation(id: string) {
     where: { id },
     select: {
       id: true,
-      organizationId: true,
       type: true,
       title: true,
       createdById: true,

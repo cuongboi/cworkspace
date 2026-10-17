@@ -53,10 +53,15 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip"
-import { type OrgRole, useOrg } from "@/hooks/use-org"
-import { authClient } from "@/lib/auth-client"
+import { api, db } from "@/lib/api-client"
+import { COMPANY_NAME } from "@/lib/company"
 import { invalidateModels, useDbQuery } from "@/lib/query"
-import { asRole, errorMessage, ROLE_LABELS, unwrap } from "./settings-utils"
+import {
+  asRole,
+  errorMessage,
+  type InstanceRole,
+  ROLE_LABELS,
+} from "./settings-utils"
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
@@ -73,23 +78,21 @@ function parseEmails(input: string) {
 }
 
 export function InvitationsSettings() {
-  const { org, role: myRole } = useOrg()
   const queryClient = useQueryClient()
   const [emails, setEmails] = useState("")
-  const [role, setRole] = useState<OrgRole>("member")
+  const [role, setRole] = useState<InstanceRole>("user")
   const [submitted, setSubmitted] = useState(false)
   const [sending, setSending] = useState(false)
   const [cancelId, setCancelId] = useState<string | null>(null)
   const [cancelling, setCancelling] = useState(false)
 
   const { data: invitations, isPending } = useDbQuery(
-    ["invitation", "list", org.id],
+    ["invitation", "findMany", "settings"],
     () =>
-      unwrap(
-        authClient.organization.listInvitations({
-          query: { organizationId: org.id },
-        })
-      )
+      db.invitation.findMany({
+        orderBy: { createdAt: "desc" },
+        take: 100,
+      })
   )
 
   const { valid, invalid } = parseEmails(emails)
@@ -108,25 +111,14 @@ export function InvitationsSettings() {
     let sent = 0
     for (const email of valid) {
       try {
-        await unwrap(
-          authClient.organization.inviteMember({
-            organizationId: org.id,
-            email,
-            role,
-            resend: true,
-          })
-        )
+        await api.post("/api/invitations", { email, role })
         sent++
       } catch (err) {
         failed.push(email)
         toast.error(`${email}: ${errorMessage(err, "couldn't invite")}`)
       }
     }
-    await invalidateModels(queryClient, [
-      "invitation",
-      "member",
-      "organization",
-    ])
+    await invalidateModels(queryClient, ["invitation"])
     setSending(false)
     if (sent > 0)
       toast.success(sent === 1 ? "Invitation sent" : `${sent} invitations sent`)
@@ -138,9 +130,7 @@ export function InvitationsSettings() {
     if (!cancelId) return
     setCancelling(true)
     try {
-      await unwrap(
-        authClient.organization.cancelInvitation({ invitationId: cancelId })
-      )
+      await api.post(`/api/invitations/${cancelId}/cancel`)
       await invalidateModels(queryClient, ["invitation"])
       toast.success("Invitation cancelled")
       setCancelId(null)
@@ -160,7 +150,7 @@ export function InvitationsSettings() {
 
   const sorted = [...(invitations ?? [])].sort(
     (a, b) =>
-      Number(b.status === "pending") - Number(a.status === "pending") ||
+      Number(b.status === "PENDING") - Number(a.status === "PENDING") ||
       new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
   )
   const cancelTarget = sorted.find((i) => i.id === cancelId)
@@ -171,7 +161,7 @@ export function InvitationsSettings() {
         <CardHeader>
           <CardTitle>Invite people</CardTitle>
           <CardDescription>
-            We'll email them a link to join {org.name}.
+            We'll email them a link to join {COMPANY_NAME}.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -214,17 +204,12 @@ export function InvitationsSettings() {
                   value={role}
                   onChange={(e) => setRole(asRole(e.target.value))}
                 >
-                  <NativeSelectOption value="member">
-                    {ROLE_LABELS.member}
+                  <NativeSelectOption value="user">
+                    {ROLE_LABELS.user}
                   </NativeSelectOption>
                   <NativeSelectOption value="admin">
                     {ROLE_LABELS.admin}
                   </NativeSelectOption>
-                  {myRole === "owner" ? (
-                    <NativeSelectOption value="owner">
-                      {ROLE_LABELS.owner}
-                    </NativeSelectOption>
-                  ) : null}
                 </NativeSelect>
               </Field>
               <Button type="submit" disabled={sending}>
@@ -282,8 +267,9 @@ export function InvitationsSettings() {
               <TableBody>
                 {sorted.map((inv) => {
                   const expiresAt = new Date(inv.expiresAt)
-                  const expired = inv.status === "pending" && isPast(expiresAt)
-                  const isPendingInvite = inv.status === "pending" && !expired
+                  const status = inv.status.toLowerCase()
+                  const expired = status === "pending" && isPast(expiresAt)
+                  const isPendingInvite = status === "pending" && !expired
                   return (
                     <TableRow key={inv.id}>
                       <TableCell className="max-w-48 truncate pl-6 font-medium sm:max-w-none">
@@ -294,9 +280,7 @@ export function InvitationsSettings() {
                       </TableCell>
                       <TableCell>
                         <div className="flex flex-col gap-0.5">
-                          <StatusBadge
-                            status={expired ? "expired" : inv.status}
-                          />
+                          <StatusBadge status={expired ? "expired" : status} />
                           {isPendingInvite ? (
                             <span className="text-xs text-muted-foreground">
                               Expires {format(expiresAt, "MMM d, p")}
@@ -400,8 +384,6 @@ function StatusBadge({ status }: { status: string }) {
           Expired
         </Badge>
       )
-    case "rejected":
-      return <Badge variant="destructive">Declined</Badge>
     case "canceled":
     case "cancelled":
       return (

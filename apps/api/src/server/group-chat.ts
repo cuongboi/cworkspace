@@ -17,7 +17,6 @@ export async function ensureGroupConversation(groupId: string) {
   const group = await db.group.findUnique({
     where: { id: groupId },
     select: {
-      organizationId: true,
       createdById: true,
       members: { where: { status: "ACTIVE" }, select: { userId: true } },
     },
@@ -28,7 +27,6 @@ export async function ensureGroupConversation(groupId: string) {
   try {
     const created = await db.conversation.create({
       data: {
-        organizationId: group.organizationId,
         groupId,
         type: "GROUP",
         createdById: group.createdById,

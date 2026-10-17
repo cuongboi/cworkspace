@@ -46,7 +46,7 @@ import { Input } from "@/components/ui/input"
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select"
 import { Spinner } from "@/components/ui/spinner"
 import { Textarea } from "@/components/ui/textarea"
-import { useOrg } from "@/hooks/use-org"
+import { useApp } from "@/hooks/use-app"
 import { db } from "@/lib/api-client"
 import { useDbMutation } from "@/lib/query"
 import { fileUrl, uploadFile } from "@/lib/upload"
@@ -56,9 +56,9 @@ import { GroupCover, PrivacyLabel } from "./group-visuals"
 import { PrivacyPicker } from "./privacy-picker"
 import { ScrollArea } from "@/components/ui/scroll-area"
 
-/** Group admins (and org admins) edit the group; policies enforce the same rule. */
+/** Group admins (and instance admins) edit the group; policies enforce the same rule. */
 export function useCanAdminGroup(group: GroupWithMe) {
-  const { isAdmin } = useOrg()
+  const { isAdmin } = useApp()
   const m = group.members[0]
   return isAdmin || (m?.status === "ACTIVE" && m.role === "ADMIN")
 }
@@ -136,7 +136,6 @@ function EditGroupDialog({
   onOpenChange: (open: boolean) => void
 }) {
   const navigate = useNavigate()
-  const { org, href } = useOrg()
   const [draft, setDraft] = useState<Draft>(() => ({
     name: group.name,
     description: group.description ?? "",
@@ -177,7 +176,7 @@ function EditGroupDialog({
     }
     setUploading(true)
     try {
-      const attachment = await uploadFile(file, org.id, { orgVisible: true })
+      const attachment = await uploadFile(file, { isPublic: true })
       setDraft((d) => ({ ...d, coverUrl: fileUrl(attachment.id) }))
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Upload failed")
@@ -377,7 +376,7 @@ function EditGroupDialog({
                   onSuccess: () => {
                     toast.success("Group deleted")
                     onOpenChange(false)
-                    void navigate(href("/groups"))
+                    void navigate("/groups")
                   },
                   onError: (err) => toast.error(err.message),
                 })

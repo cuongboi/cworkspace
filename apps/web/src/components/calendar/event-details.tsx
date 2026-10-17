@@ -42,7 +42,7 @@ import {
 } from "@/components/ui/sheet"
 import { Skeleton } from "@/components/ui/skeleton"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
-import { useOrg } from "@/hooks/use-org"
+import { useApp } from "@/hooks/use-app"
 import { db } from "@/lib/api-client"
 import { invalidateModels } from "@/lib/query"
 import type { Rsvp } from "@app/api/zenstack/models"
@@ -157,7 +157,7 @@ function EventDetailsBody({
   onEdit: (event: CalendarEvent) => void
   onClose: () => void
 }) {
-  const { me, href } = useOrg()
+  const { me } = useApp()
   const { startCall } = useCalls()
   const queryClient = useQueryClient()
   const [confirmDelete, setConfirmDelete] = useState(false)
@@ -271,7 +271,7 @@ function EventDetailsBody({
               </dt>
               <dd>
                 <Link
-                  to={href(`/groups/${event.group.slug}`)}
+                  to={`/groups/${event.group.slug}`}
                   className="font-medium hover:underline"
                 >
                   {event.group.name}
@@ -289,7 +289,7 @@ function EventDetailsBody({
             <dd>
               Organized by{" "}
               <Link
-                to={href(`/people/${event.creator.id}`)}
+                to={`/people/${event.creator.id}`}
                 className="font-medium hover:underline"
               >
                 {event.creator.id === me.id ? "you" : event.creator.name}
@@ -375,7 +375,7 @@ function EventDetailsBody({
                         />
                       </span>
                       <Link
-                        to={href(`/people/${a.user.id}`)}
+                        to={`/people/${a.user.id}`}
                         className="min-w-0 flex-1 truncate text-sm hover:underline"
                       >
                         {a.user.name}

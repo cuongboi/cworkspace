@@ -23,7 +23,6 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip"
-import { useOrg } from "@/hooks/use-org"
 import { useSocketEvent } from "@/hooks/use-socket"
 import { db } from "@/lib/api-client"
 import { invalidateModels, useDbQuery } from "@/lib/query"
@@ -40,21 +39,20 @@ const LATEST = 15
 
 /** Header bell: unread badge, latest notifications in a popover, live toasts. */
 export function NotificationBell() {
-  const { org, href } = useOrg()
   const navigate = useNavigate()
   const [open, setOpen] = useState(false)
 
   const { data: unread = 0 } = useDbQuery(
-    ["notification", "count", "unread", org.id],
+    ["notification", "count", "unread"],
     () =>
       db.notification.count({
-        where: { organizationId: org.id, readAt: null },
+        where: { readAt: null },
       })
   )
 
-  // live toast for new notifications of this organization (cache refresh is done by useRealtimeSync)
+  // live toast for new notifications (cache refresh is done by useRealtimeSync)
   useSocketEvent("notification:new", (n) => {
-    if (n.organizationId !== org.id || open) return
+    if (open) return
     toast(<span className="text-sm">{describeNotification(n)}</span>, {
       id: n.id,
       action: {
@@ -63,7 +61,7 @@ export function NotificationBell() {
           void db.notification
             .update({ where: { id: n.id }, data: { readAt: new Date() } })
             .catch(() => undefined)
-          void resolveNotificationHref(n, href).then((url) => navigate(url))
+          void resolveNotificationHref(n).then((url) => navigate(url))
         },
       },
     })
@@ -113,14 +111,12 @@ function BellPanel({
   unread: number
   onNavigate: () => void
 }) {
-  const { org, href } = useOrg()
   const queryClient = useQueryClient()
 
   const { data: items, isPending } = useDbQuery(
-    ["notification", "findMany", "latest", org.id],
+    ["notification", "findMany", "latest"],
     () =>
       db.notification.findMany({
-        where: { organizationId: org.id },
         orderBy: [{ createdAt: "desc" }, { id: "desc" }],
         include: notificationInclude,
         take: LATEST,
@@ -130,7 +126,7 @@ function BellPanel({
   const markAllRead = async () => {
     try {
       await db.notification.updateMany({
-        where: { organizationId: org.id, readAt: null },
+        where: { readAt: null },
         data: { readAt: new Date() },
       })
       await invalidateModels(queryClient, ["notification"])
@@ -190,7 +186,7 @@ function BellPanel({
       </ScrollArea>
       <Separator />
       <Button variant="ghost" className="m-1 rounded-md" asChild>
-        <Link to={href("/notifications")} onClick={onNavigate}>
+        <Link to={"/notifications"} onClick={onNavigate}>
           See all
         </Link>
       </Button>

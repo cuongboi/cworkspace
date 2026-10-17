@@ -18,7 +18,6 @@ import {
 } from "@/components/ui/resizable"
 import { Spinner } from "@/components/ui/spinner"
 import { useIsMobile } from "@/hooks/use-mobile"
-import { useOrg } from "@/hooks/use-org"
 import { ApiError, api } from "@/lib/api-client"
 import { ChatThread } from "./chat-thread"
 import { ConversationList } from "./conversation-list"
@@ -94,7 +93,6 @@ function NoConversationSelected() {
 /** `/chat?with=<userId>`: find-or-create the DM with that person, then open it. */
 function useOpenDirectFromQuery() {
   const navigate = useNavigate()
-  const { org, href } = useOrg()
   const [searchParams] = useSearchParams()
   const withUser = searchParams.get("with") ?? undefined
   const startedRef = useRef<string | null>(null)
@@ -104,22 +102,21 @@ function useOpenDirectFromQuery() {
     startedRef.current = withUser
     api
       .post<{ id: string }>("/api/conversations/direct", {
-        organizationId: org.id,
         userId: withUser,
       })
-      .then(({ id }) => navigate(href(`/chat/${id}`), { replace: true }))
+      .then(({ id }) => navigate(`/chat/${id}`, { replace: true }))
       .catch((err: unknown) => {
         toast.error(
           err instanceof ApiError
             ? err.message
             : "Could not open the conversation"
         )
-        void navigate(href("/chat"), { replace: true })
+        void navigate("/chat", { replace: true })
       })
       .finally(() => {
         startedRef.current = null
       })
-  }, [withUser, org.id, href, navigate])
+  }, [withUser, navigate])
 
   return Boolean(withUser)
 }

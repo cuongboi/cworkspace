@@ -44,7 +44,6 @@ const conns = new Map<string, Conn>();
 
 const callSelect = {
   id: true,
-  organizationId: true,
   conversationId: true,
   eventId: true,
   type: true,
@@ -57,9 +56,9 @@ const callSelect = {
 function summary(
   call: Omit<CallSummary, "groupId"> & { conversation: { groupId: string | null } | null },
 ): CallSummary {
-  const { id, organizationId, conversationId, eventId, type, startedById } = call;
+  const { id, conversationId, eventId, type, startedById } = call;
   const groupId = call.conversation?.groupId ?? null;
-  return { id, organizationId, conversationId, eventId, groupId, type, startedById };
+  return { id, conversationId, eventId, groupId, type, startedById };
 }
 
 function groupCallState(groupId: string): GroupCallState {
@@ -206,7 +205,6 @@ async function endCall(callId: string) {
   if (!wasAnswered) {
     await notify(
       ringing.map((userId) => ({
-        organizationId: call.organizationId,
         userId,
         actorId: call.startedById,
         type: "MISSED_CALL" as const,
@@ -283,23 +281,20 @@ export function registerCalls(socket: Conn) {
         if (!membership) return ack(fail("Only group members can start a call"));
         conversationId = (await ensureGroupConversation(String(groupId))) ?? undefined;
       }
-      let organizationId: string;
       let callGroupId: string | null = null;
       if (conversationId) {
         const convo = await scoped.conversation.findUnique({
           where: { id: conversationId },
-          select: { organizationId: true, groupId: true },
+          select: { groupId: true },
         });
         if (!convo) return ack(fail("Conversation not found"));
-        organizationId = convo.organizationId;
         callGroupId = convo.groupId;
       } else if (eventId) {
         const event = await scoped.event.findUnique({
           where: { id: eventId },
-          select: { organizationId: true, hasVideoCall: true },
+          select: { hasVideoCall: true },
         });
         if (!event?.hasVideoCall) return ack(fail("Event has no video call"));
-        organizationId = event.organizationId;
       } else {
         return ack(fail("conversationId or eventId is required"));
       }
@@ -319,7 +314,6 @@ export function registerCalls(socket: Conn) {
 
       const call = await db.call.create({
         data: {
-          organizationId,
           conversationId,
           eventId,
           type,

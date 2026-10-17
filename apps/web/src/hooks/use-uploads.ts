@@ -5,7 +5,7 @@ import { type UploadedAttachment, uploadFile } from "@/lib/upload"
 type Pending = { key: string; name: string }
 
 /** Upload state for composers: pick files, track in-flight uploads, collect ids to connect. */
-export function useUploads(organizationId: string) {
+export function useUploads() {
   const [done, setDone] = useState<UploadedAttachment[]>([])
   const [pending, setPending] = useState<Pending[]>([])
 
@@ -14,7 +14,7 @@ export function useUploads(organizationId: string) {
       const key = `${file.name}-${file.size}-${Math.random()}`
       setPending((p) => [...p, { key, name: file.name }])
       try {
-        const attachment = await uploadFile(file, organizationId)
+        const attachment = await uploadFile(file)
         setDone((d) => [...d, attachment])
       } catch (err) {
         toast.error(

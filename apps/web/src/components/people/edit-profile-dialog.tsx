@@ -20,7 +20,7 @@ import {
 import { Input } from "@/components/ui/input"
 import { Spinner } from "@/components/ui/spinner"
 import { Textarea } from "@/components/ui/textarea"
-import { useOrg } from "@/hooks/use-org"
+import { useApp } from "@/hooks/use-app"
 import { db } from "@/lib/api-client"
 import { authClient } from "@/lib/auth-client"
 import { useDbMutation } from "@/lib/query"
@@ -78,7 +78,7 @@ export function EditProfileDialog({
   profile: EditableProfile
   onOpenChange: (open: boolean) => void
 }) {
-  const { org, me } = useOrg()
+  const { me } = useApp()
   const session = authClient.useSession()
   const [draft, setDraft] = useState<Draft>(() => ({
     name: profile.name,
@@ -117,7 +117,7 @@ export function EditProfileDialog({
     }
     setUploading(true)
     try {
-      const attachment = await uploadFile(file, org.id, { orgVisible: true })
+      const attachment = await uploadFile(file, { isPublic: true })
       setDraft((d) => ({ ...d, image: fileUrl(attachment.id) }))
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Upload failed")

@@ -1,9 +1,11 @@
 import { useQueryClient } from "@tanstack/react-query"
 import { format } from "date-fns"
 import {
+  BanIcon,
   MoreHorizontalIcon,
   SearchIcon,
   ShieldIcon,
+  UserCheckIcon,
   UserMinusIcon,
   UsersIcon,
 } from "lucide-react"
@@ -62,102 +64,97 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
-import { type OrgRole, useOrg } from "@/hooks/use-org"
+import { useApp } from "@/hooks/use-app"
+import { COMPANY_NAME } from "@/lib/company"
 import { db } from "@/lib/api-client"
 import { authClient } from "@/lib/auth-client"
 import { invalidateModels, useDbQuery } from "@/lib/query"
 import {
   asRole,
   errorMessage,
+  type InstanceRole,
   ROLE_DESCRIPTIONS,
   ROLE_LABELS,
   unwrap,
 } from "./settings-utils"
 
 type PendingAction =
-  | { kind: "role"; memberId: string; name: string; from: OrgRole; to: OrgRole }
-  | { kind: "remove"; memberId: string; name: string }
+  | {
+      kind: "role"
+      userId: string
+      name: string
+      from: InstanceRole
+      to: InstanceRole
+    }
+  | { kind: "ban" | "unban" | "remove"; userId: string; name: string }
+
+const CONFIRM: Record<Exclude<PendingAction["kind"], "role">, string> = {
+  ban: "Deactivate",
+  unban: "Reactivate",
+  remove: "Delete",
+}
 
 export function MembersSettings() {
-  const { org, me, role: myRole, href } = useOrg()
+  const { me } = useApp()
   const queryClient = useQueryClient()
   const [q, setQ] = useState("")
   const [pending, setPending] = useState<PendingAction | null>(null)
   const [busy, setBusy] = useState(false)
 
   const { data: members, isPending } = useDbQuery(
-    ["member", "findMany", "settings", org.id],
+    ["user", "findMany", "settings"],
     () =>
-      db.member.findMany({
-        where: { organizationId: org.id },
-        include: {
-          user: {
-            select: {
-              id: true,
-              name: true,
-              email: true,
-              image: true,
-              title: true,
-            },
-          },
+      db.user.findMany({
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          image: true,
+          title: true,
+          role: true,
+          banned: true,
+          createdAt: true,
         },
         orderBy: { createdAt: "asc" },
+        take: 100,
       })
   )
 
-  const ownerCount = members?.filter((m) => m.role === "owner").length ?? 0
   const query = q.trim().toLowerCase()
   const visible = (members ?? []).filter(
     (m) =>
       !query ||
-      m.user.name.toLowerCase().includes(query) ||
-      m.user.email.toLowerCase().includes(query)
+      m.name.toLowerCase().includes(query) ||
+      m.email.toLowerCase().includes(query)
   )
 
-  /** Roles I may assign to this member (empty: I can't change it). */
-  const assignableRoles = (target: {
-    userId: string
-    role: string
-  }): OrgRole[] => {
-    if (target.userId === me.id) return []
-    const role = asRole(target.role)
-    if (role === "owner" && myRole !== "owner") return []
-    if (role === "owner" && ownerCount <= 1) return []
-    return myRole === "owner"
-      ? ["member", "admin", "owner"]
-      : ["member", "admin"]
-  }
-  const canRemove = (target: { userId: string; role: string }) => {
-    if (target.userId === me.id) return false
-    if (target.role === "owner") return myRole === "owner" && ownerCount > 1
-    return true
-  }
-
+  // better-auth's admin endpoints check the caller's role server-side; never act on yourself
   const run = async () => {
     if (!pending) return
     setBusy(true)
+    const { userId } = pending
     try {
-      if (pending.kind === "role") {
-        await unwrap(
-          authClient.organization.updateMemberRole({
-            organizationId: org.id,
-            memberId: pending.memberId,
-            role: pending.to,
-          })
-        )
-        toast.success(
-          `${pending.name} is now ${ROLE_LABELS[pending.to].toLowerCase()}`
-        )
-      } else {
-        await unwrap(
-          authClient.organization.removeMember({
-            organizationId: org.id,
-            memberIdOrEmail: pending.memberId,
-          })
-        )
-        toast.success(`${pending.name} was removed`)
+      switch (pending.kind) {
+        case "role":
+          await unwrap(authClient.admin.setRole({ userId, role: pending.to }))
+          toast.success(
+            `${pending.name} is now ${ROLE_LABELS[pending.to].toLowerCase()}`
+          )
+          break
+        case "ban":
+          await unwrap(authClient.admin.banUser({ userId }))
+          toast.success(`${pending.name} was deactivated`)
+          break
+        case "unban":
+          await unwrap(authClient.admin.unbanUser({ userId }))
+          toast.success(`${pending.name} was reactivated`)
+          break
+        case "remove":
+          await unwrap(authClient.admin.removeUser({ userId }))
+          toast.success(`${pending.name} was deleted`)
+          break
       }
-      await invalidateModels(queryClient, ["member", "organization"])
+      await invalidateModels(queryClient, ["user"])
       setPending(null)
     } catch (err) {
       toast.error(errorMessage(err))
@@ -173,7 +170,7 @@ export function MembersSettings() {
           <CardTitle>Members</CardTitle>
           <CardDescription>
             {members
-              ? `${members.length} ${members.length === 1 ? "person" : "people"} in ${org.name}`
+              ? `${members.length} ${members.length === 1 ? "person" : "people"} in ${COMPANY_NAME}`
               : "Loading…"}
           </CardDescription>
         </div>
@@ -227,20 +224,18 @@ export function MembersSettings() {
             <TableBody>
               {visible.map((m) => {
                 const role = asRole(m.role)
-                const roles = assignableRoles(m)
-                const removable = canRemove(m)
-                const isMe = m.userId === me.id
+                const isMe = m.id === me.id
                 return (
                   <TableRow key={m.id}>
                     <TableCell className="pl-6">
                       <Link
-                        to={href(`/people/${m.user.id}`)}
+                        to={`/people/${m.id}`}
                         className="flex min-w-0 items-center gap-3"
                       >
-                        <UserAvatar user={m.user} size="sm" />
+                        <UserAvatar user={m} size="sm" />
                         <span className="flex min-w-0 flex-col">
                           <span className="truncate font-medium hover:underline">
-                            {m.user.name}
+                            {m.name}
                             {isMe ? (
                               <span className="ml-1 font-normal text-muted-foreground">
                                 (you)
@@ -248,100 +243,103 @@ export function MembersSettings() {
                             ) : null}
                           </span>
                           <span className="truncate text-xs text-muted-foreground md:hidden">
-                            {m.user.email}
+                            {m.email}
                           </span>
-                          {m.user.title ? (
+                          {m.title ? (
                             <span className="hidden truncate text-xs text-muted-foreground md:block">
-                              {m.user.title}
+                              {m.title}
                             </span>
                           ) : null}
                         </span>
                       </Link>
                     </TableCell>
                     <TableCell className="hidden text-muted-foreground md:table-cell">
-                      {m.user.email}
+                      {m.email}
                     </TableCell>
                     <TableCell>
                       <Badge
-                        variant={
-                          role === "member"
-                            ? "outline"
-                            : role === "owner"
-                              ? "default"
-                              : "secondary"
-                        }
+                        variant={role === "admin" ? "secondary" : "outline"}
                       >
-                        {role !== "member" ? <ShieldIcon /> : null}
+                        {role === "admin" ? <ShieldIcon /> : null}
                         {ROLE_LABELS[role]}
                       </Badge>
+                      {m.banned ? (
+                        <Badge variant="destructive" className="ml-1">
+                          Deactivated
+                        </Badge>
+                      ) : null}
                     </TableCell>
                     <TableCell className="hidden text-muted-foreground sm:table-cell">
                       {format(m.createdAt, "MMM d, yyyy")}
                     </TableCell>
                     <TableCell className="pr-6 text-right">
-                      {roles.length > 0 || removable ? (
+                      {!isMe ? (
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
                             <Button
                               variant="ghost"
                               size="icon-sm"
-                              aria-label={`Manage ${m.user.name}`}
+                              aria-label={`Manage ${m.name}`}
                             >
                               <MoreHorizontalIcon />
                             </Button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end" className="w-64">
-                            {roles.length > 0 ? (
-                              <>
-                                <DropdownMenuLabel>Role</DropdownMenuLabel>
-                                <DropdownMenuRadioGroup
-                                  value={role}
-                                  onValueChange={(to) => {
-                                    if (to !== role)
-                                      setPending({
-                                        kind: "role",
-                                        memberId: m.id,
-                                        name: m.user.name,
-                                        from: role,
-                                        to: to as OrgRole,
-                                      })
-                                  }}
-                                >
-                                  {roles.map((r) => (
-                                    <DropdownMenuRadioItem
-                                      key={r}
-                                      value={r}
-                                      className="items-start"
-                                    >
-                                      <span className="flex flex-col">
-                                        <span>{ROLE_LABELS[r]}</span>
-                                        <span className="text-xs text-muted-foreground">
-                                          {ROLE_DESCRIPTIONS[r]}
-                                        </span>
-                                      </span>
-                                    </DropdownMenuRadioItem>
-                                  ))}
-                                </DropdownMenuRadioGroup>
-                              </>
-                            ) : null}
-                            {roles.length > 0 && removable ? (
-                              <DropdownMenuSeparator />
-                            ) : null}
-                            {removable ? (
-                              <DropdownMenuItem
-                                variant="destructive"
-                                onSelect={() =>
+                            <DropdownMenuLabel>Role</DropdownMenuLabel>
+                            <DropdownMenuRadioGroup
+                              value={role}
+                              onValueChange={(to) => {
+                                if (to !== role)
                                   setPending({
-                                    kind: "remove",
-                                    memberId: m.id,
-                                    name: m.user.name,
+                                    kind: "role",
+                                    userId: m.id,
+                                    name: m.name,
+                                    from: role,
+                                    to: to as InstanceRole,
                                   })
-                                }
-                              >
-                                <UserMinusIcon />
-                                Remove from organization
-                              </DropdownMenuItem>
-                            ) : null}
+                              }}
+                            >
+                              {(["user", "admin"] as const).map((r) => (
+                                <DropdownMenuRadioItem
+                                  key={r}
+                                  value={r}
+                                  className="items-start"
+                                >
+                                  <span className="flex flex-col">
+                                    <span>{ROLE_LABELS[r]}</span>
+                                    <span className="text-xs text-muted-foreground">
+                                      {ROLE_DESCRIPTIONS[r]}
+                                    </span>
+                                  </span>
+                                </DropdownMenuRadioItem>
+                              ))}
+                            </DropdownMenuRadioGroup>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem
+                              onSelect={() =>
+                                setPending({
+                                  kind: m.banned ? "unban" : "ban",
+                                  userId: m.id,
+                                  name: m.name,
+                                })
+                              }
+                            >
+                              {m.banned ? <UserCheckIcon /> : <BanIcon />}
+                              {m.banned ? "Reactivate" : "Deactivate"}
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              variant="destructive"
+                              onSelect={() =>
+                                setPending({
+                                  kind: "remove",
+                                  userId: m.id,
+                                  name: m.name,
+                                })
+                              }
+                            >
+                              <UserMinusIcon />
+                              Delete account
+                            </DropdownMenuItem>
                           </DropdownMenuContent>
                         </DropdownMenu>
                       ) : null}
@@ -361,24 +359,32 @@ export function MembersSettings() {
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>
-              {pending?.kind === "remove"
-                ? `Remove ${pending.name}?`
+              {pending?.kind === "role"
+                ? `Make ${pending.name} ${ROLE_LABELS[pending.to].toLowerCase()}?`
                 : pending
-                  ? `Make ${pending.name} ${ROLE_LABELS[pending.to].toLowerCase()}?`
+                  ? `${CONFIRM[pending.kind]} ${pending.name}?`
                   : ""}
             </AlertDialogTitle>
             <AlertDialogDescription>
-              {pending?.kind === "remove"
-                ? `${pending.name} will lose access to ${org.name}, its groups and chats. You can invite them again later.`
-                : pending
-                  ? `${ROLE_LABELS[pending.to]}s: ${ROLE_DESCRIPTIONS[pending.to].toLowerCase()}.`
-                  : ""}
+              {pending?.kind === "role"
+                ? `${ROLE_LABELS[pending.to]}s: ${ROLE_DESCRIPTIONS[pending.to].toLowerCase()}.`
+                : pending?.kind === "ban"
+                  ? `${pending.name} is signed out and can't sign in until reactivated.`
+                  : pending?.kind === "unban"
+                    ? `${pending.name} can sign in again.`
+                    : pending
+                      ? `Permanently deletes ${pending.name}'s account with their posts, messages and the groups they created. Deactivate instead to keep their content.`
+                      : ""}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel disabled={busy}>Cancel</AlertDialogCancel>
             <AlertDialogAction
-              variant={pending?.kind === "remove" ? "destructive" : "default"}
+              variant={
+                pending?.kind === "remove" || pending?.kind === "ban"
+                  ? "destructive"
+                  : "default"
+              }
               disabled={busy}
               onClick={(e) => {
                 e.preventDefault()
@@ -386,7 +392,11 @@ export function MembersSettings() {
               }}
             >
               {busy ? <Spinner /> : null}
-              {pending?.kind === "remove" ? "Remove" : "Change role"}
+              {pending?.kind === "role"
+                ? "Change role"
+                : pending
+                  ? CONFIRM[pending.kind]
+                  : null}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

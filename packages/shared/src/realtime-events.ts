@@ -25,7 +25,6 @@ export type ChatMessagePayload = {
 
 export type NotificationPayload = {
   id: string;
-  organizationId: string;
   type: string;
   actor: UserSummary | null;
   groupId: string | null;
@@ -42,7 +41,6 @@ export type CallKind = "AUDIO" | "VIDEO";
 
 export type CallSummary = {
   id: string;
-  organizationId: string;
   conversationId: string | null;
   eventId: string | null;
   /** set for a group's drop-in call (its conversation is the group chat) */

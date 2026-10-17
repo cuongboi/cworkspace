@@ -4,22 +4,33 @@ import { authDb, db } from "@/lib/db";
 
 /**
  * Access-policy tests against the real database (DATABASE_URL from .env).
- * Two orgs: A = { alice (owner), bob }, B = { carol (owner) }. Everything is cleaned up afterwards.
+ * One company: alice creates the groups, bob and carol are plain users, dave is an instance admin
+ * and erin holds an RBAC grant to delete any post. Everything is cleaned up afterwards
+ * (deleting the users cascades to what they created).
  */
 
 const run = Math.random().toString(36).slice(2, 8);
 const id = (name: string) => `t_${run}_${name}`;
 
+type Permission = { model: string; actions: string[] };
 const users = {
-  alice: { id: id("alice"), email: `alice_${run}@test.local`, name: "Alice" },
-  bob: { id: id("bob"), email: `bob_${run}@test.local`, name: "Bob" },
-  carol: { id: id("carol"), email: `carol_${run}@test.local`, name: "Carol" },
+  alice: { id: id("alice"), email: `alice_${run}@test.local`, name: "Alice", role: "user" },
+  bob: { id: id("bob"), email: `bob_${run}@test.local`, name: "Bob", role: "user" },
+  carol: { id: id("carol"), email: `carol_${run}@test.local`, name: "Carol", role: "user" },
+  dave: { id: id("dave"), email: `dave_${run}@test.local`, name: "Dave", role: "admin" },
+  erin: { id: id("erin"), email: `erin_${run}@test.local`, name: "Erin", role: "user" },
 };
-const orgA = id("orgA");
-const orgB = id("orgB");
+const grants: Partial<Record<keyof typeof users, Permission[]>> = {
+  erin: [{ model: "Post", actions: ["delete"] }],
+};
 
 const as = (u: keyof typeof users) =>
-  authDb.$setAuth({ id: users[u].id, email: users[u].email, role: null });
+  authDb.$setAuth({
+    id: users[u].id,
+    email: users[u].email,
+    role: users[u].role,
+    permissions: grants[u] ?? [],
+  });
 
 async function rejected(p: Promise<unknown>) {
   const err = await p.then(
@@ -39,44 +50,14 @@ let secretGroup: string;
 let postId: string;
 
 beforeAll(async () => {
-  for (const u of Object.values(users)) await db.user.create({ data: u });
-  const now = new Date();
-  await db.organization.create({
-    data: { id: orgA, name: "A", slug: id("a"), createdAt: now },
-  });
-  await db.organization.create({
-    data: { id: orgB, name: "B", slug: id("b"), createdAt: now },
-  });
-  await db.member.createMany({
-    data: [
-      {
-        id: id("m1"),
-        organizationId: orgA,
-        userId: users.alice.id,
-        role: "owner",
-        createdAt: now,
-      },
-      {
-        id: id("m2"),
-        organizationId: orgA,
-        userId: users.bob.id,
-        role: "member",
-        createdAt: now,
-      },
-      {
-        id: id("m3"),
-        organizationId: orgB,
-        userId: users.carol.id,
-        role: "owner",
-        createdAt: now,
-      },
-    ],
-  });
+  for (const [name, u] of Object.entries(users))
+    await db.user.create({
+      data: { ...u, permissions: grants[name as keyof typeof users] ?? [] },
+    });
 
   const mk = (privacy: "PUBLIC" | "CLOSED" | "SECRET") =>
     as("alice").group.create({
       data: {
-        organizationId: orgA,
         name: privacy,
         slug: `${privacy.toLowerCase()}-${run}`,
         privacy,
@@ -95,40 +76,16 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
-  await db.organization.deleteMany({ where: { id: { in: [orgA, orgB] } } });
   await db.user.deleteMany({
     where: { id: { in: Object.values(users).map((u) => u.id) } },
   });
 });
 
-describe("tenant isolation", () => {
-  it("hides other orgs' users, groups and posts", async () => {
-    const carol = as("carol");
-    expect(await carol.user.findMany({ where: { id: users.alice.id } })).toEqual([]);
-    expect(await carol.group.findMany({ where: { organizationId: orgA } })).toEqual([]);
-    expect(await carol.post.findMany({ where: { id: postId } })).toEqual([]);
-    expect(await carol.organization.findUnique({ where: { id: orgA } })).toBeNull();
-  });
-
-  it("rejects writes into another org", async () => {
-    await rejected(
-      as("carol").group.create({
-        data: { organizationId: orgA, name: "x", slug: id("x") },
-      }),
-    );
-    await rejected(
-      as("carol").post.create({
-        data: { groupId: publicGroup, content: "spam" },
-      }),
-    );
-  });
-
-  it("cannot add a user from another org to a group", async () => {
-    await rejected(
-      as("alice").groupMember.create({
-        data: { groupId: publicGroup, userId: users.carol.id },
-      }),
-    );
+describe("access basics", () => {
+  it("denies anonymous reads", async () => {
+    expect(await authDb.group.findMany({ where: { id: publicGroup } })).toEqual([]);
+    expect(await authDb.post.findMany({ where: { id: postId } })).toEqual([]);
+    expect(await authDb.user.findMany({ where: { id: users.alice.id } })).toEqual([]);
   });
 
   it("never exposes auth tables", async () => {
@@ -136,19 +93,31 @@ describe("tenant isolation", () => {
     expect(await as("alice").account.findMany()).toEqual([]);
   });
 
-  it("shares users within an org", async () => {
-    const found = await as("bob").user.findMany({
+  it("shares the user directory with every signed-in user", async () => {
+    const found = await as("carol").user.findMany({
       where: { id: users.alice.id },
     });
     expect(found).toHaveLength(1);
+  });
+
+  it("users cannot grant themselves a role or permissions", async () => {
+    await rejected(as("bob").user.update({ where: { id: users.bob.id }, data: { role: "admin" } }));
+    await rejected(
+      as("bob").user.update({
+        where: { id: users.bob.id },
+        data: { permissions: [{ model: "Post", actions: ["delete"] }] },
+      }),
+    );
   });
 });
 
 describe("groups", () => {
   it("hides SECRET groups from non-members, shows PUBLIC/CLOSED", async () => {
-    const ids = (await as("bob").group.findMany({ where: { organizationId: orgA } })).map(
-      (g) => g.id,
-    );
+    const ids = (
+      await as("bob").group.findMany({
+        where: { name: { in: ["PUBLIC", "CLOSED", "SECRET"] }, slug: { endsWith: run } },
+      })
+    ).map((g) => g.id);
     expect(ids).toContain(publicGroup);
     expect(ids).toContain(closedGroup);
     expect(ids).not.toContain(secretGroup);
@@ -248,10 +217,9 @@ describe("polls", () => {
 });
 
 describe("chat", () => {
-  it("only members read a conversation; members must share the org", async () => {
+  it("only members read a conversation", async () => {
     const convo = await as("alice").conversation.create({
       data: {
-        organizationId: orgA,
         type: "GROUP",
         title: "t",
         members: { create: [{ userId: users.alice.id, role: "ADMIN" }] },
@@ -267,8 +235,9 @@ describe("chat", () => {
         data: { conversationId: convo.id, content: "let me in" },
       }),
     );
+    // only the creator or a conversation admin adds people
     await rejected(
-      as("alice").conversationMember.create({
+      as("carol").conversationMember.create({
         data: { conversationId: convo.id, userId: users.carol.id },
       }),
     );
@@ -298,11 +267,11 @@ describe("notifications", () => {
   it("cannot be created from the client; only the recipient reads them", async () => {
     await rejected(
       as("alice").notification.create({
-        data: { organizationId: orgA, userId: users.bob.id, type: "MENTION" },
+        data: { userId: users.bob.id, type: "MENTION" },
       }),
     );
     await db.notification.create({
-      data: { organizationId: orgA, userId: users.bob.id, type: "MENTION" },
+      data: { userId: users.bob.id, type: "MENTION" },
     });
     expect(
       await as("alice").notification.findMany({
@@ -338,23 +307,30 @@ describe("notifications", () => {
         content: `hey @[Bob](${users.bob.id}) and @[Carol](${users.carol.id})`,
       },
     });
+    // PUBLIC group: everyone can read it, so both are notified
+    for (const u of ["bob", "carol"] as const)
+      expect(
+        await as(u).notification.count({
+          where: { type: "MENTION", actorId: users.alice.id },
+        }),
+      ).toBe(1);
+
+    await as("alice").post.create({
+      data: { groupId: secretGroup, content: `psst @[Carol](${users.carol.id})` },
+    });
+    // carol can't read the SECRET group: no new notification
     expect(
-      await as("bob").notification.count({
-        where: { type: "MENTION", actorId: users.alice.id },
-      }),
+      await db.notification.count({ where: { userId: users.carol.id, type: "MENTION" } }),
     ).toBe(1);
-    // carol is in another org: never notified
-    expect(await db.notification.count({ where: { userId: users.carol.id } })).toBe(0);
   });
 });
 
 describe("calendar", () => {
-  it("events are visible to creator and attendees; OOO to the whole org", async () => {
+  it("events are visible to creator and attendees; OOO to everyone", async () => {
     const start = new Date(Date.now() + 86_400_000);
     const end = new Date(start.getTime() + 3_600_000);
     const meeting = await as("alice").event.create({
       data: {
-        organizationId: orgA,
         title: "1:1",
         type: "MEETING",
         startAt: start,
@@ -373,7 +349,7 @@ describe("calendar", () => {
         where: { type: "EVENT_INVITE", eventId: meeting.id },
       }),
     ).toBe(1);
-    // bob can RSVP but not edit the event; carol (other org) can't be invited
+    // bob can RSVP but not edit the event, nor invite people
     await as("bob").eventAttendee.update({
       where: { eventId_userId: { eventId: meeting.id, userId: users.bob.id } },
       data: { rsvp: "GOING" },
@@ -385,14 +361,13 @@ describe("calendar", () => {
       }),
     );
     await rejected(
-      as("alice").eventAttendee.create({
+      as("bob").eventAttendee.create({
         data: { eventId: meeting.id, userId: users.carol.id },
       }),
     );
 
     const ooo = await as("bob").event.create({
       data: {
-        organizationId: orgA,
         title: "Vacation",
         type: "OUT_OF_OFFICE",
         startAt: start,
@@ -400,7 +375,7 @@ describe("calendar", () => {
       },
     });
     expect(await as("alice").event.findUnique({ where: { id: ooo.id } })).not.toBeNull();
-    expect(await as("carol").event.findUnique({ where: { id: ooo.id } })).toBeNull();
+    expect(await as("carol").event.findUnique({ where: { id: ooo.id } })).not.toBeNull();
   });
 
   it("rejects events that end before they start", async () => {
@@ -408,7 +383,6 @@ describe("calendar", () => {
     await rejected(
       as("alice").event.create({
         data: {
-          organizationId: orgA,
           title: "bad",
           startAt: start,
           endAt: new Date(start.getTime() - 1000),
@@ -419,23 +393,22 @@ describe("calendar", () => {
 });
 
 describe("attachments", () => {
-  it("are private until attached, unless org-visible; never cross-tenant", async () => {
-    const mk = (name: string, orgVisible = false) =>
+  it("are private until attached, unless public", async () => {
+    const mk = (name: string, isPublic = false) =>
       as("alice").attachment.create({
         data: {
-          organizationId: orgA,
           key: `test/${run}/${name}`,
           name,
           mimeType: "image/png",
           size: 1,
-          orgVisible,
+          isPublic,
         },
       });
     const draft = await mk("draft.png");
     const avatar = await mk("avatar.png", true);
     expect(await as("bob").attachment.findUnique({ where: { id: draft.id } })).toBeNull();
     expect(await as("bob").attachment.findUnique({ where: { id: avatar.id } })).not.toBeNull();
-    expect(await as("carol").attachment.findUnique({ where: { id: avatar.id } })).toBeNull();
+    expect(await as("carol").attachment.findUnique({ where: { id: avatar.id } })).not.toBeNull();
 
     // attaching it to a post in a public group makes it readable to readers of the post
     await as("alice").post.create({
@@ -446,7 +419,7 @@ describe("attachments", () => {
       },
     });
     expect(await as("bob").attachment.findUnique({ where: { id: draft.id } })).not.toBeNull();
-    // bob can't steal it into his own post, nor create one in another org
+    // bob can't steal it into his own post, nor upload in someone else's name
     await rejected(
       as("bob").attachment.update({
         where: { id: draft.id },
@@ -456,7 +429,7 @@ describe("attachments", () => {
     await rejected(
       as("carol").attachment.create({
         data: {
-          organizationId: orgA,
+          uploaderId: users.alice.id,
           key: `test/${run}/x`,
           name: "x",
           mimeType: "image/png",
@@ -471,14 +444,12 @@ describe("calls", () => {
   it("are readable by conversation members only and never writable from the client", async () => {
     const convo = await as("alice").conversation.create({
       data: {
-        organizationId: orgA,
         type: "GROUP",
         members: { create: [{ userId: users.alice.id, role: "ADMIN" }] },
       },
     });
     const call = await db.call.create({
       data: {
-        organizationId: orgA,
         conversationId: convo.id,
         startedById: users.alice.id,
       },
@@ -494,11 +465,75 @@ describe("calls", () => {
     await rejected(
       as("alice").call.create({
         data: {
-          organizationId: orgA,
           conversationId: convo.id,
           startedById: users.alice.id,
         },
       }),
     );
+  });
+});
+
+describe("instance admins and RBAC", () => {
+  it("plain users cannot moderate groups they don't run", async () => {
+    await rejected(as("bob").group.update({ where: { id: publicGroup }, data: { name: "mine" } }));
+    await rejected(as("bob").group.delete({ where: { id: secretGroup } }));
+  });
+
+  it("an instance admin updates any group, removes members and deletes posts", async () => {
+    const renamed = await as("dave").group.update({
+      where: { id: publicGroup },
+      data: { description: "moderated" },
+    });
+    expect(renamed.description).toBe("moderated");
+    await as("dave").groupMember.delete({
+      where: { groupId_userId: { groupId: publicGroup, userId: users.bob.id } },
+    });
+    const post = await as("alice").post.create({
+      data: { groupId: publicGroup, content: "spam?" },
+    });
+    await as("dave").post.delete({ where: { id: post.id } });
+    expect(await db.post.findUnique({ where: { id: post.id } })).toBeNull();
+  });
+
+  it("an instance admin edits the wiki of any group", async () => {
+    const page = await as("dave").wikiPage.create({
+      data: { groupId: publicGroup, title: "Handbook" },
+    });
+    await as("dave").wikiPage.delete({ where: { id: page.id } });
+  });
+
+  it("a Post delete grant deletes any post, but grants nothing else", async () => {
+    const post = await as("alice").post.create({
+      data: { groupId: publicGroup, content: "remove me" },
+    });
+    await rejected(as("erin").post.update({ where: { id: post.id }, data: { content: "edited" } }));
+    await as("erin").post.delete({ where: { id: post.id } });
+    await rejected(as("bob").post.delete({ where: { id: postId } }));
+  });
+});
+
+describe("invitations", () => {
+  it("are read by admins and the invitee only, and never written from the client", async () => {
+    await rejected(
+      as("dave").invitation.create({
+        data: {
+          email: `new_${run}@test.local`,
+          invitedById: users.dave.id,
+          expiresAt: new Date(Date.now() + 60_000),
+        },
+      }),
+    );
+    const invitation = await db.invitation.create({
+      data: {
+        email: users.carol.email,
+        invitedById: users.dave.id,
+        expiresAt: new Date(Date.now() + 60_000),
+      },
+    });
+    expect(await as("dave").invitation.findUnique({ where: { id: invitation.id } })).not.toBeNull();
+    expect(
+      await as("carol").invitation.findUnique({ where: { id: invitation.id } }),
+    ).not.toBeNull();
+    expect(await as("bob").invitation.findUnique({ where: { id: invitation.id } })).toBeNull();
   });
 });

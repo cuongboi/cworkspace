@@ -19,7 +19,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Spinner } from "@/components/ui/spinner"
-import { useOrg } from "@/hooks/use-org"
+import { useApp } from "@/hooks/use-app"
 import { useUploads } from "@/hooks/use-uploads"
 import { db } from "@/lib/api-client"
 import { useDbMutation, useDbQuery } from "@/lib/query"
@@ -42,23 +42,22 @@ export function PostComposer({
   groupId?: string
   groupName?: string
 }) {
-  const { org, me } = useOrg()
+  const { me } = useApp()
   const [content, setContent] = useState("")
   const [poll, setPoll] = useState<PollDraft | null>(null)
   const [picked, setPicked] = useState<string | null>(null)
   const [expanded, setExpanded] = useState(false)
-  const uploads = useUploads(org.id)
+  const uploads = useUploads()
   const fileRef = useRef<HTMLInputElement>(null)
   const imageRef = useRef<HTMLInputElement>(null)
 
   const { data: myGroups = [] } = useDbQuery(
-    ["groupMember", "findMany", "composer", org.id, me.id],
+    ["groupMember", "findMany", "composer", me.id],
     () =>
       db.groupMember.findMany({
         where: {
           userId: me.id,
           status: "ACTIVE",
-          group: { organizationId: org.id },
         },
         select: {
           group: { select: { id: true, name: true, isDefault: true } },

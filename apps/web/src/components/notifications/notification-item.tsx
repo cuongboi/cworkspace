@@ -29,7 +29,6 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { Skeleton } from "@/components/ui/skeleton"
-import { useOrg } from "@/hooks/use-org"
 import { db } from "@/lib/api-client"
 import { toPlainText } from "@/lib/mentions"
 import { useDbMutation } from "@/lib/query"
@@ -158,36 +157,28 @@ export function describeNotification(n: NotificationLike): ReactNode {
 /** Where a notification leads. `groupSlug` is needed for group notifications. */
 export function notificationHref(
   n: NotificationLike,
-  href: (path: string) => string,
   groupSlug = n.group?.slug
 ): string {
   switch (n.type) {
     case "GROUP_JOIN_REQUEST":
-      return groupSlug
-        ? href(`/groups/${groupSlug}?tab=members`)
-        : href("/groups")
+      return groupSlug ? `/groups/${groupSlug}?tab=members` : "/groups"
     case "GROUP_JOIN_APPROVED":
-      return groupSlug ? href(`/groups/${groupSlug}`) : href("/groups")
+      return groupSlug ? `/groups/${groupSlug}` : "/groups"
     case "EVENT_INVITE":
     case "EVENT_REMINDER":
-      return n.eventId
-        ? href(`/calendar?event=${n.eventId}`)
-        : href("/calendar")
+      return n.eventId ? `/calendar?event=${n.eventId}` : "/calendar"
     case "MISSED_CALL":
-      if (n.conversationId) return href(`/chat/${n.conversationId}`)
-      return n.eventId ? href(`/calendar?event=${n.eventId}`) : href("/chat")
+      if (n.conversationId) return `/chat/${n.conversationId}`
+      return n.eventId ? `/calendar?event=${n.eventId}` : "/chat"
     default:
-      if (n.postId) return href(`/posts/${n.postId}`)
-      if (groupSlug) return href(`/groups/${groupSlug}`)
-      return href("/notifications")
+      if (n.postId) return `/posts/${n.postId}`
+      if (groupSlug) return `/groups/${groupSlug}`
+      return "/notifications"
   }
 }
 
 /** Resolves the link of a live payload (which carries ids only). */
-export async function resolveNotificationHref(
-  n: NotificationLike,
-  href: (path: string) => string
-) {
+export async function resolveNotificationHref(n: NotificationLike) {
   if (
     !n.group &&
     n.groupId &&
@@ -198,9 +189,9 @@ export async function resolveNotificationHref(
     const group = await db.group
       .findUnique({ where: { id: n.groupId }, select: { slug: true } })
       .catch(() => null)
-    return notificationHref(n, href, group?.slug)
+    return notificationHref(n, group?.slug)
   }
-  return notificationHref(n, href)
+  return notificationHref(n)
 }
 
 export function NotificationIcon({
@@ -273,7 +264,6 @@ export function NotificationItem({
   onNavigate,
   className,
 }: ItemProps) {
-  const { href } = useOrg()
   const { markRead, dismiss } = useNotificationActions()
   const unread = n.readAt === null
   const snippet = n.post?.content ? toPlainText(n.post.content).trim() : ""
@@ -287,7 +277,7 @@ export function NotificationItem({
       )}
     >
       <Link
-        to={notificationHref(n, href)}
+        to={notificationHref(n)}
         onClick={() => {
           if (unread) markRead(n.id)
           onNavigate?.()

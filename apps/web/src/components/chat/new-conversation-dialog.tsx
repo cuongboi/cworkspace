@@ -15,14 +15,14 @@ import {
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Spinner } from "@/components/ui/spinner"
-import { useOrg } from "@/hooks/use-org"
+import { useApp } from "@/hooks/use-app"
 import { ApiError, api, db } from "@/lib/api-client"
 import { invalidateModels } from "@/lib/query"
 import { PeoplePicker, type PickedUser } from "./people-picker"
 
 /** Pick one person → open the DM; pick several → create a group conversation. */
 export function NewConversationDialog({ children }: { children: ReactNode }) {
-  const { org, me, href } = useOrg()
+  const { me } = useApp()
   const navigate = useNavigate()
   const qc = useQueryClient()
   const [open, setOpen] = useState(false)
@@ -45,13 +45,11 @@ export function NewConversationDialog({ children }: { children: ReactNode }) {
       if (!isGroup) {
         const first = people[0] as PickedUser
         ;({ id } = await api.post<{ id: string }>("/api/conversations/direct", {
-          organizationId: org.id,
           userId: first.id,
         }))
       } else {
         ;({ id } = await db.conversation.create({
           data: {
-            organizationId: org.id,
             type: "GROUP",
             title: title.trim() || null,
             members: {
@@ -67,7 +65,7 @@ export function NewConversationDialog({ children }: { children: ReactNode }) {
       void invalidateModels(qc, ["conversation", "conversationMember"])
       setOpen(false)
       reset()
-      await navigate(href(`/chat/${id}`))
+      await navigate(`/chat/${id}`)
     } catch (err) {
       toast.error(
         err instanceof ApiError

@@ -12,8 +12,8 @@ const args = parser.parse_args();
 if (args.ssl) {
     app.listen(localHttps({ port: args.ssl ? 443 : args.port, hostname: args.host }, {
         enabled: true,
-        certPath: '../certs/local/localhost.pem',
-        keyPath: '../certs/local/localhost-key.pem',
+        certPath: 'certs/local/localhost.pem',
+        keyPath: 'certs/local/localhost-key.pem',
         domains: ['localhost', '127.0.0.1', '::1']
     }))
 } else {

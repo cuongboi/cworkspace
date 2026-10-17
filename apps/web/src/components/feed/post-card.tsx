@@ -39,7 +39,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { Skeleton } from "@/components/ui/skeleton"
-import { useOrg } from "@/hooks/use-org"
+import { useApp } from "@/hooks/use-app"
 import { db } from "@/lib/api-client"
 import { useDbMutation } from "@/lib/query"
 import type { ReactionType } from "@app/api/zenstack/models"
@@ -63,7 +63,7 @@ export function PostCard({
   commentsOpen?: boolean
   onDeleted?: () => void
 }) {
-  const { me, href } = useOrg()
+  const { me } = useApp()
   const canModerate = useCanModerate(post)
   const isAuthor = post.authorId === me.id
   const [commentsOpen, setCommentsOpen] = useState(initialCommentsOpen)
@@ -78,7 +78,7 @@ export function PostCard({
 
   const reactions = withOptimistic(post.reactions, me, pendingReaction)
   const myReaction = reactions.find((r) => r.userId === me.id)?.type ?? null
-  const permalink = href(`/posts/${post.id}`)
+  const permalink = `/posts/${post.id}`
 
   const react = useDbMutation(
     (type: ReactionType | null) =>
@@ -133,14 +133,14 @@ export function PostCard({
     <Card className="gap-0 py-0">
       <article aria-labelledby={`post-${post.id}-author`}>
         <header className="flex items-start gap-3 px-4 pt-4">
-          <Link to={href(`/people/${post.author.id}`)} className="shrink-0">
+          <Link to={`/people/${post.author.id}`} className="shrink-0">
             <UserAvatar user={post.author} presence />
           </Link>
           <div className="min-w-0 flex-1">
             <p className="flex flex-wrap items-center gap-x-1 text-sm leading-tight font-semibold">
               <Link
                 id={`post-${post.id}-author`}
-                to={href(`/people/${post.author.id}`)}
+                to={`/people/${post.author.id}`}
                 className="hover:underline"
               >
                 {post.author.name}
@@ -152,7 +152,7 @@ export function PostCard({
                     aria-label="posted in"
                   />
                   <Link
-                    to={href(`/groups/${post.group.slug}`)}
+                    to={`/groups/${post.group.slug}`}
                     className="hover:underline"
                   >
                     {post.group.name}

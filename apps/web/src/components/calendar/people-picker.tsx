@@ -16,7 +16,6 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover"
 import { Spinner } from "@/components/ui/spinner"
-import { useOrg } from "@/hooks/use-org"
 import { db } from "@/lib/api-client"
 import { useDbQuery } from "@/lib/query"
 
@@ -29,19 +28,17 @@ type Props = {
   excludeIds?: string[]
 }
 
-/** Multi-select over the organization's members, searched by name. */
+/** Multi-select over the company's members, searched by name. */
 export function PeoplePicker({ value, onChange, excludeIds = [] }: Props) {
-  const { org } = useOrg()
   const [open, setOpen] = useState(false)
   const [q, setQ] = useState("")
   const query = q.trim()
 
   const { data: people = [], isFetching } = useDbQuery(
-    ["user", "findMany", "people-picker", org.id, query],
+    ["user", "findMany", "people-picker", query],
     () =>
       db.user.findMany({
         where: {
-          members: { some: { organizationId: org.id } },
           ...(query ? { name: { contains: query, mode: "insensitive" } } : {}),
         },
         select: { id: true, name: true, image: true, title: true },

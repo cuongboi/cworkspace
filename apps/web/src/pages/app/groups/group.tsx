@@ -29,7 +29,7 @@ import {
 } from "@/components/ui/empty"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { useOrg } from "@/hooks/use-org"
+import { useApp } from "@/hooks/use-app"
 import { db } from "@/lib/api-client"
 import { useDbQuery } from "@/lib/query"
 import type { GroupCallState } from "@/lib/realtime-events"
@@ -49,7 +49,7 @@ const WIDE_TABS: Tab[] = ["chat", "knowledge", "calendar"]
 
 const GroupPage = () => {
   const params = useParams()
-  const { org, me, href } = useOrg()
+  const { me } = useApp()
   const slug = params.groupSlug ?? ""
   const [tabParam, setTabParam] = useQueryState(
     "tab",
@@ -60,10 +60,10 @@ const GroupPage = () => {
     : "discussion"
 
   const { data: group, isPending } = useDbQuery(
-    ["group", "findFirst", "slug", org.id, slug, me.id],
+    ["group", "findFirst", "slug", slug, me.id],
     () =>
       db.group.findFirst({
-        where: { organizationId: org.id, slug },
+        where: { slug },
         include: groupInclude(me.id),
       })
   )
@@ -90,7 +90,7 @@ const GroupPage = () => {
         </EmptyHeader>
         <EmptyContent>
           <Button asChild variant="outline">
-            <Link to={href("/groups")}>Browse groups</Link>
+            <Link to={"/groups"}>Browse groups</Link>
           </Button>
         </EmptyContent>
       </Empty>

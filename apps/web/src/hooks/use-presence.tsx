@@ -3,7 +3,7 @@ import { useSocketEvent } from "./use-socket"
 
 const PresenceContext = createContext<ReadonlySet<string>>(new Set())
 
-/** Tracks who is online from the server's presence events. Mounted by OrgLayout. */
+/** Tracks who is online from the server's presence events. Mounted by AppLayout. */
 export function PresenceProvider({ children }: { children: ReactNode }) {
   const [online, setOnline] = useState<ReadonlySet<string>>(new Set())
 

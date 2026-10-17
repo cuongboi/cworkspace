@@ -16,14 +16,15 @@ import {
 } from "@/components/ui/empty"
 import { Input } from "@/components/ui/input"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { useOrg } from "@/hooks/use-org"
+import { useApp } from "@/hooks/use-app"
 import { db } from "@/lib/api-client"
 import { useDbQuery } from "@/lib/query"
+import { COMPANY_NAME } from "@/lib/company"
 
 type Tab = "discover" | "mine"
 
 const GroupsPage = () => {
-  const { org, me } = useOrg()
+  const { me } = useApp()
   const [searchParams] = useSearchParams()
   const [tab, setTab] = useState<Tab>(
     searchParams.get("tab") === "mine" ? "mine" : "discover"
@@ -34,10 +35,9 @@ const GroupsPage = () => {
   const setCreateOpen = (open: boolean) => void setCreate(open ? "1" : null)
 
   const { data: groups, isPending } = useDbQuery(
-    ["group", "findMany", "directory", org.id, me.id],
+    ["group", "findMany", "directory", me.id],
     () =>
       db.group.findMany({
-        where: { organizationId: org.id },
         include: groupInclude(me.id),
         orderBy: [{ isDefault: "desc" }, { name: "asc" }],
         take: 100,
@@ -63,7 +63,7 @@ const GroupsPage = () => {
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Groups</h1>
           <p className="text-sm text-muted-foreground">
-            Find teams and communities across {org.name}.
+            Find teams and communities across {COMPANY_NAME}.
           </p>
         </div>
         <Button onClick={() => setCreateOpen(true)}>

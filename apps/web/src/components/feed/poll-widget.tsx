@@ -9,7 +9,7 @@ import {
 import { useState } from "react"
 import { toast } from "sonner"
 import { useNow } from "@/hooks/use-now"
-import { useOrg } from "@/hooks/use-org"
+import { useApp } from "@/hooks/use-app"
 import { db } from "@/lib/api-client"
 import { useDbMutation } from "@/lib/query"
 import type { FeedPost } from "./post-query"
@@ -18,7 +18,7 @@ type PollData = NonNullable<FeedPost["poll"]>
 
 /** Live poll results; click an option to vote (single choice switches, multiple toggles). */
 export function PollWidget({ poll }: { poll: PollData }) {
-  const { me } = useOrg()
+  const { me } = useApp()
   const serverMine = poll.votes
     .filter((v) => v.userId === me.id)
     .map((v) => v.optionId)

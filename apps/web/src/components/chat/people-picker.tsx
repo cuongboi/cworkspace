@@ -4,7 +4,7 @@ import { useState } from "react"
 import { UserAvatar } from "@/components/common/user-avatar"
 import { Input } from "@/components/ui/input"
 import { Skeleton } from "@/components/ui/skeleton"
-import { useOrg } from "@/hooks/use-org"
+import { useApp } from "@/hooks/use-app"
 import { db } from "@/lib/api-client"
 import { useDbQuery } from "@/lib/query"
 import { ScrollArea } from "@/components/ui/scroll-area"
@@ -19,24 +19,23 @@ type Props = {
   autoFocus?: boolean
 }
 
-/** Search the org's members and toggle a multi-selection, shown as removable chips. */
+/** Search the company's members and toggle a multi-selection, shown as removable chips. */
 export function PeoplePicker({
   value,
   onChange,
   exclude = [],
   autoFocus,
 }: Props) {
-  const { org, me } = useOrg()
+  const { me } = useApp()
   const [q, setQ] = useState("")
   const term = q.trim()
 
   const { data: users = [], isPending } = useDbQuery(
-    ["user", "findMany", "chat-picker", org.id, term],
+    ["user", "findMany", "chat-picker", term],
     () =>
       db.user.findMany({
         where: {
           id: { not: me.id },
-          members: { some: { organizationId: org.id } },
           ...(term ? { name: { contains: term, mode: "insensitive" } } : {}),
         },
         select: { id: true, name: true, image: true },

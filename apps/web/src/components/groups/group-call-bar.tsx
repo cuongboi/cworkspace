@@ -15,7 +15,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip"
-import { useOrg } from "@/hooks/use-org"
+import { useApp } from "@/hooks/use-app"
 import {
   type CallKind,
   type GroupCallState,
@@ -71,7 +71,7 @@ export function GroupCallButton({
 /** Banner shown to members while the group's call is live: who's in it, and a Join button. */
 export function GroupLiveCallBanner({ live }: { live: GroupCallState }) {
   const { joinCall } = useCalls()
-  const { me } = useOrg()
+  const { me } = useApp()
   if (!live.call) return null
   const Icon = live.call.type === "VIDEO" ? VideoIcon : PhoneIcon
   const count = live.participants.length

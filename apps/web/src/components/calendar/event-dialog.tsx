@@ -23,7 +23,7 @@ import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select"
 import { Spinner } from "@/components/ui/spinner"
 import { Switch } from "@/components/ui/switch"
 import { Textarea } from "@/components/ui/textarea"
-import { useOrg } from "@/hooks/use-org"
+import { useApp } from "@/hooks/use-app"
 import { db } from "@/lib/api-client"
 import { invalidateModels, useDbQuery } from "@/lib/query"
 import type { EventType } from "@app/api/zenstack/models"
@@ -97,7 +97,7 @@ export function EventDialog({
   defaults,
   onSaved,
 }: Props) {
-  const { org, me } = useOrg()
+  const { me } = useApp()
   const queryClient = useQueryClient()
   const isEdit = Boolean(event)
   const [form, setForm] = useState(() => initialState(event, defaults, me.id))
@@ -107,11 +107,10 @@ export function EventDialog({
     setForm((f) => ({ ...f, [key]: value }))
 
   const { data: groups = [] } = useDbQuery(
-    ["group", "findMany", "event-dialog", org.id, me.id],
+    ["group", "findMany", "event-dialog", me.id],
     () =>
       db.group.findMany({
         where: {
-          organizationId: org.id,
           members: { some: { userId: me.id, status: "ACTIVE" } },
         },
         select: { id: true, name: true },
@@ -209,7 +208,6 @@ export function EventDialog({
           ? await db.event.create({
               data: {
                 ...fields,
-                organization: { connect: { id: org.id } },
                 group: { connect: { id: groupId } },
                 post: {
                   create: {
@@ -223,7 +221,7 @@ export function EventDialog({
               select: { id: true },
             })
           : await db.event.create({
-              data: { ...fields, organizationId: org.id, attendees },
+              data: { ...fields, attendees },
               select: { id: true },
             })
         id = created.id

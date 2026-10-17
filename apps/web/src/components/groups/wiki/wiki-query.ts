@@ -1,4 +1,4 @@
-import { useOrg } from "@/hooks/use-org"
+import { useApp } from "@/hooks/use-app"
 import { db } from "@/lib/api-client"
 import type { GroupWithMe } from "../group-query"
 
@@ -139,7 +139,7 @@ export type WikiRevisionRow = Awaited<
 
 /** Mirrors the WikiPage create/update policy (the server enforces it; this only hides buttons). */
 export function useCanEditWiki(group: GroupWithMe) {
-  const { isAdmin } = useOrg()
+  const { isAdmin } = useApp()
   const m = group.members[0]
   if (isAdmin) return true
   if (m?.status !== "ACTIVE") return false
@@ -155,7 +155,7 @@ export function useCanDeleteWikiPage(
   group: GroupWithMe,
   createdById: string | undefined
 ) {
-  const { isAdmin, me } = useOrg()
+  const { isAdmin, me } = useApp()
   const m = group.members[0]
   if (isAdmin) return true
   if (m?.status !== "ACTIVE") return false

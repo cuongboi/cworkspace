@@ -3,29 +3,20 @@ import { db } from "@/lib/db";
 import { rateLimit } from "@/server/rate-limit";
 import { type Conn, connectionCount, emitTo, emitToUsers, onlineUserIds, rooms } from "./hub";
 
-/** Joins org and group rooms, announces presence and sends the initial snapshot. */
+/** Joins the company and group rooms, announces presence and sends the initial snapshot. */
 export async function registerPresence(conn: Conn) {
   const { user } = conn;
-  const [memberships, groups] = await Promise.all([
-    db.member.findMany({ where: { userId: user.id }, select: { organizationId: true } }),
-    db.groupMember.findMany({
-      where: { userId: user.id, status: "ACTIVE" },
-      select: { groupId: true },
-    }),
-  ]);
-  const orgIds = memberships.map((m) => m.organizationId);
-  for (const id of orgIds) conn.join(rooms.org(id));
+  const groups = await db.groupMember.findMany({
+    where: { userId: user.id, status: "ACTIVE" },
+    select: { groupId: true },
+  });
+  conn.join(rooms.all);
   for (const g of groups) conn.join(rooms.group(g.groupId));
 
-  if (connectionCount(user.id) === 1 && orgIds.length)
-    emitTo(orgIds.map(rooms.org), "presence", { userId: user.id, online: true });
+  if (connectionCount(user.id) === 1)
+    emitTo([rooms.all], "presence", { userId: user.id, online: true });
 
-  const visible = await db.member.findMany({
-    where: { userId: { in: [...onlineUserIds()] }, organizationId: { in: orgIds } },
-    select: { userId: true },
-    distinct: ["userId"],
-  });
-  conn.emit("presence:snapshot", { online: visible.map((m) => m.userId) });
+  conn.emit("presence:snapshot", { online: [...onlineUserIds()] });
 }
 
 /**
@@ -34,8 +25,8 @@ export async function registerPresence(conn: Conn) {
  */
 export function announceOffline(conn: Conn, roomsBefore: string[]) {
   if (connectionCount(conn.user.id) > 0) return;
-  const orgRooms = roomsBefore.filter((r) => r.startsWith("org:"));
-  if (orgRooms.length) emitTo(orgRooms, "presence", { userId: conn.user.id, online: false });
+  if (roomsBefore.includes(rooms.all))
+    emitTo([rooms.all], "presence", { userId: conn.user.id, online: false });
 }
 
 /** Typing indicators: relayed to the other members of a conversation the sender belongs to. */

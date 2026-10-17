@@ -4,11 +4,10 @@ import { createBrowserRouter, Navigate, Outlet } from "react-router-dom"
 
 import { GuestOnly, RequireAuth } from "@/components/auth-guard"
 import {
-  OrgLayout,
-  type OrgLayoutOptions,
-} from "@/components/layout/org-layout"
+  AppLayout,
+  type AppLayoutOptions,
+} from "@/components/layout/app-layout"
 import { AuthLayout } from "@/pages/auth/auth-layout"
-import RootRedirect from "@/pages/root-redirect"
 
 /**
  * Route-level code splitting: each page loads on first visit, so the entry
@@ -30,9 +29,9 @@ function RootLayout() {
   )
 }
 
-/** Shell options per page, read by `OrgLayout` from the matched route's `handle`. */
-const rail: OrgLayoutOptions = { rail: true }
-const bleed: OrgLayoutOptions = { bleed: true }
+/** Shell options per page, read by `AppLayout` from the matched route's `handle`. */
+const rail: AppLayoutOptions = { rail: true }
+const bleed: AppLayoutOptions = { bleed: true }
 
 export const router = createBrowserRouter([
   {
@@ -43,79 +42,68 @@ export const router = createBrowserRouter([
       {
         element: <RequireAuth />,
         children: [
-          { index: true, element: <RootRedirect /> },
           {
-            path: "onboarding",
-            lazy: page(() => import("@/pages/onboarding")),
-          },
-          // the tenant: everything under /:orgSlug is scoped to one organization
-          {
-            path: ":orgSlug",
-            element: <OrgLayout />,
+            element: <AppLayout />,
             children: [
               {
                 index: true,
-                lazy: page(() => import("@/pages/org/index")),
+                lazy: page(() => import("@/pages/app/index")),
                 handle: rail,
               },
               {
                 path: "groups",
-                lazy: page(() => import("@/pages/org/groups/index")),
+                lazy: page(() => import("@/pages/app/groups/index")),
               },
               {
                 path: "groups/:groupSlug",
-                lazy: page(() => import("@/pages/org/groups/group")),
+                lazy: page(() => import("@/pages/app/groups/group")),
               },
               {
                 path: "posts/:postId",
-                lazy: page(() => import("@/pages/org/posts/post")),
+                lazy: page(() => import("@/pages/app/posts/post")),
                 handle: rail,
               },
               {
                 path: "people",
-                lazy: page(() => import("@/pages/org/people/index")),
+                lazy: page(() => import("@/pages/app/people/index")),
               },
               {
                 path: "people/:userId",
-                lazy: page(() => import("@/pages/org/people/person")),
+                lazy: page(() => import("@/pages/app/people/person")),
                 handle: rail,
               },
               {
                 path: "search",
-                lazy: page(() => import("@/pages/org/search")),
+                lazy: page(() => import("@/pages/app/search")),
                 handle: rail,
               },
               {
                 path: "chat",
-                lazy: page(() => import("@/pages/org/chat/index")),
+                lazy: page(() => import("@/pages/app/chat/index")),
                 handle: bleed,
               },
               {
                 path: "chat/:conversationId",
-                lazy: page(() => import("@/pages/org/chat/conversation")),
+                lazy: page(() => import("@/pages/app/chat/conversation")),
                 handle: bleed,
               },
               {
                 path: "call/:callId",
-                lazy: page(() => import("@/pages/org/call/call")),
+                lazy: page(() => import("@/pages/app/call/call")),
                 handle: bleed,
               },
               {
                 path: "calendar",
-                lazy: page(() => import("@/pages/org/calendar")),
+                lazy: page(() => import("@/pages/app/calendar")),
                 handle: bleed,
               },
               {
                 path: "notifications",
-                lazy: page(() => import("@/pages/org/notifications")),
+                lazy: page(() => import("@/pages/app/notifications")),
               },
               {
                 path: "settings",
-                lazy: page(() => import("@/pages/org/settings/index")),
-              },
-              {
-                path: "*",
-                element: <Navigate to=".." relative="path" replace />,
+                lazy: page(() => import("@/pages/app/settings/index")),
               },
             ],
           },

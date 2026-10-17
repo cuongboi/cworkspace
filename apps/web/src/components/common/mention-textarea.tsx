@@ -6,14 +6,14 @@ import {
   useState,
 } from "react"
 import { Textarea } from "@/components/ui/textarea"
-import { useOrg } from "@/hooks/use-org"
+import { useApp } from "@/hooks/use-app"
 import { db } from "@/lib/api-client"
 import { formatMention, MENTION_RE } from "@/lib/mentions"
 import { useDbQuery } from "@/lib/query"
 import { UserAvatar } from "./user-avatar"
 
 /**
- * Textarea with @mention autocomplete over the org's members. Users see "@Name"; the value
+ * Textarea with @mention autocomplete over the company's members. Users see "@Name"; the value
  * reported through `onChange` is serialized with `@[Name](userId)` tokens (see `@/lib/mentions`).
  * Pass `value=""` to reset after submitting.
  */
@@ -59,7 +59,7 @@ export function MentionTextarea({
   onKeyDown,
   ...props
 }: Props) {
-  const { org, me } = useOrg()
+  const { me } = useApp()
   const ref = useRef<HTMLTextAreaElement>(null)
   const [state, setState] = useState(() => ({
     ...deserialize(value),
@@ -75,12 +75,11 @@ export function MentionTextarea({
     setState({ ...deserialize(value), serialized: value })
 
   const { data: candidates = [] } = useDbQuery(
-    ["user", "findMany", "mention", org.id, query?.text],
+    ["user", "findMany", "mention", query?.text],
     () =>
       db.user.findMany({
         where: {
           id: { not: me.id },
-          members: { some: { organizationId: org.id } },
           ...(query?.text
             ? { name: { contains: query.text, mode: "insensitive" } }
             : {}),

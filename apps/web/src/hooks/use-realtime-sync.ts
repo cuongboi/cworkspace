@@ -5,7 +5,7 @@ import { useSocketEvent } from "./use-socket"
 /**
  * Bridges server "something changed" events to the React Query cache. Queries keyed by model
  * name (`["post", …]`, see `@/lib/query`) refetch automatically; features only need custom
- * handlers for instant UX (e.g. appending chat messages). Mounted once by OrgLayout.
+ * handlers for instant UX (e.g. appending chat messages). Mounted once by AppLayout.
  */
 export function useRealtimeSync() {
   const qc = useQueryClient()

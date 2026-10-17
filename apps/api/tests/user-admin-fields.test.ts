@@ -5,7 +5,7 @@ import { authDb, db } from "@/lib/db";
 /** The admin plugin's fields live on User, which users may update: they must stay server-only. */
 
 const id = `t_${Math.random().toString(36).slice(2, 8)}_admin`;
-const me = () => authDb.$setAuth({ id, email: `${id}@test.local`, role: null });
+const me = () => authDb.$setAuth({ id, email: `${id}@test.local`, role: null, permissions: [] });
 
 beforeAll(async () => {
   await db.user.create({ data: { id, email: `${id}@test.local`, name: "Eve" } });

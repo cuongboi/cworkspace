@@ -39,4 +39,9 @@ export type DbExecutor = Database | DatabaseTransaction;
 export type AuthDatabase = typeof authDb;
 
 /** Shape bound to `auth()` in schema.zmodel policies (`email` is used by the Invitation rule). */
-export type AuthContext = { id: string; email: string; role: string | null };
+export type AuthContext = {
+  id: string;
+  email: string;
+  role: string | null;
+  permissions: { model: string; actions: string[] }[];
+};

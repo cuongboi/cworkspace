@@ -25,7 +25,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip"
-import { useOrg } from "@/hooks/use-org"
+import { useApp } from "@/hooks/use-app"
 import { toPlainText } from "@/lib/mentions"
 import { useDbQuery } from "@/lib/query"
 import {
@@ -41,12 +41,11 @@ import { NewConversationDialog } from "./new-conversation-dialog"
 import { ScrollArea } from "@/components/ui/scroll-area"
 
 export function ConversationList({ activeId }: { activeId?: string }) {
-  const { org, me } = useOrg()
+  const { me } = useApp()
   const [q, setQ] = useState("")
   const [viewport, setViewport] = useState<HTMLDivElement | null>(null)
-  const { data, isPending, error } = useDbQuery(
-    conversationListKey(org.id),
-    () => fetchConversationList(org.id, me.id)
+  const { data, isPending, error } = useDbQuery(conversationListKey(), () =>
+    fetchConversationList(me.id)
   )
 
   const term = q.trim().toLowerCase()
@@ -201,7 +200,7 @@ function ConversationRow({
   title: string
   active: boolean
 }) {
-  const { me, href } = useOrg()
+  const { me } = useApp()
   const { conversation } = item
   const last = conversation.messages[0]
   const unread = Boolean(
@@ -235,7 +234,7 @@ function ConversationRow({
 
   return (
     <Link
-      to={href(`/chat/${conversation.id}`)}
+      to={`/chat/${conversation.id}`}
       aria-current={active ? "page" : undefined}
       className={cn(
         "flex items-center gap-3 rounded-lg px-2 py-2 transition-colors outline-none hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring",

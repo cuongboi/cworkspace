@@ -27,7 +27,7 @@ export const PRIVACY_LABEL = {
 } as const
 
 export const PRIVACY_DESCRIPTION = {
-  PUBLIC: "Anyone in the organization can see posts and join.",
+  PUBLIC: "Anyone in the company can see posts and join.",
   CLOSED:
     "Anyone can find the group and see who's in it. Only members see posts; joining needs approval.",
   SECRET:

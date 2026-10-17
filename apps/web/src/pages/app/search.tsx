@@ -28,7 +28,7 @@ import {
   ItemTitle,
 } from "@/components/ui/item"
 import { Skeleton } from "@/components/ui/skeleton"
-import { useOrg } from "@/hooks/use-org"
+import { useApp } from "@/hooks/use-app"
 import { db } from "@/lib/api-client"
 import { useDbQuery } from "@/lib/query"
 
@@ -54,7 +54,7 @@ const SearchPage = () => {
             </EmptyMedia>
             <EmptyTitle>Search your workplace</EmptyTitle>
             <EmptyDescription>
-              Find people, groups and posts across your organization.
+              Find people, groups and posts across the company.
             </EmptyDescription>
           </EmptyHeader>
         </Empty>
@@ -65,14 +65,11 @@ const SearchPage = () => {
 
 function SearchBox({ initial }: { initial: string }) {
   const navigate = useNavigate()
-  const { href } = useOrg()
   const [value, setValue] = useState(initial)
   const submit = (e: FormEvent) => {
     e.preventDefault()
     const next = value.trim()
-    void navigate(
-      href(next ? `/search?q=${encodeURIComponent(next)}` : "/search")
-    )
+    void navigate(next ? `/search?q=${encodeURIComponent(next)}` : "/search")
   }
   return (
     <search>
@@ -142,13 +139,11 @@ function NoResults({ children }: { children: ReactNode }) {
 }
 
 function PeopleResults({ q }: { q: string }) {
-  const { org, href } = useOrg()
   const { data, isPending } = useDbQuery(
-    ["user", "findMany", "search", org.id, q],
+    ["user", "findMany", "search", q],
     () =>
       db.user.findMany({
         where: {
-          members: { some: { organizationId: org.id } },
           OR: [
             { name: { contains: q, mode: "insensitive" } },
             { title: { contains: q, mode: "insensitive" } },
@@ -176,7 +171,7 @@ function PeopleResults({ q }: { q: string }) {
         <ItemGroup>
           {data.map((p) => (
             <Item key={p.id} size="sm" asChild>
-              <Link to={href(`/people/${p.id}`)}>
+              <Link to={`/people/${p.id}`}>
                 <ItemMedia>
                   <UserAvatar user={p} presence />
                 </ItemMedia>
@@ -198,13 +193,12 @@ function PeopleResults({ q }: { q: string }) {
 }
 
 function GroupResults({ q }: { q: string }) {
-  const { org, me, href } = useOrg()
+  const { me } = useApp()
   const { data, isPending } = useDbQuery(
-    ["group", "findMany", "search", org.id, q, me.id],
+    ["group", "findMany", "search", q, me.id],
     () =>
       db.group.findMany({
         where: {
-          organizationId: org.id,
           OR: [
             { name: { contains: q, mode: "insensitive" } },
             { description: { contains: q, mode: "insensitive" } },
@@ -233,10 +227,7 @@ function GroupResults({ q }: { q: string }) {
               </ItemMedia>
               <ItemContent>
                 <ItemTitle>
-                  <Link
-                    to={href(`/groups/${g.slug}`)}
-                    className="hover:underline"
-                  >
+                  <Link to={`/groups/${g.slug}`} className="hover:underline">
                     {g.name}
                   </Link>
                 </ItemTitle>
@@ -262,13 +253,12 @@ function GroupResults({ q }: { q: string }) {
 }
 
 function PostResults({ q }: { q: string }) {
-  const { org, me } = useOrg()
+  const { me } = useApp()
   const { data, isPending } = useDbQuery(
-    ["post", "findMany", "search", org.id, q, me.id],
+    ["post", "findMany", "search", q, me.id],
     () =>
       findPosts(me.id, {
         where: {
-          group: { organizationId: org.id },
           content: { contains: q, mode: "insensitive" },
         },
         take: 20,

@@ -8,10 +8,12 @@ plugin policy {
 }
 
 // Policy conventions (see AGENTS.md):
-// - Top-level tenant entities (Group, Conversation, Event, Call, Attachment, Notification) carry
-//   `organizationId` and the tenant guard `@@deny('all', !(organization.members?[userId == auth().id]))`.
-// - Child rows inherit tenancy and visibility from their parent through `check(parent)`.
-// - Rows never move between parents/tenants: `@@deny('post-update', x != before().x)`.
+// - Single-company instance: top-level entities (Group, Conversation, Event, Call, Attachment,
+//   Notification) deny anonymous access with `@@deny('all', auth() == null)`.
+// - Instance admins (`User.role == 'admin'`) and RBAC grants (`User.permissions`) override
+//   moderation rules: `auth().role == 'admin' || auth().permissions?[model == currentModel() && ...]`.
+// - Child rows inherit visibility from their parent through `check(parent)`.
+// - Rows never move between parents: `@@deny('post-update', x != before().x)`.
 //   `before()` values are cast to text, so only use it on String fields; make enum/boolean/number
 //   fields immutable with `@deny('update', true)` instead.
 
@@ -45,8 +47,7 @@ model User {
     updatedAt               DateTime            @default(now()) @updatedAt
     sessions                Session[]
     accounts                Account[]
-    members                 Member[]
-    invitations             Invitation[]
+    invitationsSent         Invitation[]
     groupsCreated           Group[]             @relation('GroupCreator')
     groupMemberships        GroupMember[]
     posts                   Post[]
@@ -68,9 +69,8 @@ model User {
     wikiPagesCreated        WikiPage[]
     wikiRevisions           WikiRevision[]
 
-    // yourself, and anyone who shares an organization with you
-    @@allow('read', id == auth().id)
-    @@allow('read', members?[organization.members?[userId == auth().id]])
+    // the company directory: every signed-in user
+    @@allow('read', auth() != null)
     @@allow('update', id == auth().id)
     @@map('user')
 }
@@ -85,7 +85,6 @@ model Session {
     userAgent            String?
     userId               String
     user                 User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-    activeOrganizationId String?
     impersonatedBy       String?
 
     // managed by better-auth through the unscoped client only
@@ -141,79 +140,28 @@ model Jwks {
     @@map('jwks')
 }
 
-model Organization {
-    id            String             @id
-    name          String
-    slug          String             @unique
-    logo          String?
-    createdAt     DateTime
-    metadata      String?
-    members       Member[]
-    permissions   MemberPermission[]
-    invitations   Invitation[]
-    groups        Group[]
-    conversations Conversation[]
-    events        Event[]
-    calls         Call[]
-    attachments   Attachment[]
-    notifications Notification[]
-
-    // mutate via authClient.organization.*; members can read
-    @@allow('read', members?[userId == auth().id])
-    @@map('organization')
+enum InvitationStatus {
+    PENDING
+    ACCEPTED
+    CANCELED
 }
 
-model Member {
-    id             String            @id
-    organizationId String
-    organization   Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-    userId         String
-    user           User              @relation(fields: [userId], references: [id], onDelete: Cascade)
-    role           String            @default('member')
-    createdAt      DateTime
-    permissionId   String?
-    permissions    MemberPermission? @relation(fields: [permissionId], references: [id], onDelete: Cascade)
-
-    // mutate via authClient.organization.*; members of the same org can read
-    @@allow('read', organization.members?[userId == auth().id])
-
-    // every tenant policy checks membership: keep this lookup indexed
-    @@index([organizationId, userId])
-    @@index([userId])
-    @@map('member')
-}
-
+// admin email invites; written by the server only (src/routes/invitations.ts, sign-up hook)
 model Invitation {
-    id             String       @id
-    organizationId String
-    organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-    email          String
-    role           String?
-    status         String       @default('pending')
-    expiresAt      DateTime
-    createdAt      DateTime     @default(now())
-    inviterId      String
-    user           User         @relation(fields: [inviterId], references: [id], onDelete: Cascade)
+    id          String           @id @default(cuid())
+    email       String
+    // instance role granted on sign-up: 'user' | 'admin'
+    role        String           @default('user')
+    status      InvitationStatus @default(PENDING)
+    expiresAt   DateTime
+    invitedById String
+    invitedBy   User             @relation(fields: [invitedById], references: [id], onDelete: Cascade)
+    createdAt   DateTime         @default(now())
 
-    // mutate via authClient.organization.*; org owners/admins and the invitee can read
-    @@allow('read', organization.members?[userId == auth().id && role in ['owner', 'admin']])
-    @@allow('read', email == auth().email)
+    @@allow('read', auth().role == 'admin' || email == auth().email)
+
+    @@index([email, status])
     @@map('invitation')
-}
-
-model MemberPermission {
-    id             String           @id
-    name           String
-    permissions    PermissionType[] @json
-    organization   Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-    organizationId String
-    createdAt      DateTime         @default(now())
-    updatedAt      DateTime         @default(now()) @updatedAt
-    members        Member[]
-
-    // custom permissions are managed server-side (Phase 8); members can read
-    @@allow('read', organization.members?[userId == auth().id])
-    @@map('member_permissions')
 }
 
 // ───────────────────────────── groups ─────────────────────────────
@@ -225,8 +173,8 @@ enum WikiEditPolicy {
 }
 
 enum GroupPrivacy {
-    PUBLIC  // anyone in the org can see the group and its posts, and join
-    CLOSED  // anyone in the org can see the group; posts are members-only; joining needs approval
+    PUBLIC  // anyone in the company can see the group and its posts, and join
+    CLOSED  // anyone in the company can see the group; posts are members-only; joining needs approval
     SECRET  // only members can see the group
 }
 
@@ -243,14 +191,12 @@ enum MembershipStatus {
 
 model Group {
     id             String        @id @default(cuid())
-    organizationId String
-    organization   Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
     name           String
-    slug           String
+    slug           String        @unique
     description    String?
     coverUrl       String?
     privacy        GroupPrivacy  @default(PUBLIC)
-    // the org-wide "All company" group: every member belongs to it, it cannot be deleted
+    // the "All company" group: every user belongs to it, it cannot be deleted
     isDefault      Boolean       @default(false) @deny('update', true)
     createdById    String        @default(auth().id)
     createdBy      User          @relation('GroupCreator', fields: [createdById], references: [id], onDelete: Cascade)
@@ -265,17 +211,13 @@ model Group {
     wikiPages      WikiPage[]
     wikiEditPolicy WikiEditPolicy @default(MEMBERS)
 
-    @@deny('all', !(organization.members?[userId == auth().id]))
+    @@deny('all', auth() == null)
     @@allow('read', privacy != SECRET || members?[userId == auth().id && status == ACTIVE])
     @@allow('create', createdById == auth().id && !isDefault)
-    @@allow('update', members?[userId == auth().id && status == ACTIVE && role == ADMIN])
-    @@allow('update', organization.members?[userId == auth().id && role in ['owner', 'admin']])
-    @@allow('delete', !isDefault && members?[userId == auth().id && status == ACTIVE && role == ADMIN])
-    @@allow('delete', !isDefault && organization.members?[userId == auth().id && role in ['owner', 'admin']])
-    @@deny('post-update', organizationId != before().organizationId || createdById != before().createdById)
+    @@allow('update', members?[userId == auth().id && status == ACTIVE && role == ADMIN] || (auth().role == 'admin' || auth().permissions?[model == currentModel() && currentOperation() in actions]))
+    @@allow('delete', !isDefault && (members?[userId == auth().id && status == ACTIVE && role == ADMIN] || (auth().role == 'admin' || auth().permissions?[model == currentModel() && currentOperation() in actions])))
+    @@deny('post-update', createdById != before().createdById)
 
-    @@unique([organizationId, slug])
-    @@index([organizationId])
     @@map('group')
 }
 
@@ -290,8 +232,6 @@ model GroupMember {
     createdAt DateTime         @default(now())
 
     @@allow('read', check(group, 'read'))
-    // the member must belong to the group's organization
-    @@deny('create', !(user.members?[organizationId == this.group.organizationId]))
     // creator bootstraps the group with themself as admin
     @@allow('create', userId == auth().id && group.createdById == auth().id)
     // self-join: PUBLIC → ACTIVE member, CLOSED → PENDING request (default group is joined server-side)
@@ -299,12 +239,9 @@ model GroupMember {
     // group admins/moderators add people
     @@allow('create', group.members?[userId == auth().id && status == ACTIVE && role in [ADMIN, MODERATOR]])
     // group admins approve requests and change roles
-    @@allow('update', group.members?[userId == auth().id && status == ACTIVE && role == ADMIN])
-    @@allow('update', group.organization.members?[userId == auth().id && role in ['owner', 'admin']])
-    // leave, or be removed by a group admin/moderator or an org admin (nobody leaves the default group)
-    @@allow('delete', userId == auth().id && !group.isDefault)
-    @@allow('delete', !group.isDefault && group.members?[userId == auth().id && status == ACTIVE && role in [ADMIN, MODERATOR]])
-    @@allow('delete', !group.isDefault && group.organization.members?[userId == auth().id && role in ['owner', 'admin']])
+    @@allow('update', group.members?[userId == auth().id && status == ACTIVE && role == ADMIN] || (auth().role == 'admin' || auth().permissions?[model == currentModel() && currentOperation() in actions]))
+    // leave, or be removed by a group admin/moderator or an instance admin (nobody leaves the default group)
+    @@allow('delete', !group.isDefault && (userId == auth().id || group.members?[userId == auth().id && status == ACTIVE && role in [ADMIN, MODERATOR]] || (auth().role == 'admin' || auth().permissions?[model == currentModel() && currentOperation() in actions])))
     @@deny('post-update', groupId != before().groupId || userId != before().userId)
 
     @@unique([groupId, userId])
@@ -352,8 +289,7 @@ model Post {
     @@allow('read', check(group, 'read') && (group.privacy == PUBLIC || group.members?[userId == auth().id && status == ACTIVE]))
     @@allow('create', authorId == auth().id && group.members?[userId == auth().id && status == ACTIVE])
     @@allow('update', authorId == auth().id)
-    @@allow('update,delete', group.members?[userId == auth().id && status == ACTIVE && role in [ADMIN, MODERATOR]])
-    @@allow('update,delete', group.organization.members?[userId == auth().id && role in ['owner', 'admin']])
+    @@allow('update,delete', group.members?[userId == auth().id && status == ACTIVE && role in [ADMIN, MODERATOR]] || (auth().role == 'admin' || auth().permissions?[model == currentModel() && currentOperation() in actions]))
     @@allow('delete', authorId == auth().id)
     @@deny('post-update', groupId != before().groupId || authorId != before().authorId)
 
@@ -485,19 +421,17 @@ model PollVote {
 
 model Attachment {
     id             String        @id @default(cuid())
-    organizationId String
-    organization   Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
     uploaderId     String        @default(auth().id)
     uploader       User          @relation(fields: [uploaderId], references: [id], onDelete: Cascade)
-    // object key in the S3 bucket: org/{organizationId}/{id}/{name}
+    // object key in the S3 bucket: files/{id}/{name}
     key            String        @unique
     name           String
     mimeType       String
     size           Int           @deny('update', true)
     width          Int?
     height         Int?
-    // avatars, group covers: readable by everyone in the organization
-    orgVisible     Boolean       @default(false) @deny('update', true)
+    // avatars, group covers: readable by every signed-in user
+    isPublic       Boolean       @default(false) @deny('update', true)
     postId         String?
     post           Post?         @relation(fields: [postId], references: [id], onDelete: Cascade)
     commentId      String?
@@ -506,11 +440,11 @@ model Attachment {
     message        Message?      @relation(fields: [messageId], references: [id], onDelete: Cascade)
     createdAt      DateTime      @default(now())
 
-    @@deny('all', !(organization.members?[userId == auth().id]))
-    @@allow('read', uploaderId == auth().id || orgVisible || check(post, 'read') || check(comment, 'read') || check(message, 'read'))
+    @@deny('all', auth() == null)
+    @@allow('read', uploaderId == auth().id || isPublic || check(post, 'read') || check(comment, 'read') || check(message, 'read'))
     // created by POST /api/uploads; the uploader attaches it to their own post/comment/message
     @@allow('create,update,delete', uploaderId == auth().id)
-    @@deny('post-update', organizationId != before().organizationId || uploaderId != before().uploaderId || key != before().key || mimeType != before().mimeType)
+    @@deny('post-update', uploaderId != before().uploaderId || key != before().key || mimeType != before().mimeType)
 
     @@index([postId])
     @@index([commentId])
@@ -538,11 +472,9 @@ enum MessageType {
 
 model Conversation {
     id             String               @id @default(cuid())
-    organizationId String
-    organization   Organization         @relation(fields: [organizationId], references: [id], onDelete: Cascade)
     type           ConversationType     @default(GROUP) @deny('update', true)
     title          String?
-    // DIRECT only: `${organizationId}:${sortedUserIds.join(':')}`, dedupes 1:1 conversations
+    // DIRECT only: `sortedUserIds.join(':')`, dedupes 1:1 conversations
     directKey      String?              @unique
     createdById    String               @default(auth().id)
     createdBy      User                 @relation(fields: [createdById], references: [id], onDelete: Cascade)
@@ -555,18 +487,18 @@ model Conversation {
     groupId        String?              @unique
     group          Group?               @relation(fields: [groupId], references: [id], onDelete: Cascade)
 
-    @@deny('all', !(organization.members?[userId == auth().id]))
+    @@deny('all', auth() == null)
     @@allow('read', groupId == null && members?[userId == auth().id])
     // group chats: grounded in the group, not the mirrored rows, so a lagging mirror never grants access
     @@allow('read', groupId != null && group.members?[userId == auth().id && status == ACTIVE])
     @@allow('create', createdById == auth().id)
     @@allow('update', type == GROUP && members?[userId == auth().id])
     @@allow('delete', type == GROUP && members?[userId == auth().id && role == ADMIN])
-    @@deny('post-update', organizationId != before().organizationId || directKey != before().directKey || createdById != before().createdById || groupId != before().groupId)
+    @@deny('post-update', directKey != before().directKey || createdById != before().createdById || groupId != before().groupId)
     // group chats are created and maintained by the server only; the title follows the group
     @@deny('create,update,delete', groupId != null)
 
-    @@index([organizationId, lastMessageAt])
+    @@index([lastMessageAt])
     @@map('conversation')
 }
 
@@ -583,8 +515,6 @@ model ConversationMember {
     joinedAt       DateTime         @default(now())
 
     @@allow('read', check(conversation, 'read'))
-    // the member must belong to the conversation's organization
-    @@deny('create', !(user.members?[organizationId == this.conversation.organizationId]))
     @@allow('create', conversation.createdById == auth().id)
     @@allow('create', conversation.type == GROUP && conversation.members?[userId == auth().id && role == ADMIN])
     // own read state / mute; admins manage roles
@@ -664,8 +594,6 @@ enum NotificationType {
 
 model Notification {
     id             String           @id @default(cuid())
-    organizationId String
-    organization   Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
     userId         String
     user           User             @relation('NotificationRecipient', fields: [userId], references: [id], onDelete: Cascade)
     actorId        String?
@@ -686,10 +614,11 @@ model Notification {
     createdAt      DateTime         @default(now())
 
     // written only by the server (realtime plugin); recipients read, mark read, dismiss
+    @@deny('all', auth() == null)
     @@allow('read,update,delete', userId == auth().id)
-    @@deny('post-update', userId != before().userId || organizationId != before().organizationId || actorId != before().actorId)
+    @@deny('post-update', userId != before().userId || actorId != before().actorId)
 
-    @@index([userId, organizationId, readAt, createdAt])
+    @@index([userId, readAt, createdAt])
     @@map('notification')
 }
 
@@ -698,7 +627,7 @@ model Notification {
 enum EventType {
     MEETING        // has attendees; may have a video call
     EVENT          // group/company event with RSVP
-    OUT_OF_OFFICE  // visible to the whole org
+    OUT_OF_OFFICE  // visible to the whole company
     REMINDER       // personal
 }
 
@@ -711,8 +640,6 @@ enum Rsvp {
 
 model Event {
     id             String          @id @default(cuid())
-    organizationId String
-    organization   Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
     groupId        String?         @deny('update', true)
     group          Group?          @relation(fields: [groupId], references: [id], onDelete: Cascade)
     // group events are announced as a Post(type EVENT)
@@ -737,19 +664,19 @@ model Event {
     calls          Call[]
     notifications  Notification[]
 
-    @@deny('all', !(organization.members?[userId == auth().id]))
+    @@deny('all', auth() == null)
     @@allow('read', creatorId == auth().id || attendees?[userId == auth().id] || type == OUT_OF_OFFICE)
-    // like posts: PUBLIC group events are visible to the org, CLOSED/SECRET ones to members only
+    // like posts: PUBLIC group events are visible to everyone, CLOSED/SECRET ones to members only
     @@allow('read', groupId != null && check(group, 'read') && (group.privacy == PUBLIC || group.members?[userId == auth().id && status == ACTIVE]))
     @@allow('create', creatorId == auth().id && (groupId == null || group.members?[userId == auth().id && status == ACTIVE]))
     @@allow('update,delete', creatorId == auth().id)
     // group moderation
     @@allow('update,delete', groupId != null && group.members?[userId == auth().id && status == ACTIVE && role in [ADMIN, MODERATOR]])
-    @@deny('post-update', organizationId != before().organizationId || creatorId != before().creatorId)
+    @@deny('post-update', creatorId != before().creatorId)
     @@deny('post-update', endAt < startAt)
     @@deny('create', endAt < startAt)
 
-    @@index([organizationId, startAt])
+    @@index([startAt])
     @@index([groupId])
     @@map('event')
 }
@@ -764,7 +691,6 @@ model EventAttendee {
     createdAt DateTime @default(now())
 
     @@allow('read', check(event, 'read'))
-    @@deny('create', !(user.members?[organizationId == this.event.organizationId]))
     // the creator invites; anyone who can see a group event can RSVP themself
     @@allow('create', event.creatorId == auth().id)
     @@allow('create', userId == auth().id && check(event, 'read'))
@@ -792,8 +718,6 @@ enum CallStatus {
 
 model Call {
     id             String            @id @default(cuid())
-    organizationId String
-    organization   Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
     conversationId String?
     conversation   Conversation?     @relation(fields: [conversationId], references: [id], onDelete: Cascade)
     eventId        String?
@@ -807,7 +731,7 @@ model Call {
     participants   CallParticipant[]
 
     // written only by the socket server (src/server/socket/calls.ts) after its own checks
-    @@deny('all', !(organization.members?[userId == auth().id]))
+    @@deny('all', auth() == null)
     @@allow('read', participants?[userId == auth().id] || check(conversation, 'read') || check(event, 'read'))
 
     @@index([conversationId])
@@ -853,10 +777,8 @@ model WikiPage {
     revisions   WikiRevision[]
 
     @@allow('read', check(group, 'read') && (group.privacy == PUBLIC || group.members?[userId == auth().id && status == ACTIVE]))
-    @@allow('create,update', group.members?[userId == auth().id && status == ACTIVE && (group.wikiEditPolicy == MEMBERS || role in [ADMIN, MODERATOR])])
-    @@allow('create,update', group.organization.members?[userId == auth().id && role in ['owner', 'admin']])
-    @@allow('delete', group.members?[userId == auth().id && status == ACTIVE && role in [ADMIN, MODERATOR]])
-    @@allow('delete', group.organization.members?[userId == auth().id && role in ['owner', 'admin']])
+    @@allow('create,update', group.members?[userId == auth().id && status == ACTIVE && (group.wikiEditPolicy == MEMBERS || role in [ADMIN, MODERATOR])] || (auth().role == 'admin' || auth().permissions?[model == currentModel() && currentOperation() in actions]))
+    @@allow('delete', group.members?[userId == auth().id && status == ACTIVE && role in [ADMIN, MODERATOR]] || (auth().role == 'admin' || auth().permissions?[model == currentModel() && currentOperation() in actions]))
     @@allow('delete', createdById == auth().id && group.members?[userId == auth().id && status == ACTIVE && group.wikiEditPolicy == MEMBERS])
     @@deny('create', createdById != auth().id)
     // the tree never spans groups (cycles are prevented by POST /api/groups/:id/wiki/:pageId/move)

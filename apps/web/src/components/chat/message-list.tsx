@@ -8,19 +8,13 @@ import {
   isYesterday,
 } from "date-fns"
 import { ArrowDownIcon } from "lucide-react"
-import {
-  useEffect,
-  useLayoutEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react"
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import { Marker, MarkerContent } from "@/components/ui/marker"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Spinner } from "@/components/ui/spinner"
-import { useOrg } from "@/hooks/use-org"
+import { useApp } from "@/hooks/use-app"
 import { db } from "@/lib/api-client"
 import { useDbInfinite } from "@/lib/query"
 import {
@@ -32,7 +26,10 @@ import {
   type ThreadMember,
 } from "./chat-data"
 import { type MessageActions, MessageRow } from "./message-row"
-import { type ThreadScrollHandle, useRegisterThreadScroll } from "./thread-scroll"
+import {
+  type ThreadScrollHandle,
+  useRegisterThreadScroll,
+} from "./thread-scroll"
 
 const GROUP_WINDOW_MIN = 5
 const TIME_GAP_MIN = 60
@@ -57,7 +54,7 @@ type Props = {
 }
 
 export function MessageList({ conversation, members, actions }: Props) {
-  const { me } = useOrg()
+  const { me } = useApp()
   const {
     data,
     isPending,
@@ -114,7 +111,7 @@ function Thread({
   loadingOlder: boolean
   loadOlder: () => void
 }) {
-  const { me } = useOrg()
+  const { me } = useApp()
   const [viewport, setViewport] = useState<HTMLDivElement | null>(null)
   const [ready, setReady] = useState(false)
   const [highlight, setHighlight] = useState<string | null>(null)
@@ -230,7 +227,7 @@ function Thread({
         role="log"
         aria-label="Messages"
         className={cn(
-          "flex size-full min-h-0 min-w-0 flex-col overflow-y-auto overscroll-contain scrollbar-thin scrollbar-gutter-stable [overflow-anchor:none]",
+          "flex size-full min-h-0 min-w-0 scrollbar-thin scrollbar-gutter-stable flex-col overflow-y-auto overscroll-contain [overflow-anchor:none]",
           !ready && "invisible"
         )}
         onScroll={(e) => {
@@ -266,8 +263,7 @@ function Thread({
               const gap =
                 !newDay &&
                 prev &&
-                differenceInMinutes(m.createdAt, prev.createdAt) >=
-                  TIME_GAP_MIN
+                differenceInMinutes(m.createdAt, prev.createdAt) >= TIME_GAP_MIN
               const first = !sameGroup(prev, m)
               return (
                 <div
@@ -341,7 +337,7 @@ function useMarkRead(
   myLastReadAt: Date | undefined,
   visibleEnd: number
 ) {
-  const { me } = useOrg()
+  const { me } = useApp()
   const [focused, setFocused] = useState(false)
   const markedRef = useRef<string | null>(null)
 

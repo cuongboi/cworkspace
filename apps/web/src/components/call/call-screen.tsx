@@ -32,7 +32,7 @@ import {
 } from "@/components/ui/sheet"
 import { Spinner } from "@/components/ui/spinner"
 import { useIsMobile } from "@/hooks/use-mobile"
-import { useOrg } from "@/hooks/use-org"
+import { useApp } from "@/hooks/use-app"
 import { useSocketEvent } from "@/hooks/use-socket"
 import { db } from "@/lib/api-client"
 import { useDbQuery } from "@/lib/query"
@@ -56,7 +56,7 @@ import { ScrollArea } from "@/components/ui/scroll-area"
  * Render it with `key={callId}` so a different call gets a fresh session.
  */
 export function CallScreen({ callId }: { callId: string }) {
-  const { me } = useOrg()
+  const { me } = useApp()
   const info = useDbQuery(["call", "findUnique", callId, "lobby"], () =>
     db.call.findUnique({
       where: { id: callId },
@@ -114,10 +114,9 @@ export function CallScreen({ callId }: { callId: string }) {
 
 function useGoBack() {
   const navigate = useNavigate()
-  const { href } = useOrg()
   return () => {
     if (window.history.length > 1) navigate(-1)
-    else void navigate(href("/chat"))
+    else void navigate("/chat")
   }
 }
 

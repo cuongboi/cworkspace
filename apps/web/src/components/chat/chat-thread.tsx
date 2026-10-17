@@ -37,7 +37,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip"
 import { useIsMobile } from "@/hooks/use-mobile"
-import { useOrg } from "@/hooks/use-org"
+import { useApp } from "@/hooks/use-app"
 import { useIsOnline } from "@/hooks/use-presence"
 import { useSocketEvent } from "@/hooks/use-socket"
 import { useUploads } from "@/hooks/use-uploads"
@@ -83,7 +83,6 @@ export function ChatThread({
   variant?: ThreadVariant
   actions?: ReactNode
 }) {
-  const { href } = useOrg()
   useLiveMessages(conversationId)
   const conversation = useDbQuery(conversationKey(conversationId), () =>
     fetchConversation(conversationId)
@@ -108,7 +107,7 @@ export function ChatThread({
         {variant === "page" ? (
           <EmptyContent>
             <Button asChild variant="secondary">
-              <Link to={href("/chat")}>Back to chats</Link>
+              <Link to={"/chat"}>Back to chats</Link>
             </Button>
           </EmptyContent>
         ) : null}
@@ -139,9 +138,9 @@ function ThreadView({
   variant: ThreadVariant
   actions?: ReactNode
 }) {
-  const { org, me } = useOrg()
+  const { me } = useApp()
   const qc = useQueryClient()
-  const uploads = useUploads(org.id)
+  const uploads = useUploads()
   const [mode, setMode] = useState<ComposerMode | null>(null)
   const [infoOpen, setInfoOpen] = useState(false)
   const [toDelete, setToDelete] = useState<ChatMessage | null>(null)
@@ -318,7 +317,7 @@ function ThreadHeader({
   actions?: ReactNode
   onOpenInfo: () => void
 }) {
-  const { me, href } = useOrg()
+  const { me } = useApp()
   const isMobile = useIsMobile()
   const { startCall } = useCalls()
   const [calling, setCalling] = useState<CallKind | null>(null)
@@ -378,7 +377,7 @@ function ThreadHeader({
     <header className="flex h-16 shrink-0 items-center gap-2 border-b px-2 md:px-4">
       {isMobile ? (
         <Button asChild variant="ghost" size="icon" className="rounded-full">
-          <Link to={href("/chat")} aria-label="Back to chats">
+          <Link to={"/chat"} aria-label="Back to chats">
             <ArrowLeftIcon />
           </Link>
         </Button>
@@ -455,7 +454,7 @@ function ThreadHeader({
 
 /** Who is typing in this conversation (entries expire 3s after the last signal). */
 function useTypingUsers(conversationId: string) {
-  const { me } = useOrg()
+  const { me } = useApp()
   const [typing, setTyping] = useState<
     Record<string, { name: string; until: number }>
   >({})

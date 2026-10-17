@@ -12,7 +12,7 @@ import {
   EmptyMedia,
   EmptyTitle,
 } from "@/components/ui/empty"
-import { useOrg } from "@/hooks/use-org"
+import { useApp } from "@/hooks/use-app"
 import { db } from "@/lib/api-client"
 import { useDbQuery } from "@/lib/query"
 
@@ -20,14 +20,14 @@ import { useDbQuery } from "@/lib/query"
 const PostPage = () => {
   const params = useParams()
   const navigate = useNavigate()
-  const { org, me, href } = useOrg()
+  const { me } = useApp()
   const postId = params.postId ?? ""
 
   const { data: post, isPending } = useDbQuery(
     ["post", "findFirst", "permalink", postId, me.id],
     () =>
       db.post.findFirst({
-        where: { id: postId, group: { organizationId: org.id } },
+        where: { id: postId },
         include: postInclude(me.id),
       })
   )
@@ -39,7 +39,7 @@ const PostPage = () => {
         size="sm"
         className="self-start text-muted-foreground"
         onClick={() =>
-          window.history.length > 1 ? navigate(-1) : navigate(href("/"))
+          window.history.length > 1 ? navigate(-1) : navigate("/")
         }
       >
         <ArrowLeftIcon />
@@ -52,7 +52,7 @@ const PostPage = () => {
           post={post}
           commentsOpen
           onDeleted={() =>
-            void navigate(href(`/groups/${post.group.slug}`), { replace: true })
+            void navigate(`/groups/${post.group.slug}`, { replace: true })
           }
         />
       ) : (
@@ -68,7 +68,7 @@ const PostPage = () => {
           </EmptyHeader>
           <EmptyContent>
             <Button asChild variant="outline">
-              <Link to={href("/")}>Back to feed</Link>
+              <Link to={"/"}>Back to feed</Link>
             </Button>
           </EmptyContent>
         </Empty>

@@ -2,7 +2,6 @@ import type { JsonObject } from "@zenstackhq/orm";
 import type { NotificationType } from "../../zenstack/models";
 
 type NotificationInput = {
-  organizationId: string;
   userId: string;
   actorId?: string | null;
   type: NotificationType;

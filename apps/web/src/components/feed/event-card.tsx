@@ -14,7 +14,7 @@ import { useState } from "react"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import { useNow } from "@/hooks/use-now"
-import { useOrg } from "@/hooks/use-org"
+import { useApp } from "@/hooks/use-app"
 import { db } from "@/lib/api-client"
 import { useDbMutation } from "@/lib/query"
 import { Rsvp } from "@app/api/zenstack/models"
@@ -41,7 +41,7 @@ function timeRange(e: EventData) {
 
 /** Event announcement (Post type EVENT): date block, details and my RSVP. */
 export function EventCard({ event }: { event: EventData }) {
-  const { me, href } = useOrg()
+  const { me } = useApp()
   const serverRsvp =
     event.attendees.find((a) => a.userId === me.id)?.rsvp ?? null
   const [pending, setPending] = useState<Rsvp | null>(null)
@@ -136,7 +136,7 @@ export function EventCard({ event }: { event: EventData }) {
           </div>
         )}
         <Button asChild size="sm" variant="ghost" className="ml-auto">
-          <Link to={href(`/calendar?event=${event.id}`)}>
+          <Link to={`/calendar?event=${event.id}`}>
             <CalendarIcon />
             View in calendar
           </Link>
