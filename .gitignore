@@ -39,3 +39,8 @@ yarn-error.log*
 
 # Ignore frontend build folder
 apps/api/src/public
+
+# Claude flow
+.claude-flow
+
+server
