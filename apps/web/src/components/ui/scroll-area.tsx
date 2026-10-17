@@ -5,8 +5,15 @@ import { ScrollArea as ScrollAreaPrimitive } from "radix-ui"
 function ScrollArea({
   className,
   children,
+  orientation = "vertical",
+  viewportRef,
+  viewportClassName,
   ...props
-}: React.ComponentProps<typeof ScrollAreaPrimitive.Root>) {
+}: React.ComponentProps<typeof ScrollAreaPrimitive.Root> & {
+  orientation?: "vertical" | "horizontal" | "both"
+  viewportRef?: React.Ref<HTMLDivElement>
+  viewportClassName?: string
+}) {
   return (
     <ScrollAreaPrimitive.Root
       data-slot="scroll-area"
@@ -14,12 +21,20 @@ function ScrollArea({
       {...props}
     >
       <ScrollAreaPrimitive.Viewport
+        ref={viewportRef}
         data-slot="scroll-area-viewport"
-        className="size-full rounded-[inherit] transition-[color,box-shadow] outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-1"
+        className={cn(
+          "size-full rounded-[inherit] transition-[color,box-shadow] outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-1",
+          // Radix wraps content in a `display: table` div that grows to its
+          // content's width, which breaks `truncate` in vertical-only lists.
+          orientation === "vertical" && "[&>div]:block!",
+          viewportClassName
+        )}
       >
         {children}
       </ScrollAreaPrimitive.Viewport>
-      <ScrollBar />
+      {orientation !== "horizontal" && <ScrollBar />}
+      {orientation !== "vertical" && <ScrollBar orientation="horizontal" />}
       <ScrollAreaPrimitive.Corner />
     </ScrollAreaPrimitive.Root>
   )

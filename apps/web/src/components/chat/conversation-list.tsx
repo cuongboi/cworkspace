@@ -1,3 +1,4 @@
+import { useVirtualizer } from "@tanstack/react-virtual"
 import { cn } from "cn"
 import {
   BellOffIcon,
@@ -37,10 +38,12 @@ import {
 } from "./chat-data"
 import { ConversationAvatar } from "./conversation-avatar"
 import { NewConversationDialog } from "./new-conversation-dialog"
+import { ScrollArea } from "@/components/ui/scroll-area"
 
 export function ConversationList({ activeId }: { activeId?: string }) {
   const { org, me } = useOrg()
   const [q, setQ] = useState("")
+  const [viewport, setViewport] = useState<HTMLDivElement | null>(null)
   const { data, isPending, error } = useDbQuery(
     conversationListKey(org.id),
     () => fetchConversationList(org.id, me.id)
@@ -99,52 +102,93 @@ export function ConversationList({ activeId }: { activeId?: string }) {
         </div>
       </div>
 
-      <nav
-        aria-label="Conversations"
-        className="min-h-0 flex-1 overflow-y-auto px-2 pb-2"
-      >
-        {isPending ? (
-          <ListSkeleton />
-        ) : error ? (
-          <p className="px-3 py-6 text-center text-sm text-destructive">
-            Could not load conversations.
-          </p>
-        ) : rows.length === 0 ? (
-          <Empty className="border-0 py-10">
-            <EmptyHeader>
-              <EmptyMedia variant="icon">
-                <MessageCirclePlusIcon />
-              </EmptyMedia>
-              <EmptyTitle>No conversations yet</EmptyTitle>
-              <EmptyDescription>
-                Message a coworker or start a group chat.
-              </EmptyDescription>
-            </EmptyHeader>
-            <EmptyContent>
-              <NewConversationDialog>
-                <Button>New message</Button>
-              </NewConversationDialog>
-            </EmptyContent>
-          </Empty>
-        ) : filtered.length === 0 ? (
-          <p className="px-3 py-6 text-center text-sm text-muted-foreground">
-            No chats match “{q.trim()}”
-          </p>
-        ) : (
-          <ul className="flex flex-col gap-0.5">
-            {filtered.map(({ item, title }) => (
-              <li key={item.conversation.id}>
-                <ConversationRow
-                  item={item}
-                  title={title}
-                  active={item.conversation.id === activeId}
-                />
-              </li>
-            ))}
-          </ul>
-        )}
-      </nav>
+      <ScrollArea viewportRef={setViewport} className="min-h-0 flex-1">
+        <nav aria-label="Conversations" className="px-2 pb-2">
+          {isPending ? (
+            <ListSkeleton />
+          ) : error ? (
+            <p className="px-3 py-6 text-center text-sm text-destructive">
+              Could not load conversations.
+            </p>
+          ) : rows.length === 0 ? (
+            <Empty className="border-0 py-10">
+              <EmptyHeader>
+                <EmptyMedia variant="icon">
+                  <MessageCirclePlusIcon />
+                </EmptyMedia>
+                <EmptyTitle>No conversations yet</EmptyTitle>
+                <EmptyDescription>
+                  Message a coworker or start a group chat.
+                </EmptyDescription>
+              </EmptyHeader>
+              <EmptyContent>
+                <NewConversationDialog>
+                  <Button>New message</Button>
+                </NewConversationDialog>
+              </EmptyContent>
+            </Empty>
+          ) : filtered.length === 0 ? (
+            <p className="px-3 py-6 text-center text-sm text-muted-foreground">
+              No chats match “{q.trim()}”
+            </p>
+          ) : (
+            <VirtualConversationRows
+              rows={filtered}
+              activeId={activeId}
+              scrollElement={viewport}
+            />
+          )}
+        </nav>
+      </ScrollArea>
     </div>
+  )
+}
+
+function VirtualConversationRows({
+  rows,
+  activeId,
+  scrollElement,
+}: {
+  rows: { item: ConversationListItem; title: string }[]
+  activeId?: string
+  scrollElement: HTMLElement | null
+}) {
+  const virtualizer = useVirtualizer({
+    count: rows.length,
+    getScrollElement: () => scrollElement,
+    estimateSize: () => 56,
+    getItemKey: (i) => rows[i]?.item.conversation.id ?? i,
+    gap: 2,
+    overscan: 8,
+  })
+
+  return (
+    <ul
+      className="relative w-full"
+      style={{ height: virtualizer.getTotalSize() }}
+    >
+      {virtualizer.getVirtualItems().map((v) => {
+        const row = rows[v.index]
+        if (!row) return null
+        return (
+          <li
+            key={v.key}
+            data-index={v.index}
+            ref={virtualizer.measureElement}
+            aria-setsize={rows.length}
+            aria-posinset={v.index + 1}
+            className="absolute inset-x-0 top-0"
+            style={{ transform: `translateY(${v.start}px)` }}
+          >
+            <ConversationRow
+              item={row.item}
+              title={row.title}
+              active={row.item.conversation.id === activeId}
+            />
+          </li>
+        )
+      })}
+    </ul>
   )
 }
 
@@ -200,6 +244,7 @@ function ConversationRow({
     >
       <ConversationAvatar
         type={conversation.type}
+        group={conversation.group}
         members={conversation.members}
         meId={me.id}
         size="lg"

@@ -53,6 +53,7 @@ import {
 } from "./calendar-utils"
 import { EVENT_TYPE_STYLES } from "./event-colors"
 import { useCalendarEvent } from "./use-calendar-events"
+import { ScrollArea } from "@/components/ui/scroll-area"
 
 const RSVP_META: Record<
   Rsvp,
@@ -98,41 +99,48 @@ export function EventDetailsSheet({
 
   return (
     <Sheet open={Boolean(eventId)} onOpenChange={onOpenChange}>
-      <SheetContent className="w-full gap-0 overflow-y-auto sm:max-w-md">
-        {event ? (
-          <EventDetailsBody
-            event={event}
-            occurrence={occurrence}
-            onEdit={onEdit}
-            onClose={() => onOpenChange(false)}
-          />
-        ) : (
-          <>
-            <SheetHeader>
-              <SheetTitle>
+      <SheetContent className="w-full gap-0 sm:max-w-md">
+        <ScrollArea
+          className="min-h-0 flex-1"
+          viewportClassName="[&>div]:h-full"
+        >
+          <div className="flex min-h-full flex-col">
+            {event ? (
+              <EventDetailsBody
+                event={event}
+                occurrence={occurrence}
+                onEdit={onEdit}
+                onClose={() => onOpenChange(false)}
+              />
+            ) : (
+              <>
+                <SheetHeader>
+                  <SheetTitle>
+                    {isPending ? (
+                      <Skeleton className="h-6 w-48" />
+                    ) : (
+                      "Event not found"
+                    )}
+                  </SheetTitle>
+                  <SheetDescription>
+                    {isPending
+                      ? "Loading event…"
+                      : error
+                        ? error.message
+                        : "It was deleted, or you don't have access to it."}
+                  </SheetDescription>
+                </SheetHeader>
                 {isPending ? (
-                  <Skeleton className="h-6 w-48" />
-                ) : (
-                  "Event not found"
-                )}
-              </SheetTitle>
-              <SheetDescription>
-                {isPending
-                  ? "Loading event…"
-                  : error
-                    ? error.message
-                    : "It was deleted, or you don't have access to it."}
-              </SheetDescription>
-            </SheetHeader>
-            {isPending ? (
-              <div className="flex flex-col gap-3 p-4">
-                <Skeleton className="h-4 w-56" />
-                <Skeleton className="h-4 w-40" />
-                <Skeleton className="h-20 w-full" />
-              </div>
-            ) : null}
-          </>
-        )}
+                  <div className="flex flex-col gap-3 p-4">
+                    <Skeleton className="h-4 w-56" />
+                    <Skeleton className="h-4 w-40" />
+                    <Skeleton className="h-20 w-full" />
+                  </div>
+                ) : null}
+              </>
+            )}
+          </div>
+        </ScrollArea>
       </SheetContent>
     </Sheet>
   )

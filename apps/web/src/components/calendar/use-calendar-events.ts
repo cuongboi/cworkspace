@@ -5,11 +5,26 @@ import { type CalendarEvent, eventInclude } from "./calendar-utils"
 
 const PAGE = 100
 
-/** Events visible to me (policies decide) that may have an occurrence in [start, end]. */
-export function useCalendarEvents(start: Date, end: Date) {
+/**
+ * Events visible to me (policies decide) that may have an occurrence in [start, end];
+ * `groupId` narrows it to one group's calendar.
+ */
+export function useCalendarEvents(
+  start: Date,
+  end: Date,
+  { groupId }: { groupId?: string } = {}
+) {
   const { org } = useOrg()
   return useDbQuery(
-    ["event", "findMany", "calendar", org.id, start.getTime(), end.getTime()],
+    [
+      "event",
+      "findMany",
+      "calendar",
+      org.id,
+      groupId ?? "all",
+      start.getTime(),
+      end.getTime(),
+    ],
     async () => {
       // the API caps a page at 100 rows: walk the cursor (bounded) for busy calendars
       const all: CalendarEvent[] = []
@@ -18,6 +33,7 @@ export function useCalendarEvents(start: Date, end: Date) {
         const rows = await db.event.findMany({
           where: {
             organizationId: org.id,
+            ...(groupId ? { groupId } : {}),
             startAt: { lt: end },
             OR: [{ endAt: { gte: start } }, { rrule: { not: null } }],
           },

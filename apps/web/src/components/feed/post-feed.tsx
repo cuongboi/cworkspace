@@ -1,17 +1,24 @@
-import { type ReactNode, useEffect, useRef } from "react"
+import { useVirtualizer } from "@tanstack/react-virtual"
+import { type ReactNode, useEffect, useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Spinner } from "@/components/ui/spinner"
 import { useOrg } from "@/hooks/use-org"
+import { usePageScrollElement } from "@/hooks/use-page-scroll"
 import { useDbInfinite, useDbQuery } from "@/lib/query"
 import type { PostWhereInput } from "@app/api/zenstack/input"
 import { PostCard, PostSkeleton } from "./post-card"
 import { findPinnedPosts, findPosts } from "./post-query"
 
 const PAGE_SIZE = 10
+const POST_GAP = 16
+/** start fetching the next page while this many posts are still below the rendered window */
+const PREFETCH_ROWS = 3
 
 /**
- * Infinite list of posts. `scope` identifies the feed in the query key (keys start with "post" so
- * realtime events refresh it).
+ * Infinite, virtualized list of posts. `scope` identifies the feed in the query key (keys start
+ * with "post" so realtime events refresh it). It scrolls with the page (`PageScrollContext`), so
+ * only cards near the viewport are mounted: local card state (open comments, drafts) resets once
+ * a card scrolls far out of view.
  */
 export function PostFeed({
   scope,
@@ -51,21 +58,42 @@ export function PostFeed({
     () => findPinnedPosts(me.id, where),
     { enabled: pinnedFirst }
   )
-  const sentinel = useRef<HTMLDivElement>(null)
 
+  const posts = [
+    ...(pinnedFirst ? (pinned.data ?? []) : []),
+    ...(data?.pages.flat() ?? []),
+  ]
+
+  const scrollElement = usePageScrollElement()
+  const [list, setList] = useState<HTMLDivElement | null>(null)
+  const scrollMargin = useListOffset(list, scrollElement)
+  const virtualizer = useVirtualizer({
+    count: posts.length,
+    getScrollElement: () => scrollElement,
+    estimateSize: () => 360,
+    getItemKey: (i) => posts[i]?.id ?? i,
+    gap: POST_GAP,
+    overscan: 3,
+    scrollMargin,
+  })
+  const items = virtualizer.getVirtualItems()
+
+  const lastRendered = items.at(-1)?.index ?? -1
   useEffect(() => {
-    const el = sentinel.current
-    if (!el || !hasNextPage) return
-    const observer = new IntersectionObserver(
-      (entries) => {
-        if (entries.some((e) => e.isIntersecting) && !isFetchingNextPage)
-          void fetchNextPage()
-      },
-      { rootMargin: "600px 0px" }
+    if (
+      posts.length > 0 &&
+      lastRendered >= posts.length - PREFETCH_ROWS &&
+      hasNextPage &&
+      !isFetchingNextPage
     )
-    observer.observe(el)
-    return () => observer.disconnect()
-  }, [hasNextPage, isFetchingNextPage, fetchNextPage])
+      void fetchNextPage()
+  }, [
+    lastRendered,
+    posts.length,
+    hasNextPage,
+    isFetchingNextPage,
+    fetchNextPage,
+  ])
 
   if (isPending || (pinnedFirst && pinned.isPending)) {
     return (
@@ -90,18 +118,33 @@ export function PostFeed({
     )
   }
 
-  const posts = [
-    ...(pinnedFirst ? (pinned.data ?? []) : []),
-    ...data.pages.flat(),
-  ]
   if (posts.length === 0) return <>{empty}</>
 
   return (
     <div className="flex flex-col gap-4">
-      {posts.map((post) => (
-        <PostCard key={post.id} post={post} showGroup={showGroup} />
-      ))}
-      <div ref={sentinel} aria-hidden className="h-px" />
+      <div
+        ref={setList}
+        className="relative w-full"
+        style={{ height: virtualizer.getTotalSize() }}
+      >
+        {items.map((item) => {
+          const post = posts[item.index]
+          if (!post) return null
+          return (
+            <div
+              key={item.key}
+              data-index={item.index}
+              ref={virtualizer.measureElement}
+              className="absolute inset-x-0 top-0"
+              style={{
+                transform: `translateY(${item.start - virtualizer.options.scrollMargin}px)`,
+              }}
+            >
+              <PostCard post={post} showGroup={showGroup} />
+            </div>
+          )
+        })}
+      </div>
       {isFetchingNextPage ? (
         <div className="flex justify-center py-4">
           <Spinner className="size-5" />
@@ -121,4 +164,33 @@ export function PostFeed({
       )}
     </div>
   )
+}
+
+/**
+ * Distance from the top of the scroll content to the list (the virtualizer's `scrollMargin`).
+ * Content above the list (composer, group header, banners) changes size, so it is re-read
+ * whenever the scroll content resizes.
+ */
+function useListOffset(
+  list: HTMLElement | null,
+  scrollElement: HTMLElement | null
+) {
+  const [offset, setOffset] = useState(0)
+
+  useEffect(() => {
+    const content = scrollElement?.firstElementChild
+    if (!list || !scrollElement || !content) return
+    // fires once on observe, then on every resize
+    const observer = new ResizeObserver(() => {
+      const next =
+        list.getBoundingClientRect().top -
+        scrollElement.getBoundingClientRect().top +
+        scrollElement.scrollTop
+      setOffset((prev) => (Math.abs(prev - next) < 1 ? prev : next))
+    })
+    observer.observe(content)
+    return () => observer.disconnect()
+  }, [list, scrollElement])
+
+  return offset
 }

@@ -13,7 +13,7 @@
     "zen": "dotenv -e ../../.env -- zen",
     "db:generate": "bun run zen generate",
     "db:push": "bun run zen db push",
-    "build": "bun build ./src/index.ts --compile --minify --asset ./src/public --outfile ../../server",
+    "build": "bun build ./src/index.ts --compile --minify --asset ./src/public --outfile ../../run-server",
     "lint": "oxlint .",
     "lint:fix": "oxlint . --fix",
     "format": "oxfmt .",

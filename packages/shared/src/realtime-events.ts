@@ -45,8 +45,23 @@ export type CallSummary = {
   organizationId: string;
   conversationId: string | null;
   eventId: string | null;
+  /** set for a group's drop-in call (its conversation is the group chat) */
+  groupId: string | null;
   type: CallKind;
   startedById: string;
+};
+
+/** Live drop-in call of a group, pushed to the group room on every change. */
+export type GroupCallState = {
+  groupId: string;
+  call: {
+    id: string;
+    conversationId: string;
+    type: CallKind;
+    startedAt: Date;
+  } | null;
+  /** distinct users currently in the call */
+  participants: UserSummary[];
 };
 
 export type MediaState = { audio: boolean; video: boolean; screen: boolean };
@@ -98,6 +113,8 @@ export interface ServerToClientEvents {
     pollId: string;
   }) => void;
   "group:changed": (p: { groupId: string }) => void;
+  "group:call": (p: GroupCallState) => void;
+  "wiki:changed": (p: { groupId: string; pageId: string; action: MutationAction }) => void;
   // chat
   "message:new": (p: ChatMessagePayload) => void;
   "message:changed": (p: { conversationId: string; messageId: string }) => void;
@@ -146,9 +163,10 @@ export type Ack<T> = (
 export interface ClientToServerEvents {
   typing: (p: { conversationId: string }) => void;
   "call:start": (
-    p: { conversationId?: string; eventId?: string; type: CallKind },
+    p: { conversationId?: string; eventId?: string; groupId?: string; type: CallKind },
     ack: Ack<{ callId: string }>,
   ) => void;
+  "group:call:get": (p: { groupId: string }, ack: Ack<GroupCallState>) => void;
   "call:join": (
     p: { callId: string; media: MediaState },
     ack: Ack<{ call: CallSummary; peers: CallPeer[]; title: string }>,

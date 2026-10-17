@@ -43,4 +43,4 @@ apps/api/src/public
 # Claude flow
 .claude-flow
 
-server
+run-server

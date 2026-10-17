@@ -36,8 +36,14 @@ import {
 } from "./calendar-utils"
 import { EVENT_TYPE_STYLES, EVENT_TYPES } from "./event-colors"
 import { PeoplePicker, type PickedUser } from "./people-picker"
+import { ScrollArea } from "@/components/ui/scroll-area"
 
-export type EventDialogDefaults = { start: Date; allDay?: boolean }
+export type EventDialogDefaults = {
+  start: Date
+  allDay?: boolean
+  /** create the event in this group (group calendar): the group can't be changed */
+  group?: { id: string; name: string }
+}
 
 type Props = {
   open: boolean
@@ -75,7 +81,7 @@ function initialState(
     endTime: format(end, TIME),
     location: event?.location ?? "",
     description: event?.description ?? "",
-    groupId: event?.groupId ?? "",
+    groupId: event?.groupId ?? defaults?.group?.id ?? "",
     repeat: parseRepeat(event?.rrule),
     hasVideoCall: event?.hasVideoCall ?? false,
     attendees: (event?.attendees ?? [])
@@ -111,7 +117,7 @@ export function EventDialog({
         select: { id: true, name: true },
         orderBy: { name: "asc" },
       }),
-    { enabled: open && !isEdit, staleTime: 60_000 }
+    { enabled: open && !isEdit && !defaults?.group, staleTime: 60_000 }
   )
 
   const startAt = form.allDay
@@ -241,255 +247,266 @@ export function EventDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[90svh] overflow-y-auto sm:max-w-xl">
-        <DialogHeader>
-          <DialogTitle>{isEdit ? "Edit event" : "New event"}</DialogTitle>
-          <DialogDescription className="sr-only">
-            {isEdit
-              ? "Change the details of this event"
-              : "Schedule a meeting, event, reminder or time off"}
-          </DialogDescription>
-        </DialogHeader>
-        <form
-          id="event-form"
-          onSubmit={(e) => {
-            e.preventDefault()
-            void save()
-          }}
+      <DialogContent className="p-0 sm:max-w-xl">
+        <ScrollArea
+          className="rounded-[inherit]"
+          viewportClassName="max-h-[90svh]"
         >
-          <FieldGroup className="gap-4">
-            <Field data-invalid={submitted && Boolean(titleError)}>
-              <FieldLabel htmlFor="event-title">Title</FieldLabel>
-              <Input
-                id="event-title"
-                autoFocus
-                value={form.title}
-                onChange={(e) => set("title", e.target.value)}
-                placeholder="Add title"
-                maxLength={200}
-                aria-invalid={submitted && Boolean(titleError)}
-              />
-              {submitted && titleError ? (
-                <FieldError>{titleError}</FieldError>
-              ) : null}
-            </Field>
+          <div className="grid gap-6 p-6">
+            <DialogHeader>
+              <DialogTitle>{isEdit ? "Edit event" : "New event"}</DialogTitle>
+              <DialogDescription className="sr-only">
+                {isEdit
+                  ? "Change the details of this event"
+                  : "Schedule a meeting, event, reminder or time off"}
+              </DialogDescription>
+            </DialogHeader>
+            <form
+              id="event-form"
+              onSubmit={(e) => {
+                e.preventDefault()
+                void save()
+              }}
+            >
+              <FieldGroup className="gap-4">
+                <Field data-invalid={submitted && Boolean(titleError)}>
+                  <FieldLabel htmlFor="event-title">Title</FieldLabel>
+                  <Input
+                    id="event-title"
+                    autoFocus
+                    value={form.title}
+                    onChange={(e) => set("title", e.target.value)}
+                    placeholder="Add title"
+                    maxLength={200}
+                    aria-invalid={submitted && Boolean(titleError)}
+                  />
+                  {submitted && titleError ? (
+                    <FieldError>{titleError}</FieldError>
+                  ) : null}
+                </Field>
 
-            <Field>
-              <FieldLabel>Type</FieldLabel>
-              <div
-                className="flex flex-wrap gap-1.5"
-                role="radiogroup"
-                aria-label="Event type"
-              >
-                {EVENT_TYPES.map((type) => {
-                  const style = EVENT_TYPE_STYLES[type]
-                  const Icon = style.icon
-                  const active = form.type === type
-                  return (
-                    <Button
-                      key={type}
-                      type="button"
-                      size="sm"
-                      variant={active ? "secondary" : "outline"}
-                      role="radio"
-                      aria-checked={active}
-                      onClick={() => set("type", type)}
-                      className={active ? "ring-2 ring-ring/40" : undefined}
+                <Field>
+                  <FieldLabel>Type</FieldLabel>
+                  <div
+                    className="flex flex-wrap gap-1.5"
+                    role="radiogroup"
+                    aria-label="Event type"
+                  >
+                    {EVENT_TYPES.map((type) => {
+                      const style = EVENT_TYPE_STYLES[type]
+                      const Icon = style.icon
+                      const active = form.type === type
+                      return (
+                        <Button
+                          key={type}
+                          type="button"
+                          size="sm"
+                          variant={active ? "secondary" : "outline"}
+                          role="radio"
+                          aria-checked={active}
+                          onClick={() => set("type", type)}
+                          className={active ? "ring-2 ring-ring/40" : undefined}
+                        >
+                          <span
+                            className={`size-2 rounded-full ${style.dot}`}
+                            aria-hidden
+                          />
+                          <Icon />
+                          {style.label}
+                        </Button>
+                      )
+                    })}
+                  </div>
+                </Field>
+
+                <div className="flex items-center gap-2">
+                  <Switch
+                    id="event-all-day"
+                    checked={form.allDay}
+                    onCheckedChange={(v) => set("allDay", v)}
+                  />
+                  <Label htmlFor="event-all-day" className="font-normal">
+                    All day
+                  </Label>
+                </div>
+
+                <Field data-invalid={submitted && Boolean(rangeError)}>
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                    <div className="flex flex-col gap-1.5">
+                      <FieldLabel htmlFor="event-start-date">Starts</FieldLabel>
+                      <div className="flex gap-2">
+                        <Input
+                          id="event-start-date"
+                          type="date"
+                          value={form.startDate}
+                          onChange={(e) =>
+                            changeStart(e.target.value, form.startTime)
+                          }
+                          required
+                        />
+                        {form.allDay ? null : (
+                          <Input
+                            type="time"
+                            aria-label="Start time"
+                            value={form.startTime}
+                            onChange={(e) =>
+                              changeStart(form.startDate, e.target.value)
+                            }
+                            className="w-32"
+                            step={300}
+                            required
+                          />
+                        )}
+                      </div>
+                    </div>
+                    <div className="flex flex-col gap-1.5">
+                      <FieldLabel htmlFor="event-end-date">Ends</FieldLabel>
+                      <div className="flex gap-2">
+                        <Input
+                          id="event-end-date"
+                          type="date"
+                          value={form.endDate}
+                          min={form.startDate}
+                          onChange={(e) => set("endDate", e.target.value)}
+                          aria-invalid={submitted && Boolean(rangeError)}
+                          required
+                        />
+                        {form.allDay ? null : (
+                          <Input
+                            type="time"
+                            aria-label="End time"
+                            value={form.endTime}
+                            onChange={(e) => set("endTime", e.target.value)}
+                            className="w-32"
+                            step={300}
+                            aria-invalid={submitted && Boolean(rangeError)}
+                            required
+                          />
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                  {rangeError && (submitted || validDates) ? (
+                    <FieldError>{rangeError}</FieldError>
+                  ) : null}
+                </Field>
+
+                <Field>
+                  <FieldLabel htmlFor="event-repeat">Repeat</FieldLabel>
+                  <NativeSelect
+                    id="event-repeat"
+                    value={form.repeat}
+                    onChange={(e) =>
+                      set("repeat", e.target.value as RepeatOption)
+                    }
+                    className="w-full sm:w-72"
+                  >
+                    {REPEAT_OPTIONS.map((option) => (
+                      <NativeSelectOption key={option} value={option}>
+                        {repeatLabel(option, validDates ? startAt : new Date())}
+                      </NativeSelectOption>
+                    ))}
+                  </NativeSelect>
+                </Field>
+
+                <Field>
+                  <FieldLabel htmlFor="event-location">Location</FieldLabel>
+                  <Input
+                    id="event-location"
+                    value={form.location}
+                    onChange={(e) => set("location", e.target.value)}
+                    placeholder="Add a room or address"
+                    maxLength={300}
+                  />
+                </Field>
+
+                <div className="flex items-center justify-between gap-3 rounded-lg border p-3">
+                  <div className="flex flex-col">
+                    <Label htmlFor="event-video">Add video call</Label>
+                    <span className="text-xs text-muted-foreground">
+                      Attendees can join from the event.
+                    </span>
+                  </div>
+                  <Switch
+                    id="event-video"
+                    checked={form.hasVideoCall}
+                    onCheckedChange={(v) => set("hasVideoCall", v)}
+                  />
+                </div>
+
+                <Field>
+                  <FieldLabel>Guests</FieldLabel>
+                  <PeoplePicker
+                    value={form.attendees}
+                    onChange={(users) => set("attendees", users)}
+                    excludeIds={[event?.creatorId ?? me.id]}
+                  />
+                </Field>
+
+                {isEdit || defaults?.group ? (
+                  (event?.group ?? defaults?.group) ? (
+                    <p className="text-sm text-muted-foreground">
+                      Posted in {(event?.group ?? defaults?.group)?.name}
+                    </p>
+                  ) : null
+                ) : (
+                  <Field>
+                    <FieldLabel htmlFor="event-group">Group</FieldLabel>
+                    <NativeSelect
+                      id="event-group"
+                      value={form.groupId}
+                      onChange={(e) => set("groupId", e.target.value)}
+                      className="w-full sm:w-72"
                     >
-                      <span
-                        className={`size-2 rounded-full ${style.dot}`}
-                        aria-hidden
-                      />
-                      <Icon />
-                      {style.label}
-                    </Button>
-                  )
-                })}
-              </div>
-            </Field>
+                      <NativeSelectOption value="">
+                        No group (private)
+                      </NativeSelectOption>
+                      {groups.map((g) => (
+                        <NativeSelectOption key={g.id} value={g.id}>
+                          {g.name}
+                        </NativeSelectOption>
+                      ))}
+                    </NativeSelect>
+                    {form.groupId ? (
+                      <span className="text-xs text-muted-foreground">
+                        The event will be announced in the group's feed and
+                        visible to its members.
+                      </span>
+                    ) : null}
+                  </Field>
+                )}
 
-            <div className="flex items-center gap-2">
-              <Switch
-                id="event-all-day"
-                checked={form.allDay}
-                onCheckedChange={(v) => set("allDay", v)}
-              />
-              <Label htmlFor="event-all-day" className="font-normal">
-                All day
-              </Label>
-            </div>
-
-            <Field data-invalid={submitted && Boolean(rangeError)}>
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                <div className="flex flex-col gap-1.5">
-                  <FieldLabel htmlFor="event-start-date">Starts</FieldLabel>
-                  <div className="flex gap-2">
-                    <Input
-                      id="event-start-date"
-                      type="date"
-                      value={form.startDate}
-                      onChange={(e) =>
-                        changeStart(e.target.value, form.startTime)
-                      }
-                      required
-                    />
-                    {form.allDay ? null : (
-                      <Input
-                        type="time"
-                        aria-label="Start time"
-                        value={form.startTime}
-                        onChange={(e) =>
-                          changeStart(form.startDate, e.target.value)
-                        }
-                        className="w-32"
-                        step={300}
-                        required
-                      />
-                    )}
-                  </div>
-                </div>
-                <div className="flex flex-col gap-1.5">
-                  <FieldLabel htmlFor="event-end-date">Ends</FieldLabel>
-                  <div className="flex gap-2">
-                    <Input
-                      id="event-end-date"
-                      type="date"
-                      value={form.endDate}
-                      min={form.startDate}
-                      onChange={(e) => set("endDate", e.target.value)}
-                      aria-invalid={submitted && Boolean(rangeError)}
-                      required
-                    />
-                    {form.allDay ? null : (
-                      <Input
-                        type="time"
-                        aria-label="End time"
-                        value={form.endTime}
-                        onChange={(e) => set("endTime", e.target.value)}
-                        className="w-32"
-                        step={300}
-                        aria-invalid={submitted && Boolean(rangeError)}
-                        required
-                      />
-                    )}
-                  </div>
-                </div>
-              </div>
-              {rangeError && (submitted || validDates) ? (
-                <FieldError>{rangeError}</FieldError>
-              ) : null}
-            </Field>
-
-            <Field>
-              <FieldLabel htmlFor="event-repeat">Repeat</FieldLabel>
-              <NativeSelect
-                id="event-repeat"
-                value={form.repeat}
-                onChange={(e) => set("repeat", e.target.value as RepeatOption)}
-                className="w-full sm:w-72"
+                <Field>
+                  <FieldLabel htmlFor="event-description">
+                    Description
+                  </FieldLabel>
+                  <Textarea
+                    id="event-description"
+                    value={form.description}
+                    onChange={(e) => set("description", e.target.value)}
+                    placeholder="Add a description"
+                    rows={4}
+                    maxLength={5000}
+                  />
+                </Field>
+              </FieldGroup>
+            </form>
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => onOpenChange(false)}
+                disabled={saving}
               >
-                {REPEAT_OPTIONS.map((option) => (
-                  <NativeSelectOption key={option} value={option}>
-                    {repeatLabel(option, validDates ? startAt : new Date())}
-                  </NativeSelectOption>
-                ))}
-              </NativeSelect>
-            </Field>
-
-            <Field>
-              <FieldLabel htmlFor="event-location">Location</FieldLabel>
-              <Input
-                id="event-location"
-                value={form.location}
-                onChange={(e) => set("location", e.target.value)}
-                placeholder="Add a room or address"
-                maxLength={300}
-              />
-            </Field>
-
-            <div className="flex items-center justify-between gap-3 rounded-lg border p-3">
-              <div className="flex flex-col">
-                <Label htmlFor="event-video">Add video call</Label>
-                <span className="text-xs text-muted-foreground">
-                  Attendees can join from the event.
-                </span>
-              </div>
-              <Switch
-                id="event-video"
-                checked={form.hasVideoCall}
-                onCheckedChange={(v) => set("hasVideoCall", v)}
-              />
-            </div>
-
-            <Field>
-              <FieldLabel>Guests</FieldLabel>
-              <PeoplePicker
-                value={form.attendees}
-                onChange={(users) => set("attendees", users)}
-                excludeIds={[event?.creatorId ?? me.id]}
-              />
-            </Field>
-
-            {isEdit ? (
-              event?.group ? (
-                <p className="text-sm text-muted-foreground">
-                  Posted in {event.group.name}
-                </p>
-              ) : null
-            ) : (
-              <Field>
-                <FieldLabel htmlFor="event-group">Group</FieldLabel>
-                <NativeSelect
-                  id="event-group"
-                  value={form.groupId}
-                  onChange={(e) => set("groupId", e.target.value)}
-                  className="w-full sm:w-72"
-                >
-                  <NativeSelectOption value="">
-                    No group (private)
-                  </NativeSelectOption>
-                  {groups.map((g) => (
-                    <NativeSelectOption key={g.id} value={g.id}>
-                      {g.name}
-                    </NativeSelectOption>
-                  ))}
-                </NativeSelect>
-                {form.groupId ? (
-                  <span className="text-xs text-muted-foreground">
-                    The event will be announced in the group's feed and visible
-                    to its members.
-                  </span>
-                ) : null}
-              </Field>
-            )}
-
-            <Field>
-              <FieldLabel htmlFor="event-description">Description</FieldLabel>
-              <Textarea
-                id="event-description"
-                value={form.description}
-                onChange={(e) => set("description", e.target.value)}
-                placeholder="Add a description"
-                rows={4}
-                maxLength={5000}
-              />
-            </Field>
-          </FieldGroup>
-        </form>
-        <DialogFooter>
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() => onOpenChange(false)}
-            disabled={saving}
-          >
-            Cancel
-          </Button>
-          <Button type="submit" form="event-form" disabled={saving}>
-            {saving ? <Spinner /> : null}
-            {isEdit ? "Save" : "Create"}
-          </Button>
-        </DialogFooter>
+                Cancel
+              </Button>
+              <Button type="submit" form="event-form" disabled={saving}>
+                {saving ? <Spinner /> : null}
+                {isEdit ? "Save" : "Create"}
+              </Button>
+            </DialogFooter>
+          </div>
+        </ScrollArea>
       </DialogContent>
     </Dialog>
   )

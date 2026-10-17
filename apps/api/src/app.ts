@@ -10,6 +10,7 @@ import { BetterAuthOpenApi, betterAuthPlugin } from "./plugins/auth";
 import { conversationsRoute } from "./routes/conversations";
 import { executeRoute } from "./routes/execute";
 import { filesRoute } from "./routes/files";
+import { groupsRoute } from "./routes/groups";
 import { rtcRoute } from "./routes/rtc";
 import { uploadsRoute } from "./routes/uploads";
 import { webSocketPlugin } from "./websocket";
@@ -56,6 +57,7 @@ export const app = new Elysia()
   .use(uploadsRoute)
   .use(filesRoute)
   .use(conversationsRoute)
+  .use(groupsRoute)
   .use(rtcRoute)
   .use(webSocketPlugin())
   // unknown API paths answer with the JSON envelope, not the SPA's index.html
@@ -70,7 +72,7 @@ export const app = new Elysia()
       alwaysStatic: true,
     })
   )
-  .get('*', async ({ set, request }) => {
+  .get('*', async ({ set }) => {
     const file = Bun.file(path.join(ASSET_PATH, 'index.html'))
     const exists = await file.exists()
 

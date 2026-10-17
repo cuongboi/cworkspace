@@ -1,3 +1,4 @@
+import { useVirtualizer } from "@tanstack/react-virtual"
 import { cn } from "cn"
 import {
   differenceInMinutes,
@@ -6,18 +7,17 @@ import {
   isToday,
   isYesterday,
 } from "date-fns"
-import { useEffect, useRef, useState } from "react"
-import { toast } from "sonner"
-import { Marker, MarkerContent } from "@/components/ui/marker"
+import { ArrowDownIcon } from "lucide-react"
 import {
-  MessageScroller,
-  MessageScrollerButton,
-  MessageScrollerContent,
-  MessageScrollerItem,
-  MessageScrollerViewport,
-  useMessageScroller,
-  useMessageScrollerVisibility,
-} from "@/components/ui/message-scroller"
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react"
+import { toast } from "sonner"
+import { Button } from "@/components/ui/button"
+import { Marker, MarkerContent } from "@/components/ui/marker"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Spinner } from "@/components/ui/spinner"
 import { useOrg } from "@/hooks/use-org"
@@ -32,9 +32,12 @@ import {
   type ThreadMember,
 } from "./chat-data"
 import { type MessageActions, MessageRow } from "./message-row"
+import { type ThreadScrollHandle, useRegisterThreadScroll } from "./thread-scroll"
 
 const GROUP_WINDOW_MIN = 5
 const TIME_GAP_MIN = 60
+/** the "beginning of the conversation" / loading strip above the first message */
+const STATUS_ROW_HEIGHT = 48
 
 function dayLabel(d: Date) {
   if (isToday(d)) return "Today"
@@ -112,18 +115,50 @@ function Thread({
   loadOlder: () => void
 }) {
   const { me } = useOrg()
-  const viewportRef = useRef<HTMLDivElement>(null)
-  const { scrollToMessage } = useMessageScroller()
+  const [viewport, setViewport] = useState<HTMLDivElement | null>(null)
+  const [ready, setReady] = useState(false)
   const [highlight, setHighlight] = useState<string | null>(null)
   const isGroup = conversation.type === "GROUP"
+  const count = messages.length
+
+  const virtualizer = useVirtualizer({
+    count,
+    getScrollElement: () => viewport,
+    estimateSize: () => 64,
+    getItemKey: (i) => messages[i]?.id ?? i,
+    overscan: 10,
+    paddingStart: STATUS_ROW_HEIGHT,
+    paddingEnd: 12,
+    // chat semantics: prepending older pages keeps the same message under the reader, resizes
+    // (images loading, edits) keep the bottom pinned, and new messages are followed when the
+    // reader is already at the bottom
+    anchorTo: "end",
+    followOnAppend: "smooth",
+    scrollEndThreshold: 80,
+  })
+  const items = virtualizer.getVirtualItems()
+  const atEnd = virtualizer.isAtEnd(200)
+  const visibleEnd = virtualizer.range?.endIndex ?? -1
+
+  const scrollHandle = useMemo<ThreadScrollHandle>(
+    () => ({ scrollToEnd: (options) => virtualizer.scrollToEnd(options) }),
+    [virtualizer]
+  )
+  useRegisterThreadScroll(scrollHandle)
+
+  // open at the newest message; hidden for a frame so the jump from the top isn't visible
+  useLayoutEffect(() => {
+    if (!viewport) return
+    virtualizer.scrollToEnd()
+    const raf = requestAnimationFrame(() => setReady(true))
+    return () => cancelAnimationFrame(raf)
+  }, [viewport, virtualizer])
 
   // conversations shorter than the viewport: keep loading until it scrolls (or history ends)
-  const count = messages.length
   useEffect(() => {
-    const el = viewportRef.current
-    if (!el || !hasOlder || loadingOlder || count === 0) return
-    if (el.scrollHeight <= el.clientHeight + 40) loadOlder()
-  }, [count, hasOlder, loadingOlder, loadOlder])
+    if (!viewport || !hasOlder || loadingOlder || count === 0) return
+    if (viewport.scrollHeight <= viewport.clientHeight + 40) loadOlder()
+  }, [viewport, count, hasOlder, loadingOlder, loadOlder])
 
   useEffect(() => {
     if (!highlight) return
@@ -132,17 +167,18 @@ function Thread({
   }, [highlight])
 
   const jumpTo = (id: string) => {
-    if (!messages.some((m) => m.id === id)) {
+    const index = messages.findIndex((m) => m.id === id)
+    if (index === -1) {
       toast("That message is further back in the conversation", {
         description: "Scroll up to load older messages.",
       })
       return
     }
-    scrollToMessage(id, { align: "center", behavior: "smooth" })
+    virtualizer.scrollToIndex(index, { align: "center", behavior: "smooth" })
     setHighlight(id)
   }
 
-  useMarkRead(conversation.id, messages, myLastReadAt)
+  useMarkRead(conversation.id, messages, myLastReadAt, visibleEnd)
 
   // delivery / read state under my latest message, when it's the newest one
   const last = messages.at(-1)
@@ -174,89 +210,138 @@ function Thread({
       Math.abs(differenceInMinutes(b.createdAt, a.createdAt)) < GROUP_WINDOW_MIN
     )
 
+  const statusRow = (
+    <div
+      className="absolute inset-x-0 top-0 flex items-center justify-center text-xs text-muted-foreground"
+      style={{ height: STATUS_ROW_HEIGHT }}
+    >
+      {loadingOlder ? (
+        <Spinner />
+      ) : !hasOlder && count > 0 ? (
+        <span>This is the beginning of the conversation</span>
+      ) : null}
+    </div>
+  )
+
   return (
-    <MessageScroller className="flex-1">
-      <MessageScrollerViewport
-        ref={viewportRef}
+    <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden">
+      <div
+        ref={setViewport}
+        role="log"
         aria-label="Messages"
-        className="flex flex-col"
+        className={cn(
+          "flex size-full min-h-0 min-w-0 flex-col overflow-y-auto overscroll-contain scrollbar-thin scrollbar-gutter-stable [overflow-anchor:none]",
+          !ready && "invisible"
+        )}
         onScroll={(e) => {
-          if (hasOlder && !loadingOlder && e.currentTarget.scrollTop < 400)
+          if (
+            ready &&
+            hasOlder &&
+            !loadingOlder &&
+            e.currentTarget.scrollTop < 400
+          )
             loadOlder()
         }}
       >
-        <div className="flex h-12 shrink-0 items-center justify-center text-xs text-muted-foreground">
-          {loadingOlder ? (
-            <Spinner />
-          ) : !hasOlder && messages.length > 0 ? (
-            <span>This is the beginning of the conversation</span>
-          ) : null}
-        </div>
-        <MessageScrollerContent className="mt-auto h-max min-h-0 gap-0 px-3 pb-3 md:px-6">
-          {messages.length === 0 ? (
-            <MessageScrollerItem className="py-10 text-center text-sm text-muted-foreground">
+        {count === 0 ? (
+          <div className="relative mt-auto">
+            <div style={{ height: STATUS_ROW_HEIGHT }} />
+            <p className="py-10 text-center text-sm text-muted-foreground">
               No messages yet. Say hi 👋
-            </MessageScrollerItem>
-          ) : null}
-          {messages.map((m, i) => {
-            const prev = messages[i - 1]
-            const next = messages[i + 1]
-            const newDay = !prev || !isSameDay(prev.createdAt, m.createdAt)
-            const gap =
-              !newDay &&
-              prev &&
-              differenceInMinutes(m.createdAt, prev.createdAt) >= TIME_GAP_MIN
-            const first = !sameGroup(prev, m)
-            return (
-              <MessageScrollerItem
-                key={m.id}
-                messageId={m.id}
-                className={cn(
-                  "rounded-xl transition-colors duration-700",
-                  first ? "pt-3" : "pt-0.5",
-                  highlight === m.id && "bg-primary/10"
-                )}
-              >
-                {newDay ? (
-                  <Marker variant="separator" className="py-3 text-xs">
-                    <MarkerContent>{dayLabel(m.createdAt)}</MarkerContent>
-                  </Marker>
-                ) : gap ? (
-                  <p className="py-3 text-center text-xs text-muted-foreground">
-                    {format(m.createdAt, "HH:mm")}
-                  </p>
-                ) : null}
-                <MessageRow
-                  message={m}
-                  conversationId={conversation.id}
-                  isGroup={isGroup}
-                  firstInGroup={first}
-                  lastInGroup={!sameGroup(m, next)}
-                  status={m === last ? status : null}
-                  actions={{ ...actions, onJumpTo: jumpTo }}
-                />
-              </MessageScrollerItem>
-            )
-          })}
-        </MessageScrollerContent>
-      </MessageScrollerViewport>
-      <MessageScrollerButton className="shadow-md" />
-    </MessageScroller>
+            </p>
+          </div>
+        ) : (
+          // mt-auto bottom-aligns conversations shorter than the viewport
+          <div
+            className="relative mt-auto w-full shrink-0"
+            style={{ height: virtualizer.getTotalSize() }}
+          >
+            {statusRow}
+            {items.map((item) => {
+              const m = messages[item.index]
+              if (!m) return null
+              const prev = messages[item.index - 1]
+              const next = messages[item.index + 1]
+              const newDay = !prev || !isSameDay(prev.createdAt, m.createdAt)
+              const gap =
+                !newDay &&
+                prev &&
+                differenceInMinutes(m.createdAt, prev.createdAt) >=
+                  TIME_GAP_MIN
+              const first = !sameGroup(prev, m)
+              return (
+                <div
+                  key={item.key}
+                  data-index={item.index}
+                  ref={virtualizer.measureElement}
+                  className="absolute inset-x-0 top-0 px-3 md:px-6"
+                  style={{ transform: `translateY(${item.start}px)` }}
+                >
+                  <div
+                    className={cn(
+                      "min-w-0 rounded-xl transition-colors duration-700",
+                      first ? "pt-3" : "pt-0.5",
+                      highlight === m.id && "bg-primary/10"
+                    )}
+                  >
+                    {newDay ? (
+                      <Marker variant="separator" className="py-3 text-xs">
+                        <MarkerContent>{dayLabel(m.createdAt)}</MarkerContent>
+                      </Marker>
+                    ) : gap ? (
+                      <p className="py-3 text-center text-xs text-muted-foreground">
+                        {format(m.createdAt, "HH:mm")}
+                      </p>
+                    ) : null}
+                    <MessageRow
+                      message={m}
+                      conversationId={conversation.id}
+                      isGroup={isGroup}
+                      firstInGroup={first}
+                      lastInGroup={!sameGroup(m, next)}
+                      status={m === last ? status : null}
+                      actions={{ ...actions, onJumpTo: jumpTo }}
+                    />
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        )}
+      </div>
+      <Button
+        variant="secondary"
+        size="icon-sm"
+        aria-label="Scroll to newest message"
+        tabIndex={atEnd ? -1 : 0}
+        aria-hidden={atEnd}
+        onClick={() => virtualizer.scrollToEnd({ behavior: "smooth" })}
+        className={cn(
+          "absolute bottom-4 left-1/2 -translate-x-1/2 rounded-full border-border bg-background shadow-md transition-[translate,scale,opacity] duration-200 hover:bg-muted",
+          atEnd
+            ? "pointer-events-none translate-y-full scale-95 opacity-0"
+            : "translate-y-0 scale-100 opacity-100"
+        )}
+      >
+        <ArrowDownIcon />
+      </Button>
+    </div>
   )
 }
 
 /**
- * Marks the conversation read when the newest message is on screen and the window is focused.
+ * Marks the conversation read when the newest message is on screen (`visibleEnd` is the last
+ * index in the viewport) and the window is focused.
  * Debounced, and at most once per newest message so the resulting `conversation:read` echo
  * can't loop.
  */
 function useMarkRead(
   conversationId: string,
   messages: ChatMessage[],
-  myLastReadAt: Date | undefined
+  myLastReadAt: Date | undefined,
+  visibleEnd: number
 ) {
   const { me } = useOrg()
-  const { visibleMessageIds } = useMessageScrollerVisibility()
   const [focused, setFocused] = useState(false)
   const markedRef = useRef<string | null>(null)
 
@@ -274,7 +359,8 @@ function useMarkRead(
     }
   }, [])
 
-  const newest = messages.findLast((m) => !m.pending)
+  const newestIndex = messages.findLastIndex((m) => !m.pending)
+  const newest = messages[newestIndex]
   const newestId = newest?.id
   const newestAt = new Date(newest?.createdAt || "").getTime()
   const shouldMark = Boolean(
@@ -283,7 +369,7 @@ function useMarkRead(
     focused &&
     myLastReadAt &&
     newestAt > myLastReadAt.getTime() &&
-    visibleMessageIds.includes(newestId)
+    visibleEnd >= newestIndex
   )
 
   useEffect(() => {

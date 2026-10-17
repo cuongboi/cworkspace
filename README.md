@@ -23,7 +23,7 @@ Under the hood it is a full-stack TypeScript monorepo: a **React SPA** (`apps/we
 | Auth | [better-auth](https://better-auth.com) — email/password, JWT, bearer, admin plugins, ZenStack adapter |
 | Realtime | Bun WebSocket via Elysia (`/ws`, authenticated, typed JSON protocol in `@app/shared`) |
 | Tenancy | better-auth `organization` plugin + ZenStack policies |
-| Files / email / calls | S3-compatible bucket (AWS S3, R2, MinIO), Resend, WebRTC + coturn |
+| Files / email / calls | S3-compatible bucket (AWS S3, R2, MiniStack), Resend, WebRTC + coturn |
 | Web framework | React 19, Vite 8, TypeScript |
 | Routing / URL state | React Router 7, [nuqs](https://nuqs.dev) |
 | Data fetching | TanStack Query over a typed ORM proxy (`db.<model>.<op>()`) |
@@ -61,7 +61,7 @@ Under the hood it is a full-stack TypeScript monorepo: a **React SPA** (`apps/we
 │           └── pages/          # auth/, onboarding, invite, org/** (tenant pages)
 ├── packages/
 │   └── shared/                 # @app/shared: realtime event contract, mention encoding
-├── docker-compose.yml          # Postgres, MinIO, coturn for local development
+├── docker-compose.yml          # MiniStack (S3 + RDS Postgres), StackPort, coturn for local dev
 ├── .env.example
 └── turbo.json
 ```
@@ -71,14 +71,14 @@ Under the hood it is a full-stack TypeScript monorepo: a **React SPA** (`apps/we
 ### Prerequisites
 
 - Bun 1.4.x and Node ≥ 24
-- PostgreSQL (or Docker: `docker compose up -d` starts Postgres, MinIO for files and coturn for calls)
+- PostgreSQL (or Docker: `docker compose up -d` starts MiniStack (Postgres via RDS + S3 for files), StackPort and coturn for calls)
 
 ### Setup
 
 ```bash
 bun install
 cp .env.example .env            # then fill in the values below
-docker compose up -d            # optional: Postgres, MinIO (+ bucket), coturn
+docker compose up -d            # optional: MiniStack (+ bucket, RDS Postgres), StackPort, coturn
 bun --cwd apps/api run db:push  # create/update tables from schema.zmodel
 bun run dev                     # starts api (:3000) and web (:5173) via Turborepo
 ```

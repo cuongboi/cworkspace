@@ -49,6 +49,7 @@ import {
   GroupRole as GroupRoles,
 } from "@app/api/zenstack/models"
 import type { GroupWithMe } from "./group-query"
+import { ScrollArea } from "@/components/ui/scroll-area"
 
 const ROLE_LABEL: Record<GroupRole, string> = {
   ADMIN: "Admin",
@@ -400,7 +401,7 @@ function AddMembersDialog({
           aria-label="Search people"
           autoFocus
         />
-        <div className="-mx-2 max-h-80 overflow-y-auto">
+        <ScrollArea className="-mx-2" viewportClassName="max-h-80">
           {isPending ? (
             <div className="flex justify-center p-4">
               <Skeleton className="h-8 w-full" />
@@ -445,7 +446,7 @@ function AddMembersDialog({
               ) : null}
             </ItemGroup>
           )}
-        </div>
+        </ScrollArea>
       </DialogContent>
     </Dialog>
   )

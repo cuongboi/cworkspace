@@ -7,6 +7,7 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { useOrg } from "@/hooks/use-org"
 import { db } from "@/lib/api-client"
 import { useDbQuery } from "@/lib/query"
+import { ScrollArea } from "@/components/ui/scroll-area"
 
 export type PickedUser = { id: string; name: string; image: string | null }
 
@@ -98,7 +99,7 @@ export function PeoplePicker({
         </ul>
       ) : null}
 
-      <div className="-mx-2 max-h-72 min-h-40 overflow-y-auto">
+      <ScrollArea className="-mx-2" viewportClassName="max-h-72 min-h-40">
         {isPending ? (
           <div className="flex flex-col gap-1 px-2">
             {[0, 1, 2, 3].map((i) => (
@@ -146,7 +147,7 @@ export function PeoplePicker({
             })}
           </ul>
         )}
-      </div>
+      </ScrollArea>
     </div>
   )
 }

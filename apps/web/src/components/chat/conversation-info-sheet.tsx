@@ -7,6 +7,7 @@ import {
   ShieldIcon,
   UserPlusIcon,
   UserRoundIcon,
+  UsersRoundIcon,
 } from "lucide-react"
 import { Link } from "react-router-dom"
 import { useNavigate } from "react-router-dom"
@@ -62,6 +63,7 @@ import {
 } from "./chat-data"
 import { ConversationAvatar } from "./conversation-avatar"
 import { PeoplePicker, type PickedUser } from "./people-picker"
+import { ScrollArea } from "@/components/ui/scroll-area"
 
 const FOREVER = new Date("9999-12-31T00:00:00.000Z")
 
@@ -94,7 +96,9 @@ export function ConversationInfoSheet({
   const qc = useQueryClient()
   const isGroup = conversation.type === "GROUP"
   const myMember = members.find((m) => m.userId === me.id)
-  const iAmAdmin = myMember?.role === "ADMIN"
+  // a group's chat is managed through the group (members, name), not here
+  const linkedGroup = conversation.group
+  const iAmAdmin = !linkedGroup && myMember?.role === "ADMIN"
   const title = conversationTitle(conversation, members, me.id)
   const other = !isGroup ? otherUsers(members, me.id)[0] : undefined
   const otherOnline = useIsOnline(other?.id)
@@ -230,246 +234,266 @@ export function ConversationInfoSheet({
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent className="w-full gap-0 overflow-y-auto sm:max-w-sm">
-        <SheetHeader className="items-center pt-8 text-center">
-          <ConversationAvatar
-            type={conversation.type}
-            members={members}
-            meId={me.id}
-            size="lg"
-            className="size-16"
-          />
-          <SheetTitle className="mt-2 text-lg">{title}</SheetTitle>
-          <SheetDescription>
-            {isGroup
-              ? `${members.length} members`
-              : otherOnline
-                ? "Active now"
-                : "Direct message"}
-          </SheetDescription>
-          {other ? (
-            <Button asChild variant="secondary" size="sm" className="mt-2">
-              <Link to={href(`/people/${other.id}`)}>
-                <UserRoundIcon /> View profile
-              </Link>
-            </Button>
-          ) : null}
-        </SheetHeader>
-
-        <div className="flex flex-col gap-6 px-4 pb-6">
-          {isGroup ? (
-            <form
-              className="flex flex-col gap-2"
-              onSubmit={(e) => {
-                e.preventDefault()
-                void rename()
-              }}
-            >
-              <Label htmlFor="chat-title">Conversation name</Label>
-              <div className="flex gap-2">
-                <Input
-                  id="chat-title"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  placeholder={conversationTitle(
-                    { type: "GROUP", title: null },
-                    members,
-                    me.id
-                  )}
-                  maxLength={100}
-                />
-                <Button
-                  type="submit"
-                  variant="secondary"
-                  disabled={
-                    savingName || name.trim() === (conversation.title ?? "")
-                  }
-                >
-                  {savingName ? <Spinner /> : null}
-                  Save
+      <SheetContent className="w-full gap-0 sm:max-w-sm">
+        <ScrollArea
+          className="min-h-0 flex-1"
+          viewportClassName="[&>div]:h-full"
+        >
+          <div className="flex min-h-full flex-col">
+            <SheetHeader className="items-center pt-8 text-center">
+              <ConversationAvatar
+                type={conversation.type}
+                group={linkedGroup}
+                members={members}
+                meId={me.id}
+                size="lg"
+                className="size-16"
+              />
+              <SheetTitle className="mt-2 text-lg">{title}</SheetTitle>
+              <SheetDescription>
+                {isGroup
+                  ? `${members.length} members`
+                  : otherOnline
+                    ? "Active now"
+                    : "Direct message"}
+              </SheetDescription>
+              {other ? (
+                <Button asChild variant="secondary" size="sm" className="mt-2">
+                  <Link to={href(`/people/${other.id}`)}>
+                    <UserRoundIcon /> View profile
+                  </Link>
                 </Button>
-              </div>
-            </form>
-          ) : null}
+              ) : null}
+            </SheetHeader>
 
-          <div className="flex flex-col gap-2">
-            <Label htmlFor="chat-mute" className="flex items-center gap-1.5">
-              <BellOffIcon className="size-4" /> Mute notifications
-            </Label>
-            <Select
-              value={mutedUntil ? "custom" : "off"}
-              onValueChange={(v) => void setMute(v)}
-            >
-              <SelectTrigger id="chat-mute" className="w-full">
-                <SelectValue>
-                  {mutedUntil
-                    ? mutedUntil.getTime() === FOREVER.getTime()
-                      ? "Muted until you turn it back on"
-                      : `Muted until ${mutedUntil.toLocaleString([], { dateStyle: "medium", timeStyle: "short" })}`
-                    : "Not muted"}
-                </SelectValue>
-              </SelectTrigger>
-              <SelectContent>
-                {MUTE_OPTIONS.map((o) => (
-                  <SelectItem key={o.value} value={o.value}>
-                    {o.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          {isGroup ? (
-            <>
-              <Separator />
-              <section
-                className="flex flex-col gap-2"
-                aria-labelledby="chat-members-heading"
-              >
-                <div className="flex items-center justify-between">
-                  <h3
-                    id="chat-members-heading"
-                    className="text-sm font-semibold"
-                  >
-                    Members · {members.length}
-                  </h3>
-                  {iAmAdmin && !adding ? (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => setAdding(true)}
-                    >
-                      <UserPlusIcon /> Add people
-                    </Button>
-                  ) : null}
-                </div>
-
-                {adding ? (
-                  <div className="flex flex-col gap-2 rounded-lg border p-3">
-                    <PeoplePicker
-                      value={toAdd}
-                      onChange={setToAdd}
-                      exclude={members.map((m) => m.userId)}
-                      autoFocus
+            <div className="flex flex-col gap-6 px-4 pb-6">
+              {isGroup && !linkedGroup ? (
+                <form
+                  className="flex flex-col gap-2"
+                  onSubmit={(e) => {
+                    e.preventDefault()
+                    void rename()
+                  }}
+                >
+                  <Label htmlFor="chat-title">Conversation name</Label>
+                  <div className="flex gap-2">
+                    <Input
+                      id="chat-title"
+                      value={name}
+                      onChange={(e) => setName(e.target.value)}
+                      placeholder={conversationTitle(
+                        { type: "GROUP", title: null },
+                        members,
+                        me.id
+                      )}
+                      maxLength={100}
                     />
-                    <div className="flex justify-end gap-2">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => {
-                          setAdding(false)
-                          setToAdd([])
-                        }}
-                      >
-                        Cancel
-                      </Button>
-                      <Button
-                        size="sm"
-                        disabled={toAdd.length === 0 || busy}
-                        onClick={() => void addMembers()}
-                      >
-                        {busy ? <Spinner /> : null}
-                        Add{toAdd.length ? ` ${toAdd.length}` : ""}
-                      </Button>
-                    </div>
+                    <Button
+                      type="submit"
+                      variant="secondary"
+                      disabled={
+                        savingName || name.trim() === (conversation.title ?? "")
+                      }
+                    >
+                      {savingName ? <Spinner /> : null}
+                      Save
+                    </Button>
                   </div>
-                ) : null}
+                </form>
+              ) : null}
 
-                <ul className="flex flex-col">
-                  {members.map((m) => (
-                    <li
-                      key={m.id}
-                      className="flex items-center gap-3 rounded-md px-1 py-1.5"
-                    >
-                      <UserAvatar user={m.user} presence />
-                      <div className="min-w-0 flex-1">
-                        <Link
-                          to={href(`/people/${m.userId}`)}
-                          className="block truncate text-sm font-medium hover:underline"
-                        >
-                          {m.user.name}
-                          {m.userId === me.id ? (
-                            <span className="text-muted-foreground">
-                              {" "}
-                              (you)
-                            </span>
-                          ) : null}
-                        </Link>
-                      </div>
-                      {m.role === "ADMIN" ? (
-                        <Badge variant="secondary">Admin</Badge>
-                      ) : null}
-                      {iAmAdmin && m.userId !== me.id ? (
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button
-                              variant="ghost"
-                              size="icon-sm"
-                              aria-label={`Manage ${m.user.name}`}
-                            >
-                              <MoreHorizontalIcon />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end">
-                            <DropdownMenuItem
-                              onSelect={() =>
-                                void setRole(
-                                  m,
-                                  m.role === "ADMIN" ? "MEMBER" : "ADMIN"
-                                )
-                              }
-                            >
-                              <ShieldIcon />{" "}
-                              {m.role === "ADMIN"
-                                ? "Remove as admin"
-                                : "Make admin"}
-                            </DropdownMenuItem>
-                            <DropdownMenuItem
-                              variant="destructive"
-                              onSelect={() => void removeMember(m)}
-                            >
-                              <LogOutIcon /> Remove from group
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      ) : null}
-                    </li>
-                  ))}
-                </ul>
-              </section>
+              <div className="flex flex-col gap-2">
+                <Label
+                  htmlFor="chat-mute"
+                  className="flex items-center gap-1.5"
+                >
+                  <BellOffIcon className="size-4" /> Mute notifications
+                </Label>
+                <Select
+                  value={mutedUntil ? "custom" : "off"}
+                  onValueChange={(v) => void setMute(v)}
+                >
+                  <SelectTrigger id="chat-mute" className="w-full">
+                    <SelectValue>
+                      {mutedUntil
+                        ? mutedUntil.getTime() === FOREVER.getTime()
+                          ? "Muted until you turn it back on"
+                          : `Muted until ${mutedUntil.toLocaleString([], { dateStyle: "medium", timeStyle: "short" })}`
+                        : "Not muted"}
+                    </SelectValue>
+                  </SelectTrigger>
+                  <SelectContent>
+                    {MUTE_OPTIONS.map((o) => (
+                      <SelectItem key={o.value} value={o.value}>
+                        {o.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
 
-              <Separator />
-              <AlertDialog>
-                <AlertDialogTrigger asChild>
-                  <Button
-                    variant="ghost"
-                    className="justify-start text-destructive hover:text-destructive"
+              {isGroup ? (
+                <>
+                  <Separator />
+                  <section
+                    className="flex flex-col gap-2"
+                    aria-labelledby="chat-members-heading"
                   >
-                    <LogOutIcon /> Leave group
-                  </Button>
-                </AlertDialogTrigger>
-                <AlertDialogContent>
-                  <AlertDialogHeader>
-                    <AlertDialogTitle>Leave this group?</AlertDialogTitle>
-                    <AlertDialogDescription>
-                      You'll stop receiving messages from this conversation.
-                      Someone will have to add you back to rejoin.
-                    </AlertDialogDescription>
-                  </AlertDialogHeader>
-                  <AlertDialogFooter>
-                    <AlertDialogCancel>Cancel</AlertDialogCancel>
-                    <AlertDialogAction
-                      variant="destructive"
-                      onClick={() => void leave()}
-                    >
-                      Leave group
-                    </AlertDialogAction>
-                  </AlertDialogFooter>
-                </AlertDialogContent>
-              </AlertDialog>
-            </>
-          ) : null}
-        </div>
+                    <div className="flex items-center justify-between">
+                      <h3
+                        id="chat-members-heading"
+                        className="text-sm font-semibold"
+                      >
+                        Members · {members.length}
+                      </h3>
+                      {iAmAdmin && !adding ? (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setAdding(true)}
+                        >
+                          <UserPlusIcon /> Add people
+                        </Button>
+                      ) : null}
+                    </div>
+
+                    {adding ? (
+                      <div className="flex flex-col gap-2 rounded-lg border p-3">
+                        <PeoplePicker
+                          value={toAdd}
+                          onChange={setToAdd}
+                          exclude={members.map((m) => m.userId)}
+                          autoFocus
+                        />
+                        <div className="flex justify-end gap-2">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => {
+                              setAdding(false)
+                              setToAdd([])
+                            }}
+                          >
+                            Cancel
+                          </Button>
+                          <Button
+                            size="sm"
+                            disabled={toAdd.length === 0 || busy}
+                            onClick={() => void addMembers()}
+                          >
+                            {busy ? <Spinner /> : null}
+                            Add{toAdd.length ? ` ${toAdd.length}` : ""}
+                          </Button>
+                        </div>
+                      </div>
+                    ) : null}
+
+                    <ul className="flex flex-col">
+                      {members.map((m) => (
+                        <li
+                          key={m.id}
+                          className="flex items-center gap-3 rounded-md px-1 py-1.5"
+                        >
+                          <UserAvatar user={m.user} presence />
+                          <div className="min-w-0 flex-1">
+                            <Link
+                              to={href(`/people/${m.userId}`)}
+                              className="block truncate text-sm font-medium hover:underline"
+                            >
+                              {m.user.name}
+                              {m.userId === me.id ? (
+                                <span className="text-muted-foreground">
+                                  {" "}
+                                  (you)
+                                </span>
+                              ) : null}
+                            </Link>
+                          </div>
+                          {m.role === "ADMIN" ? (
+                            <Badge variant="secondary">Admin</Badge>
+                          ) : null}
+                          {iAmAdmin && m.userId !== me.id ? (
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button
+                                  variant="ghost"
+                                  size="icon-sm"
+                                  aria-label={`Manage ${m.user.name}`}
+                                >
+                                  <MoreHorizontalIcon />
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end">
+                                <DropdownMenuItem
+                                  onSelect={() =>
+                                    void setRole(
+                                      m,
+                                      m.role === "ADMIN" ? "MEMBER" : "ADMIN"
+                                    )
+                                  }
+                                >
+                                  <ShieldIcon />{" "}
+                                  {m.role === "ADMIN"
+                                    ? "Remove as admin"
+                                    : "Make admin"}
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
+                                  variant="destructive"
+                                  onSelect={() => void removeMember(m)}
+                                >
+                                  <LogOutIcon /> Remove from group
+                                </DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          ) : null}
+                        </li>
+                      ))}
+                    </ul>
+                  </section>
+
+                  <Separator />
+                  {linkedGroup ? (
+                    <Button asChild variant="secondary">
+                      <Link to={href(`/groups/${linkedGroup.slug}`)}>
+                        <UsersRoundIcon /> Open group
+                      </Link>
+                    </Button>
+                  ) : (
+                    <AlertDialog>
+                      <AlertDialogTrigger asChild>
+                        <Button
+                          variant="ghost"
+                          className="justify-start text-destructive hover:text-destructive"
+                        >
+                          <LogOutIcon /> Leave group
+                        </Button>
+                      </AlertDialogTrigger>
+                      <AlertDialogContent>
+                        <AlertDialogHeader>
+                          <AlertDialogTitle>Leave this group?</AlertDialogTitle>
+                          <AlertDialogDescription>
+                            You'll stop receiving messages from this
+                            conversation. Someone will have to add you back to
+                            rejoin.
+                          </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                          <AlertDialogCancel>Cancel</AlertDialogCancel>
+                          <AlertDialogAction
+                            variant="destructive"
+                            onClick={() => void leave()}
+                          >
+                            Leave group
+                          </AlertDialogAction>
+                        </AlertDialogFooter>
+                      </AlertDialogContent>
+                    </AlertDialog>
+                  )}
+                </>
+              ) : null}
+            </div>
+          </div>
+        </ScrollArea>
       </SheetContent>
     </Sheet>
   )

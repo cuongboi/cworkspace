@@ -17,6 +17,7 @@ import {
   shortTimeLabel,
 } from "./calendar-utils"
 import { EVENT_TYPE_STYLES } from "./event-colors"
+import { ScrollArea } from "@/components/ui/scroll-area"
 
 type Props = {
   range: { start: Date; end: Date }
@@ -51,7 +52,7 @@ export function AgendaView({ range, occurrences, onSelect, onCreate }: Props) {
   }
 
   return (
-    <div className="min-h-0 flex-1 overflow-y-auto">
+    <ScrollArea className="min-h-0 flex-1">
       <ol className="mx-auto flex max-w-3xl flex-col divide-y px-2 sm:px-4">
         {groups.map(({ day, items }) => (
           <li key={day.toISOString()} className="flex gap-3 py-3 sm:gap-6">
@@ -133,6 +134,6 @@ export function AgendaView({ range, occurrences, onSelect, onCreate }: Props) {
           </li>
         ))}
       </ol>
-    </div>
+    </ScrollArea>
   )
 }

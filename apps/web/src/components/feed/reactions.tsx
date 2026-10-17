@@ -13,6 +13,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover"
 import { ReactionType } from "@app/api/zenstack/models"
+import { ScrollArea } from "@/components/ui/scroll-area"
 
 export const REACTIONS: {
   type: ReactionType
@@ -268,20 +269,22 @@ export function ReactionSummary({
             </span>
           ))}
         </div>
-        <ul className="flex max-h-60 flex-col gap-1.5 overflow-y-auto text-sm">
-          {reactions.map((r) => (
-            <li
-              key={r.userId}
-              className="flex items-center justify-between gap-2"
-            >
-              <span className="truncate">{r.user.name}</span>
-              <span>
-                <span aria-hidden>{reactionMeta(r.type).emoji}</span>
-                <span className="sr-only">{reactionMeta(r.type).label}</span>
-              </span>
-            </li>
-          ))}
-        </ul>
+        <ScrollArea viewportClassName="max-h-60">
+          <ul className="flex flex-col gap-1.5 text-sm">
+            {reactions.map((r) => (
+              <li
+                key={r.userId}
+                className="flex items-center justify-between gap-2"
+              >
+                <span className="truncate">{r.user.name}</span>
+                <span>
+                  <span aria-hidden>{reactionMeta(r.type).emoji}</span>
+                  <span className="sr-only">{reactionMeta(r.type).label}</span>
+                </span>
+              </li>
+            ))}
+          </ul>
+        </ScrollArea>
       </PopoverContent>
     </Popover>
   )

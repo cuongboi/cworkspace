@@ -8,7 +8,7 @@ import {
   VideoIcon,
 } from "lucide-react"
 import { Link } from "react-router-dom"
-import { useEffect, useState } from "react"
+import { type ReactNode, useEffect, useState } from "react"
 import { toast } from "sonner"
 import { useCalls } from "@/components/call/call-provider"
 import {
@@ -30,7 +30,6 @@ import {
   EmptyMedia,
   EmptyTitle,
 } from "@/components/ui/empty"
-import { MessageScrollerProvider } from "@/components/ui/message-scroller"
 import { Skeleton } from "@/components/ui/skeleton"
 import {
   Tooltip,
@@ -52,9 +51,14 @@ import {
   conversationTitle,
   fetchConversation,
   fetchMembers,
+  fetchMessage,
+  findCachedMessage,
+  insertMessage,
   membersKey,
+  messagesKey,
   otherUsers,
   patchMessage,
+  replaceMessage,
   type ThreadConversation,
   type ThreadMember,
 } from "./chat-data"
@@ -62,9 +66,25 @@ import { Composer, type ComposerMode } from "./composer"
 import { ConversationAvatar } from "./conversation-avatar"
 import { ConversationInfoSheet } from "./conversation-info-sheet"
 import { MessageList } from "./message-list"
+import { ThreadScrollProvider } from "./thread-scroll"
 
-export function ChatThread({ conversationId }: { conversationId: string }) {
+type ThreadVariant = "page" | "panel"
+
+/**
+ * One conversation. `page` is the Messenger pane; `panel` is embedded (group page, call screen):
+ * a compact header without call/back buttons, with `actions` on the right, sized by its parent.
+ */
+export function ChatThread({
+  conversationId,
+  variant = "page",
+  actions,
+}: {
+  conversationId: string
+  variant?: ThreadVariant
+  actions?: ReactNode
+}) {
   const { href } = useOrg()
+  useLiveMessages(conversationId)
   const conversation = useDbQuery(conversationKey(conversationId), () =>
     fetchConversation(conversationId)
   )
@@ -85,31 +105,39 @@ export function ChatThread({ conversationId }: { conversationId: string }) {
             It may have been deleted, or you're no longer a member.
           </EmptyDescription>
         </EmptyHeader>
-        <EmptyContent>
-          <Button asChild variant="secondary">
-            <Link to={href("/chat")}>Back to chats</Link>
-          </Button>
-        </EmptyContent>
+        {variant === "page" ? (
+          <EmptyContent>
+            <Button asChild variant="secondary">
+              <Link to={href("/chat")}>Back to chats</Link>
+            </Button>
+          </EmptyContent>
+        ) : null}
       </Empty>
     )
   }
 
   return (
-    <MessageScrollerProvider autoScroll defaultScrollPosition="end">
+    <ThreadScrollProvider>
       <ThreadView
         conversation={conversation.data}
         members={members.data ?? []}
+        variant={variant}
+        actions={actions}
       />
-    </MessageScrollerProvider>
+    </ThreadScrollProvider>
   )
 }
 
 function ThreadView({
   conversation,
   members,
+  variant,
+  actions,
 }: {
   conversation: ThreadConversation
   members: ThreadMember[]
+  variant: ThreadVariant
+  actions?: ReactNode
 }) {
   const { org, me } = useOrg()
   const qc = useQueryClient()
@@ -208,6 +236,8 @@ function ThreadView({
       <ThreadHeader
         conversation={conversation}
         members={members}
+        variant={variant}
+        actions={actions}
         onOpenInfo={() => setInfoOpen(true)}
       />
       <MessageList
@@ -278,10 +308,14 @@ function ThreadView({
 function ThreadHeader({
   conversation,
   members,
+  variant,
+  actions,
   onOpenInfo,
 }: {
   conversation: ThreadConversation
   members: ThreadMember[]
+  variant: ThreadVariant
+  actions?: ReactNode
   onOpenInfo: () => void
 }) {
   const { me, href } = useOrg()
@@ -307,6 +341,39 @@ function ThreadHeader({
     }
   }
 
+  if (variant === "panel") {
+    return (
+      <header className="flex h-12 shrink-0 items-center gap-2 border-b px-2">
+        <button
+          type="button"
+          onClick={onOpenInfo}
+          className="flex min-w-0 flex-1 items-center gap-2 rounded-lg p-1 text-left outline-none hover:bg-accent/50 focus-visible:ring-2 focus-visible:ring-ring"
+        >
+          <ConversationAvatar
+            type={conversation.type}
+            group={conversation.group}
+            members={members}
+            meId={me.id}
+            size="sm"
+          />
+          <span className="min-w-0">
+            <span className="block truncate text-sm font-semibold">
+              {title}
+            </span>
+            {subtitle ? (
+              <span className="block truncate text-xs text-muted-foreground">
+                {subtitle}
+              </span>
+            ) : null}
+          </span>
+        </button>
+        {actions ? (
+          <div className="flex shrink-0 items-center gap-1">{actions}</div>
+        ) : null}
+      </header>
+    )
+  }
+
   return (
     <header className="flex h-16 shrink-0 items-center gap-2 border-b px-2 md:px-4">
       {isMobile ? (
@@ -323,6 +390,7 @@ function ThreadHeader({
       >
         <ConversationAvatar
           type={conversation.type}
+          group={conversation.group}
           members={members}
           meId={me.id}
         />
@@ -474,4 +542,41 @@ function ThreadLoading() {
       </div>
     </div>
   )
+}
+
+/**
+ * Appends `message:new` rows of this thread instantly (deduped by id; my own optimistic
+ * message is reconciled), then fetches the full row (attachments, reply quote) in the background.
+ */
+function useLiveMessages(conversationId: string) {
+  const qc = useQueryClient()
+
+  useSocketEvent("message:new", (payload) => {
+    if (payload.conversationId !== conversationId) return
+    if (!qc.getQueryData(messagesKey(conversationId))) return
+    const quoted = payload.replyToId
+      ? findCachedMessage(qc, conversationId, payload.replyToId)
+      : undefined
+    const message: ChatMessage = {
+      ...payload,
+      data: (payload.data ?? null) as ChatMessage["data"],
+      attachments: [],
+      reactions: [],
+      replyTo: quoted
+        ? {
+            id: quoted.id,
+            content: quoted.content,
+            deletedAt: quoted.deletedAt,
+            senderId: quoted.senderId,
+            sender: { name: quoted.sender.name },
+          }
+        : null,
+    }
+    insertMessage(qc, message)
+    fetchMessage(payload.id)
+      .then((full) => {
+        if (full) replaceMessage(qc, conversationId, full.id, full)
+      })
+      .catch(() => undefined)
+  })
 }

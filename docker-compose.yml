@@ -1,38 +1,52 @@
-# Local infrastructure for cworkplace: Postgres, MinIO (S3) and coturn (TURN).
+# Local infrastructure for cworkplace: MiniStack (AWS emulator: S3 + RDS Postgres), StackPort (UI) and coturn (TURN).
 #   docker compose up -d        # then: bun --cwd apps/api run db:push && bun run dev
 # The API is a single long-lived process (realtime state lives in memory), so no Redis is needed.
 services:
-  postgres:
-    image: postgres:16-alpine
+  ministack:
+    image: ministackorg/ministack:latest
+    ports: ["4566:4566"]
     environment:
-      POSTGRES_USER: cworkplace
-      POSTGRES_PASSWORD: cworkplace
-      POSTGRES_DB: cworkplace
-    ports: ["5432:5432"]
-    volumes: [postgres:/var/lib/postgresql/data]
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U cworkplace"]
-      interval: 5s
-      retries: 10
+      - MINISTACK_REGION=us-east-1
+      # keep resources and S3 objects in ~/.ministack across restarts
+      - PERSIST_STATE=1
+      - STATE_DIR=/var/lib/ministack/state
+      - S3_PERSIST=1
+      - S3_DATA_DIR=/var/lib/ministack/s3
+      # RDS data lives in a named Docker volume so the database survives container respawns
+      - RDS_PERSIST=1
+    volumes:
+      # RDS instances run as real Postgres containers started through the host's Docker daemon
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ${HOME}/.ministack:/var/lib/ministack
 
-  minio:
-    image: minio/minio:RELEASE.2025-04-22T22-12-26Z
-    command: server /data --console-address ":9001"
+  # web UI for browsing the emulated AWS resources: http://localhost:8080
+  stackport:
+    image: davireis/stackport:latest
+    ports: ["8080:8080"]
     environment:
-      MINIO_ROOT_USER: cworkplace
-      MINIO_ROOT_PASSWORD: cworkplace-secret
-    ports: ["9000:9000", "9001:9001"]
-    volumes: [minio:/data]
+      - AWS_ENDPOINT_URL=http://ministack:4566
+      - AWS_REGION=us-east-1
+      # boto3 refuses to sign requests without credentials; MiniStack accepts any
+      - AWS_ACCESS_KEY_ID=test
+      - AWS_SECRET_ACCESS_KEY=test
+      - STACKPORT_ALLOW_WRITES=true
+    depends_on: [ministack]
 
-  # creates the private bucket once
-  minio-init:
-    image: minio/mc:RELEASE.2025-04-16T18-13-26Z
-    depends_on: [minio]
+  # creates the private bucket and the Postgres instance once
+  ministack-init:
+    image: amazon/aws-cli:2.27.0
+    depends_on: [ministack]
+    environment:
+      AWS_ACCESS_KEY_ID: test
+      AWS_SECRET_ACCESS_KEY: test
+      AWS_DEFAULT_REGION: us-east-1
+      AWS_ENDPOINT_URL: http://ministack:4566
     entrypoint: >
       /bin/sh -c "
-      until mc alias set local http://minio:9000 cworkplace cworkplace-secret; do sleep 1; done;
-      mc mb --ignore-existing local/cworkplace;
-      mc anonymous set none local/cworkplace;
+      until aws s3api list-buckets >/dev/null 2>&1; do sleep 1; done;
+      aws s3api head-bucket --bucket cworkplace 2>/dev/null || aws s3api create-bucket --bucket cworkplace;
+      aws rds describe-db-instances --db-instance-identifier cworkplace >/dev/null 2>&1 || aws rds create-db-instance --db-instance-identifier cworkplace --engine postgres --db-instance-class db.t3.micro --master-username cworkplace --master-user-password cworkplace --db-name cworkplace --allocated-storage 20;
+      aws rds describe-db-instances --db-instance-identifier cworkplace --query 'DBInstances[0].Endpoint' --output text;
       "
 
   coturn:
@@ -48,7 +62,3 @@ services:
       - "3478:3478/udp"
       - "3478:3478/tcp"
       - "49160-49200:49160-49200/udp"
-
-volumes:
-  postgres:
-  minio:

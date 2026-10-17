@@ -69,25 +69,25 @@ Root (via Turborepo): `bun run dev` · `bun run build` · `bun run lint` · `bun
 
 `apps/web`: `bun run dev` · `bun run build` (type-check, build, copy `dist/` to `apps/api/src/public`) · `bun run lint` / `format` / `typecheck`
 
-Setup: `bun install` → `cp .env.example .env` → `docker compose up -d` (Postgres, MinIO, coturn) → `bun --cwd apps/api run db:push` → `bun run dev` (API :3000, web :5173; Vite proxies `/api`, `/ws` and `/openapi`).
+Setup: `bun install` → `cp .env.example .env` → `docker compose up -d` (MiniStack: S3 + RDS Postgres; StackPort UI; coturn) → `bun --cwd apps/api run db:push` → `bun run dev` (API :3000, web :5173; Vite proxies `/api`, `/ws` and `/openapi`).
 
 ## Environment variables
 
 Read env **only** through `env` from `@/env`. When adding a key, add it to `src/env.ts` and `.env.example`.
 
-| Variable | Required | Default |
-| --- | --- | --- |
-| `DATABASE_URL` | yes | — |
-| `BETTER_AUTH_SECRET` | yes | — |
-| `BETTER_AUTH_URL` | no | `http://localhost:3000` |
-| `BETTER_AUTH_BASE_PATH` | no | `/api/auth` |
-| `WEB_ORIGIN` | no | `http://localhost:5173` (comma-separated) |
-| `APP_URL` | no | first `WEB_ORIGIN` (links in emails) |
-| `RESEND_API_KEY`, `MAIL_FROM` | no | unset → emails are printed to the API console |
-| `S3_ENDPOINT`, `S3_REGION`, `S3_BUCKET`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY` | for uploads | unset → uploads answer 502 `UPSTREAM_ERROR` |
-| `STUN_URLS`, `TURN_URLS`, `TURN_SECRET` | for calls across NATs | Google STUN, no TURN |
-| `VITE_BETTER_AUTH_URL` | no | — |
-| `DB_LOG_QUERIES` | no | `false` |
+| Variable                                                                            | Required              | Default                                       |
+| ----------------------------------------------------------------------------------- | --------------------- | --------------------------------------------- |
+| `DATABASE_URL`                                                                      | yes                   | —                                             |
+| `BETTER_AUTH_SECRET`                                                                | yes                   | —                                             |
+| `BETTER_AUTH_URL`                                                                   | no                    | `http://localhost:3000`                       |
+| `BETTER_AUTH_BASE_PATH`                                                             | no                    | `/api/auth`                                   |
+| `WEB_ORIGIN`                                                                        | no                    | `http://localhost:5173` (comma-separated)     |
+| `APP_URL`                                                                           | no                    | first `WEB_ORIGIN` (links in emails)          |
+| `RESEND_API_KEY`, `MAIL_FROM`                                                       | no                    | unset → emails are printed to the API console |
+| `S3_ENDPOINT`, `S3_REGION`, `S3_BUCKET`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY` | for uploads           | unset → uploads answer 502 `UPSTREAM_ERROR`   |
+| `STUN_URLS`, `TURN_URLS`, `TURN_SECRET`                                             | for calls across NATs | Google STUN, no TURN                          |
+| `VITE_BETTER_AUTH_URL`                                                              | no                    | —                                             |
+| `DB_LOG_QUERIES`                                                                    | no                    | `false`                                       |
 
 ## Data model & access control
 
@@ -102,6 +102,7 @@ Read env **only** through `env` from `@/env`. When adding a key, add it to `src/
   ]
   ```
 - RBAC with a condition on a model:
+
   ```
   model ExampleModel {
     id ...
@@ -110,6 +111,23 @@ Read env **only** through `env` from `@/env`. When adding a key, add it to `src/
     ...
   }
   ```
+
+- Write policy rules carefully. For example: If same action or same conditon:
+
+```
+  @@allow('create', event.creatorId == auth().id)
+  @@allow('create', userId == auth().id && check(event, 'read'))
+  @@allow('update', userId == auth().id || event.creatorId == auth().id)
+  @@allow('delete', userId == auth().id || event.creatorId == auth().id)
+```
+
+write as
+
+```
+  @@allow('create', event.creatorId == auth().id || (userId == auth().id && check(event, 'read')))
+  @@allow('update,delete', userId == auth().id || event.creatorId == auth().id)
+```
+
 - DB clients:
   - `dbFor(user)` (`src/server/session.ts`) = `authDb.$setAuth({ id, email, role })` — policy-enforced; this is `userDb` in route handlers. Use for anything driven by user input.
   - `db` (`src/lib/db.ts`) — bypasses policies. Trusted server code only (auth adapter, realtime plugin, socket handlers after an authorization check, jobs, seeding). **Never expose it to `/api/execute`.**
@@ -168,22 +186,22 @@ Read env **only** through `env` from `@/env`. When adding a key, add it to `src/
 
 ## Where to put code
 
-| Task | Location |
-| --- | --- |
-| Database schema / policies | `apps/api/zenstack/schema.zmodel` (then `db:push`) |
-| Policy tests | `apps/api/tests/*.test.ts` |
-| Realtime event contract | `packages/shared/src/realtime-events.ts` |
-| Mutation side effects / notifications | `apps/api/src/server/plugins/realtime-plugin.ts` |
-| WebSocket features | `apps/api/src/websocket/*` |
-| HTTP routes (API) | `apps/api/src/routes/*` |
-| UI components | `apps/web/src/components/*` |
-| Web routes/pages | `apps/web/src/pages/*` + `apps/web/src/router.tsx` |
+| Task                                  | Location                                           |
+| ------------------------------------- | -------------------------------------------------- |
+| Database schema / policies            | `apps/api/zenstack/schema.zmodel` (then `db:push`) |
+| Policy tests                          | `apps/api/tests/*.test.ts`                         |
+| Realtime event contract               | `packages/shared/src/realtime-events.ts`           |
+| Mutation side effects / notifications | `apps/api/src/server/plugins/realtime-plugin.ts`   |
+| WebSocket features                    | `apps/api/src/websocket/*`                         |
+| HTTP routes (API)                     | `apps/api/src/routes/*`                            |
+| UI components                         | `apps/web/src/components/*`                        |
+| Web routes/pages                      | `apps/web/src/pages/*` + `apps/web/src/router.tsx` |
 
 ## Code style
 
 - TypeScript everywhere; avoid `any` outside framework glue.
 - Before committing: `bun run lint`, `bun run check-types` and `bun --cwd apps/api run test`. Format with `oxfmt` (api) / Prettier (web).
-- Comments explain *why*, not *what*.
+- Comments explain _why_, not _what_.
 
 ## Build & deploy
 
@@ -203,3 +221,4 @@ The binary serves API, auth, WebSocket, and SPA (with deep-link fallback) from o
 - Read `process.env` directly instead of `env` from `@/env`.
 - Register routes after `staticPlugin`.
 - Call `fetch` directly from web components.
+- Run analyze code base or test, ask me for permission.

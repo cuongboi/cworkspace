@@ -29,7 +29,7 @@ export function ContactsRail() {
 
   return (
     <aside className="hidden w-64 shrink-0 border-l xl:block">
-      <div className="sticky top-14 flex h-[calc(100svh-3.5rem)] flex-col">
+      <div className="flex h-full flex-col">
         <h2 className="px-4 pt-4 pb-2 text-sm font-semibold text-muted-foreground">
           Contacts
         </h2>

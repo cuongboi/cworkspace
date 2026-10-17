@@ -1,5 +1,11 @@
-import { useEffect } from "react"
-import { Link, Outlet, useMatches, useParams } from "react-router-dom"
+import { useEffect, useState } from "react"
+import {
+  Link,
+  Outlet,
+  useLocation,
+  useMatches,
+  useParams,
+} from "react-router-dom"
 import { CallProvider } from "@/components/call/call-provider"
 import { Button } from "@/components/ui/button"
 import {
@@ -9,9 +15,11 @@ import {
   EmptyHeader,
   EmptyTitle,
 } from "@/components/ui/empty"
+import { ScrollArea } from "@/components/ui/scroll-area"
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar"
 import { Spinner } from "@/components/ui/spinner"
 import { OrgProvider, type OrgRole } from "@/hooks/use-org"
+import { PageScrollContext } from "@/hooks/use-page-scroll"
 import { PresenceProvider } from "@/hooks/use-presence"
 import { useRealtimeSync } from "@/hooks/use-realtime-sync"
 import { db } from "@/lib/api-client"
@@ -110,18 +118,18 @@ export function OrgLayout() {
           <RealtimeSync />
           <SidebarProvider>
             <AppSidebar />
-            <SidebarInset className="min-w-0">
+            {/* the shell is pinned to the viewport so only the page area scrolls */}
+            <SidebarInset className="h-svh min-w-0 overflow-hidden">
               <AppHeader />
               <div className="flex min-h-0 flex-1">
-                <main
-                  className={
-                    bleed
-                      ? "flex min-w-0 flex-1 flex-col"
-                      : "min-w-0 flex-1 p-4 md:p-6"
-                  }
-                >
-                  <Outlet />
-                </main>
+                {bleed ? (
+                  // full-bleed pages size themselves and manage their own scrolling
+                  <main className="flex min-w-0 flex-1 flex-col">
+                    <Outlet />
+                  </main>
+                ) : (
+                  <PageScroll />
+                )}
                 {rail ? <ContactsRail /> : null}
               </div>
             </SidebarInset>
@@ -129,6 +137,27 @@ export function OrgLayout() {
         </CallProvider>
       </PresenceProvider>
     </OrgProvider>
+  )
+}
+
+function PageScroll() {
+  // state, not a ref: virtualized lists in the page need to re-render once it exists
+  const [viewport, setViewport] = useState<HTMLDivElement | null>(null)
+  const { pathname } = useLocation()
+
+  // the page no longer scrolls the window, so reset our own scroll position on navigation
+  useEffect(() => {
+    viewport?.scrollTo({ top: 0 })
+  }, [pathname, viewport])
+
+  return (
+    <ScrollArea viewportRef={setViewport} className="min-w-0 flex-1">
+      <PageScrollContext value={viewport}>
+        <main className="p-4 md:p-6">
+          <Outlet />
+        </main>
+      </PageScrollContext>
+    </ScrollArea>
   )
 }
 

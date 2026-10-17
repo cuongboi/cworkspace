@@ -17,6 +17,7 @@ import {
   shortTimeLabel,
 } from "./calendar-utils"
 import { EVENT_TYPE_STYLES } from "./event-colors"
+import { ScrollArea } from "@/components/ui/scroll-area"
 
 const HOUR_HEIGHT = 48 // px
 const HOURS = Array.from({ length: 24 }, (_, h) => h)
@@ -67,7 +68,7 @@ export function TimeGridView({
   }
 
   return (
-    <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto">
+    <ScrollArea viewportRef={scrollRef} className="min-h-0 flex-1">
       <div className="sticky top-0 z-20 bg-background">
         {/* day headers */}
         <div className="grid border-b" style={gridCols}>
@@ -256,7 +257,7 @@ export function TimeGridView({
           )
         })}
       </div>
-    </div>
+    </ScrollArea>
   )
 }
 

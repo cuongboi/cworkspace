@@ -212,3 +212,24 @@ export function connectionCount(userId: string) {
 export function onlineUserIds() {
   return new Set(connOwner.values());
 }
+
+type GroupLeaveListener = (groupId: string, userId: string) => void;
+const groupLeaveListeners = new Set<GroupLeaveListener>();
+
+/**
+ * Socket features react to a user losing a group membership (e.g. calls kick them out of the
+ * group's live call). Lets the realtime plugin notify them without importing feature modules.
+ */
+export function onGroupMembershipEnded(listener: GroupLeaveListener) {
+  groupLeaveListeners.add(listener);
+}
+
+export function groupMembershipEnded(groupId: string, userId: string) {
+  for (const listener of groupLeaveListeners) {
+    try {
+      listener(groupId, userId);
+    } catch (err) {
+      console.error("[ws] group leave listener", err);
+    }
+  }
+}

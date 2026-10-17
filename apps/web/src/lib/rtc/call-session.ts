@@ -78,7 +78,6 @@ const VIDEO_CONSTRAINTS: MediaTrackConstraints = {
   width: { ideal: 960 },
   height: { ideal: 540 },
   frameRate: { ideal: 24, max: 30 },
-  facingMode: 'user',
 }
 export const DEFAULT_ICE_SERVERS: RTCIceServer[] = [
   { urls: ["stun:stun.l.google.com:19302"] },

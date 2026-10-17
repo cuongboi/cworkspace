@@ -34,6 +34,7 @@ import {
   notificationInclude,
   resolveNotificationHref,
 } from "./notification-item"
+import { ScrollArea } from "@/components/ui/scroll-area"
 
 const LATEST = 15
 
@@ -157,7 +158,7 @@ function BellPanel({
         </Button>
       </div>
       <Separator />
-      <div className="max-h-[min(28rem,calc(100svh-10rem))] overflow-y-auto overscroll-contain">
+      <ScrollArea viewportClassName="max-h-[min(28rem,calc(100svh-10rem))] overscroll-contain">
         <div className="flex flex-col gap-0.5 p-2">
           {isPending ? (
             Array.from({ length: 4 }, (_, i) => (
@@ -186,7 +187,7 @@ function BellPanel({
             ))
           )}
         </div>
-      </div>
+      </ScrollArea>
       <Separator />
       <Button variant="ghost" className="m-1 rounded-md" asChild>
         <Link to={href("/notifications")} onClick={onNavigate}>

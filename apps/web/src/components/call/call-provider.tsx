@@ -22,11 +22,13 @@ import { type IncomingCall, IncomingCallCard } from "./incoming-call"
 export type StartCallOptions = {
   conversationId?: string
   eventId?: string
+  /** a group's drop-in call (on the group chat; nobody rings) */
+  groupId?: string
   type: CallKind
 }
 
 type CallsContextValue = {
-  /** Starts (or joins the live) call of a conversation / event and opens the call page. */
+  /** Starts (or joins the live) call of a conversation / event / group and opens the call page. */
   startCall: (opts: StartCallOptions) => Promise<void>
   /** Opens the call page for an existing call. */
   joinCall: (callId: string) => void

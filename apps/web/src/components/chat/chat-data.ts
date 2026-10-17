@@ -8,6 +8,10 @@ import type { ReactionType } from "@app/api/zenstack/models"
  */
 
 const userSummary = { select: { id: true, name: true, image: true } } as const
+/** set on a group's chat: its title and avatar come from the group */
+const groupSummary = {
+  select: { id: true, name: true, slug: true, coverUrl: true },
+} as const
 
 // ── conversation list ────────────────────────────────────────────────
 
@@ -29,6 +33,7 @@ export function fetchConversationList(orgId: string, meId: string) {
           id: true,
           type: true,
           title: true,
+          group: groupSummary,
           lastMessageAt: true,
           members: {
             select: { userId: true, user: userSummary },
@@ -71,6 +76,7 @@ export function fetchConversation(id: string) {
       type: true,
       title: true,
       createdById: true,
+      group: groupSummary,
     },
   })
 }
@@ -274,10 +280,15 @@ export function otherUsers(
 }
 
 export function conversationTitle(
-  conversation: { type: "DIRECT" | "GROUP"; title: string | null },
+  conversation: {
+    type: "DIRECT" | "GROUP"
+    title: string | null
+    group?: { name: string } | null
+  },
   members: { userId: string; user: UserLike }[],
   meId: string
 ) {
+  if (conversation.group) return conversation.group.name
   const others = otherUsers(members, meId)
   if (conversation.type === "DIRECT") return others[0]?.name ?? "Conversation"
   if (conversation.title?.trim()) return conversation.title.trim()
@@ -305,6 +316,10 @@ export type CallData = {
   callType: "AUDIO" | "VIDEO"
   durationSec: number
   answered: boolean
+  /** a group's drop-in call: never "missed" */
+  groupCall: boolean
+  /** the group call is still running (its entry is updated when it ends) */
+  live: boolean
 }
 
 export function parseCallData(data: unknown): CallData {
@@ -317,6 +332,8 @@ export function parseCallData(data: unknown): CallData {
     callType: d.callType === "VIDEO" ? "VIDEO" : "AUDIO",
     durationSec: typeof d.durationSec === "number" ? d.durationSec : 0,
     answered: d.answered === true,
+    groupCall: d.groupCall === true,
+    live: d.live === true,
   }
 }
 
@@ -330,6 +347,8 @@ export function formatDuration(sec: number) {
 
 export function callLabel(data: CallData) {
   const kind = data.callType === "VIDEO" ? "Video call" : "Audio call"
+  if (data.live) return `${kind} in progress`
+  if (data.groupCall) return `${kind} · ${formatDuration(data.durationSec)}`
   return data.answered
     ? `${kind} · ${formatDuration(data.durationSec)}`
     : `Missed ${kind.toLowerCase()}`

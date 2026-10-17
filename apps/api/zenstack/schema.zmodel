@@ -65,6 +65,8 @@ model User {
     eventAttendances        EventAttendee[]
     callsStarted            Call[]
     callParticipations      CallParticipant[]
+    wikiPagesCreated        WikiPage[]
+    wikiRevisions           WikiRevision[]
 
     // yourself, and anyone who shares an organization with you
     @@allow('read', id == auth().id)
@@ -216,6 +218,12 @@ model MemberPermission {
 
 // ───────────────────────────── groups ─────────────────────────────
 
+// who may create and edit the group's Knowledge pages
+enum WikiEditPolicy {
+    MEMBERS // every active member
+    ADMINS  // group admins and moderators
+}
+
 enum GroupPrivacy {
     PUBLIC  // anyone in the org can see the group and its posts, and join
     CLOSED  // anyone in the org can see the group; posts are members-only; joining needs approval
@@ -252,6 +260,10 @@ model Group {
     posts          Post[]
     events         Event[]
     notifications  Notification[]
+    // the group chat, created lazily by the server (src/server/group-chat.ts)
+    conversation   Conversation?
+    wikiPages      WikiPage[]
+    wikiEditPolicy WikiEditPolicy @default(MEMBERS)
 
     @@deny('all', !(organization.members?[userId == auth().id]))
     @@allow('read', privacy != SECRET || members?[userId == auth().id && status == ACTIVE])
@@ -539,13 +551,20 @@ model Conversation {
     members        ConversationMember[]
     messages       Message[]
     calls          Call[]
+    // set for a group's chat: membership mirrors the group's ACTIVE members (written server-side)
+    groupId        String?              @unique
+    group          Group?               @relation(fields: [groupId], references: [id], onDelete: Cascade)
 
     @@deny('all', !(organization.members?[userId == auth().id]))
-    @@allow('read', members?[userId == auth().id])
+    @@allow('read', groupId == null && members?[userId == auth().id])
+    // group chats: grounded in the group, not the mirrored rows, so a lagging mirror never grants access
+    @@allow('read', groupId != null && group.members?[userId == auth().id && status == ACTIVE])
     @@allow('create', createdById == auth().id)
     @@allow('update', type == GROUP && members?[userId == auth().id])
     @@allow('delete', type == GROUP && members?[userId == auth().id && role == ADMIN])
-    @@deny('post-update', organizationId != before().organizationId || directKey != before().directKey || createdById != before().createdById)
+    @@deny('post-update', organizationId != before().organizationId || directKey != before().directKey || createdById != before().createdById || groupId != before().groupId)
+    // group chats are created and maintained by the server only; the title follows the group
+    @@deny('create,update,delete', groupId != null)
 
     @@index([organizationId, lastMessageAt])
     @@map('conversation')
@@ -570,6 +589,9 @@ model ConversationMember {
     @@allow('create', conversation.type == GROUP && conversation.members?[userId == auth().id && role == ADMIN])
     // own read state / mute; admins manage roles
     @@allow('update', userId == auth().id || conversation.members?[userId == auth().id && role == ADMIN])
+    // group chat membership follows the group (server-side sync); members only update their own read state / mute
+    @@deny('create,delete', conversation.groupId != null)
+    @@deny('update', conversation.groupId != null && userId != auth().id)
     // leave a group conversation, or be removed by an admin
     @@allow('delete', conversation.type == GROUP && (userId == auth().id || conversation.members?[userId == auth().id && role == ADMIN]))
     @@deny('post-update', conversationId != before().conversationId || userId != before().userId)
@@ -691,7 +713,7 @@ model Event {
     id             String          @id @default(cuid())
     organizationId String
     organization   Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-    groupId        String?
+    groupId        String?         @deny('update', true)
     group          Group?          @relation(fields: [groupId], references: [id], onDelete: Cascade)
     // group events are announced as a Post(type EVENT)
     postId         String?         @unique
@@ -717,9 +739,12 @@ model Event {
 
     @@deny('all', !(organization.members?[userId == auth().id]))
     @@allow('read', creatorId == auth().id || attendees?[userId == auth().id] || type == OUT_OF_OFFICE)
-    @@allow('read', groupId != null && check(group, 'read'))
+    // like posts: PUBLIC group events are visible to the org, CLOSED/SECRET ones to members only
+    @@allow('read', groupId != null && check(group, 'read') && (group.privacy == PUBLIC || group.members?[userId == auth().id && status == ACTIVE]))
     @@allow('create', creatorId == auth().id && (groupId == null || group.members?[userId == auth().id && status == ACTIVE]))
     @@allow('update,delete', creatorId == auth().id)
+    // group moderation
+    @@allow('update,delete', groupId != null && group.members?[userId == auth().id && status == ACTIVE && role in [ADMIN, MODERATOR]])
     @@deny('post-update', organizationId != before().organizationId || creatorId != before().creatorId)
     @@deny('post-update', endAt < startAt)
     @@deny('create', endAt < startAt)
@@ -803,4 +828,60 @@ model CallParticipant {
 
     @@unique([callId, userId])
     @@map('call_participant')
+}
+
+// ───────────────────────────── knowledge (group wiki) ─────────────────────────────
+
+model WikiPage {
+    id          String         @id @default(cuid())
+    groupId     String
+    group       Group          @relation(fields: [groupId], references: [id], onDelete: Cascade)
+    parentId    String?
+    parent      WikiPage?      @relation('WikiTree', fields: [parentId], references: [id], onDelete: Cascade)
+    children    WikiPage[]     @relation('WikiTree')
+    title       String
+    // markdown
+    content     String         @default('')
+    position    Int            @default(0)
+    createdById String         @default(auth().id)
+    createdBy   User           @relation(fields: [createdById], references: [id], onDelete: Cascade)
+    // bumped by every content save: optimistic concurrency (`where: { id, version }`); moves leave it alone
+    version     Int            @default(0)
+    createdAt   DateTime       @default(now())
+    updatedAt   DateTime       @updatedAt
+    // who edited what and when lives here (authorId is enforced), not on the page
+    revisions   WikiRevision[]
+
+    @@allow('read', check(group, 'read') && (group.privacy == PUBLIC || group.members?[userId == auth().id && status == ACTIVE]))
+    @@allow('create,update', group.members?[userId == auth().id && status == ACTIVE && (group.wikiEditPolicy == MEMBERS || role in [ADMIN, MODERATOR])])
+    @@allow('create,update', group.organization.members?[userId == auth().id && role in ['owner', 'admin']])
+    @@allow('delete', group.members?[userId == auth().id && status == ACTIVE && role in [ADMIN, MODERATOR]])
+    @@allow('delete', group.organization.members?[userId == auth().id && role in ['owner', 'admin']])
+    @@allow('delete', createdById == auth().id && group.members?[userId == auth().id && status == ACTIVE && group.wikiEditPolicy == MEMBERS])
+    @@deny('create', createdById != auth().id)
+    // the tree never spans groups (cycles are prevented by POST /api/groups/:id/wiki/:pageId/move)
+    @@deny('create,post-update', parentId != null && parent.groupId != groupId)
+    @@deny('post-update', groupId != before().groupId || createdById != before().createdById)
+
+    @@index([groupId, parentId, position])
+    @@index([parentId])
+    @@map('wiki_page')
+}
+
+model WikiRevision {
+    id        String   @id @default(cuid())
+    pageId    String
+    page      WikiPage @relation(fields: [pageId], references: [id], onDelete: Cascade)
+    title     String
+    content   String   @default('')
+    authorId  String   @default(auth().id)
+    author    User     @relation(fields: [authorId], references: [id], onDelete: Cascade)
+    createdAt DateTime @default(now())
+
+    // append-only history: written together with the page, removed only by cascade
+    @@allow('read', check(page, 'read'))
+    @@allow('create', authorId == auth().id && check(page, 'update'))
+
+    @@index([pageId, createdAt])
+    @@map('wiki_revision')
 }

@@ -113,9 +113,10 @@ function CallMessage({
   message: ChatMessage
   conversationId: string
 }) {
-  const { startCall } = useCalls()
+  const { startCall, joinCall } = useCalls()
   const data = parseCallData(message.data)
-  const Icon = !data.answered
+  const missed = !data.answered && !data.groupCall
+  const Icon = missed
     ? PhoneMissedIcon
     : data.callType === "VIDEO"
       ? VideoIcon
@@ -125,9 +126,12 @@ function CallMessage({
       <div
         className={cn(
           "inline-flex items-center gap-2 rounded-full bg-muted py-1 pr-1 pl-3 text-xs",
-          !data.answered && "text-destructive"
+          missed && "text-destructive"
         )}
       >
+        {data.live ? (
+          <span className="size-2 animate-pulse rounded-full bg-red-500" />
+        ) : null}
         <Icon className="size-4" aria-hidden="true" />
         <span className="font-medium">{callLabel(data)}</span>
         <span
@@ -141,10 +145,12 @@ function CallMessage({
           size="xs"
           className="rounded-full text-foreground"
           onClick={() =>
-            void startCall({ conversationId, type: data.callType })
+            data.live && data.callId
+              ? joinCall(data.callId)
+              : void startCall({ conversationId, type: data.callType })
           }
         >
-          Call back
+          {data.live ? "Join" : data.groupCall ? "Start call" : "Call back"}
         </Button>
       </div>
     </div>

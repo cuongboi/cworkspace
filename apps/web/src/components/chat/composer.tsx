@@ -12,7 +12,6 @@ import { toast } from "sonner"
 import { AttachmentList } from "@/components/common/attachment-list"
 import { MentionTextarea } from "@/components/common/mention-textarea"
 import { Button } from "@/components/ui/button"
-import { useMessageScroller } from "@/components/ui/message-scroller"
 import { Spinner } from "@/components/ui/spinner"
 import {
   Tooltip,
@@ -35,6 +34,8 @@ import {
   replaceMessage,
   tempId,
 } from "./chat-data"
+import { useThreadScroll } from "./thread-scroll"
+import { ScrollArea } from "@/components/ui/scroll-area"
 
 export type ComposerMode =
   | { kind: "reply"; message: ChatMessage }
@@ -60,7 +61,7 @@ export function Composer({
   const { me } = useOrg()
   const qc = useQueryClient()
   const socket = useSocket()
-  const { scrollToEnd } = useMessageScroller()
+  const { scrollToEnd } = useThreadScroll()
   const [value, setValue] = useState("")
   const [draft, setDraft] = useState("")
   const wrapperRef = useRef<HTMLDivElement>(null)
@@ -280,22 +281,24 @@ export function Composer({
 
       {mode?.kind !== "edit" &&
       (uploads.attachments.length > 0 || uploads.pending.length > 0) ? (
-        <div className="mb-2 flex max-h-56 flex-col gap-2 overflow-y-auto">
-          <AttachmentList
-            attachments={uploads.attachments}
-            onRemove={uploads.remove}
-            className="max-w-sm"
-          />
-          {uploads.pending.map((p) => (
-            <div
-              key={p.key}
-              className="flex items-center gap-2 text-xs text-muted-foreground"
-            >
-              <Spinner className="size-3.5" />
-              <span className="truncate">Uploading {p.name}…</span>
-            </div>
-          ))}
-        </div>
+        <ScrollArea className="mb-2" viewportClassName="max-h-56">
+          <div className="flex flex-col gap-2">
+            <AttachmentList
+              attachments={uploads.attachments}
+              onRemove={uploads.remove}
+              className="max-w-sm"
+            />
+            {uploads.pending.map((p) => (
+              <div
+                key={p.key}
+                className="flex items-center gap-2 text-xs text-muted-foreground"
+              >
+                <Spinner className="size-3.5" />
+                <span className="truncate">Uploading {p.name}…</span>
+              </div>
+            ))}
+          </div>
+        </ScrollArea>
       ) : null}
 
       <div className="flex items-end gap-1.5">

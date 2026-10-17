@@ -23,6 +23,9 @@ export function useRealtimeSync() {
   useSocketEvent("group:changed", () =>
     invalidateModels(qc, ["group", "groupMember"])
   )
+  useSocketEvent("wiki:changed", () =>
+    invalidateModels(qc, ["wikiPage", "wikiRevision"])
+  )
 
   useSocketEvent("message:new", () =>
     invalidateModels(qc, ["conversation", "conversationMember"])

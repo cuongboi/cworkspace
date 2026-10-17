@@ -1,0 +1,153 @@
+import { cn } from "cn"
+import { PhoneIcon, VideoIcon } from "lucide-react"
+import { useState } from "react"
+import { useCalls } from "@/components/call/call-provider"
+import { UserAvatar } from "@/components/common/user-avatar"
+import { Button } from "@/components/ui/button"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip"
+import { useOrg } from "@/hooks/use-org"
+import {
+  type CallKind,
+  type GroupCallState,
+  MAX_MESH_PARTICIPANTS,
+} from "@/lib/realtime-events"
+
+/**
+ * "Call" menu: starts the group's drop-in call. While a call is live it becomes a Join button
+ * (the server joins callers to the live call anyway: one call per group).
+ */
+export function GroupCallButton({
+  groupId,
+  live,
+}: {
+  groupId: string
+  live: GroupCallState | null
+}) {
+  const { startCall, joinCall } = useCalls()
+  const [busy, setBusy] = useState(false)
+
+  if (live?.call) {
+    return <JoinButton live={live} onJoin={() => joinCall(live.call!.id)} />
+  }
+
+  const start = async (type: CallKind) => {
+    setBusy(true)
+    try {
+      await startCall({ groupId, type })
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button variant="secondary" disabled={busy}>
+          <VideoIcon /> Call
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end">
+        <DropdownMenuItem onSelect={() => void start("VIDEO")}>
+          <VideoIcon /> Start video call
+        </DropdownMenuItem>
+        <DropdownMenuItem onSelect={() => void start("AUDIO")}>
+          <PhoneIcon /> Start audio call
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  )
+}
+
+/** Banner shown to members while the group's call is live: who's in it, and a Join button. */
+export function GroupLiveCallBanner({ live }: { live: GroupCallState }) {
+  const { joinCall } = useCalls()
+  const { me } = useOrg()
+  if (!live.call) return null
+  const Icon = live.call.type === "VIDEO" ? VideoIcon : PhoneIcon
+  const count = live.participants.length
+  const inIt = live.participants.some((p) => p.id === me.id)
+  const names = live.participants.map((p) => p.name.split(/\s+/)[0]).join(", ")
+
+  return (
+    <div
+      role="status"
+      className="flex items-center gap-3 rounded-xl border bg-card p-3"
+    >
+      <span className="relative flex size-9 shrink-0 items-center justify-center rounded-full bg-red-500/10 text-red-600">
+        <Icon className="size-4" aria-hidden />
+        <span className="absolute top-0 right-0 size-2.5 animate-pulse rounded-full bg-red-500 ring-2 ring-card" />
+      </span>
+      <div className="min-w-0 flex-1">
+        <p className="text-sm font-medium">
+          Live {live.call.type === "VIDEO" ? "video" : "audio"} call
+        </p>
+        <p className="truncate text-xs text-muted-foreground">
+          {count === 0
+            ? "Starting…"
+            : `${names} · ${count}/${MAX_MESH_PARTICIPANTS}`}
+        </p>
+      </div>
+      <div className="hidden -space-x-2 sm:flex">
+        {live.participants.slice(0, 4).map((p) => (
+          <UserAvatar
+            key={p.id}
+            user={p}
+            size="sm"
+            className="rounded-full ring-2 ring-card"
+          />
+        ))}
+      </div>
+      {inIt ? (
+        <Button variant="secondary" onClick={() => joinCall(live.call!.id)}>
+          Return to call
+        </Button>
+      ) : (
+        <JoinButton live={live} onJoin={() => joinCall(live.call!.id)} />
+      )}
+    </div>
+  )
+}
+
+function JoinButton({
+  live,
+  onJoin,
+}: {
+  live: GroupCallState
+  onJoin: () => void
+}) {
+  const full = live.participants.length >= MAX_MESH_PARTICIPANTS
+  const button = (
+    <Button
+      onClick={onJoin}
+      disabled={full}
+      className={cn(
+        !full && "bg-emerald-600 text-white hover:bg-emerald-600/90"
+      )}
+    >
+      {live.call?.type === "AUDIO" ? <PhoneIcon /> : <VideoIcon />}
+      Join call
+    </Button>
+  )
+  if (!full) return button
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        {/* a disabled button doesn't fire pointer events: wrap it for the tooltip */}
+        <span tabIndex={0}>{button}</span>
+      </TooltipTrigger>
+      <TooltipContent>
+        The call is full ({MAX_MESH_PARTICIPANTS} people max)
+      </TooltipContent>
+    </Tooltip>
+  )
+}
