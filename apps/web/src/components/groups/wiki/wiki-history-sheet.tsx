@@ -87,7 +87,7 @@ export function WikiHistorySheet({
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent className="w-full gap-0 sm:max-w-3xl">
+      <SheetContent className="w-full! gap-0 sm:max-w-3xl!">
         <SheetHeader className="border-b">
           <SheetTitle>Page history</SheetTitle>
           <SheetDescription>
@@ -104,39 +104,39 @@ export function WikiHistorySheet({
             <ul className="p-2">
               {isPending
                 ? Array.from({ length: 4 }, (_, i) => (
-                    <li key={i} className="p-2">
-                      <Skeleton className="h-9 w-full" />
-                    </li>
-                  ))
+                  <li key={i} className="p-2">
+                    <Skeleton className="h-9 w-full" />
+                  </li>
+                ))
                 : revisions?.map((r, i) => (
-                    <li key={r.id}>
-                      <button
-                        type="button"
-                        onClick={() => setSelectedId(r.id)}
-                        className={cn(
-                          "flex w-full items-center gap-2 rounded-md p-2 text-left text-sm hover:bg-accent",
-                          selected?.id === r.id && "bg-accent"
-                        )}
-                      >
-                        <UserAvatar user={r.author} size="sm" />
-                        <span className="min-w-0 flex-1">
-                          <span className="block truncate font-medium">
-                            {r.author.name}
-                            {i === 0 ? (
-                              <span className="text-muted-foreground">
-                                {" "}
-                                · current
-                              </span>
-                            ) : null}
-                          </span>
-                          <TimeAgo
-                            date={r.createdAt}
-                            className="block text-xs text-muted-foreground"
-                          />
+                  <li key={r.id}>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedId(r.id)}
+                      className={cn(
+                        "flex w-full items-center gap-2 rounded-md p-2 text-left text-sm hover:bg-accent",
+                        selected?.id === r.id && "bg-accent"
+                      )}
+                    >
+                      <UserAvatar user={r.author} size="sm" />
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate font-medium">
+                          {r.author.name}
+                          {i === 0 ? (
+                            <span className="text-muted-foreground">
+                              {" "}
+                              · current
+                            </span>
+                          ) : null}
                         </span>
-                      </button>
-                    </li>
-                  ))}
+                        <TimeAgo
+                          date={r.createdAt}
+                          className="block text-xs text-muted-foreground"
+                        />
+                      </span>
+                    </button>
+                  </li>
+                ))}
             </ul>
           </ScrollArea>
           <div className="flex min-h-0 flex-col">

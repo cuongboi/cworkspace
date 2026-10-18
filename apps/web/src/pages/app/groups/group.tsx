@@ -10,7 +10,6 @@ import {
   GroupCallButton,
   GroupLiveCallBanner,
 } from "@/components/groups/group-call-bar"
-import { GroupChat } from "@/components/groups/group-chat"
 import { GroupMembers } from "@/components/groups/group-members"
 import { type GroupWithMe, groupInclude } from "@/components/groups/group-query"
 import { GroupCover, PrivacyLabel } from "@/components/groups/group-visuals"
@@ -45,7 +44,7 @@ const TABS = [
 ] as const
 type Tab = (typeof TABS)[number]
 /** tabs that need the wide content column */
-const WIDE_TABS: Tab[] = ["chat", "knowledge", "calendar"]
+const WIDE_TABS: Tab[] = ["knowledge", "calendar"]
 
 const GroupPage = () => {
   const params = useParams()
@@ -179,9 +178,6 @@ const GroupPage = () => {
             </Empty>
           )}
         </TabsContent>
-        <TabsContent value="chat" className="flex flex-col gap-4">
-          {isMember ? <GroupChat groupId={group.id} live={live} /> : locked}
-        </TabsContent>
         <TabsContent value="knowledge">
           {canSeePosts ? <GroupKnowledge group={group} /> : locked}
         </TabsContent>
@@ -250,9 +246,6 @@ function GroupHeader({
             <TabsList variant="line" className="justify-start">
               <TabsTrigger value="discussion" className="p-2">
                 Discussion
-              </TabsTrigger>
-              <TabsTrigger value="chat" className="p-2">
-                Chat
               </TabsTrigger>
               <TabsTrigger value="knowledge" className="p-2">
                 Knowledge

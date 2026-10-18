@@ -8,7 +8,6 @@ import {
 } from "lucide-react"
 import { Link } from "react-router-dom"
 import { useState } from "react"
-import { shortTime } from "@/components/common/time-ago"
 import { Button } from "@/components/ui/button"
 import {
   Empty,
@@ -26,15 +25,12 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip"
 import { useApp } from "@/hooks/use-app"
-import { toPlainText } from "@/lib/mentions"
 import { useDbQuery } from "@/lib/query"
 import {
   type ConversationListItem,
-  callLabel,
   conversationListKey,
   conversationTitle,
   fetchConversationList,
-  parseCallData,
 } from "./chat-data"
 import { ConversationAvatar } from "./conversation-avatar"
 import { NewConversationDialog } from "./new-conversation-dialog"
@@ -59,12 +55,12 @@ export function ConversationList({ activeId }: { activeId?: string }) {
   }))
   const filtered = term
     ? rows.filter(
-        ({ item, title }) =>
-          title.toLowerCase().includes(term) ||
-          item.conversation.members.some((m) =>
-            m.user.name.toLowerCase().includes(term)
-          )
-      )
+      ({ item, title }) =>
+        title.toLowerCase().includes(term) ||
+        item.conversation.members.some((m) =>
+          m.user.name.toLowerCase().includes(term)
+        )
+    )
     : rows
 
   return (
@@ -210,28 +206,6 @@ function ConversationRow({
   )
   const muted = Boolean(item.mutedUntil && item.mutedUntil > new Date())
 
-  let preview = "No messages yet"
-  if (last) {
-    const sender =
-      last.senderId === me.id
-        ? "You"
-        : conversation.type === "GROUP"
-          ? (conversation.members
-              .find((m) => m.userId === last.senderId)
-              ?.user.name.split(/\s+/)[0] ?? "")
-          : ""
-    let text: string
-    if (last.type === "CALL") text = callLabel(parseCallData(last.data))
-    else if (last.type === "SYSTEM") text = toPlainText(last.content)
-    else if (last.deletedAt) text = "Unsent a message"
-    else if (last.content.trim())
-      text = toPlainText(last.content).replace(/\s+/g, " ")
-    else if (last._count.attachments)
-      text = `Sent ${last._count.attachments === 1 ? "an attachment" : `${last._count.attachments} attachments`}`
-    else text = ""
-    preview = sender && last.type === "TEXT" ? `${sender}: ${text}` : text
-  }
-
   return (
     <Link
       to={`/chat/${conversation.id}`}
@@ -246,10 +220,10 @@ function ConversationRow({
         group={conversation.group}
         members={conversation.members}
         meId={me.id}
-        size="lg"
+        size="sm"
       />
       <div className="min-w-0 flex-1">
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-1 text-sm">
           <span
             className={cn(
               "truncate text-sm",
@@ -263,22 +237,6 @@ function ConversationRow({
               className="size-3.5 shrink-0 text-muted-foreground"
               aria-label="Muted"
             />
-          ) : null}
-        </div>
-        <div
-          className={cn(
-            "flex items-center gap-1 text-xs",
-            unread ? "font-semibold text-foreground" : "text-muted-foreground"
-          )}
-        >
-          <span className="min-w-0 truncate">{preview}</span>
-          {last ? (
-            <>
-              <span aria-hidden="true">·</span>
-              <span className="shrink-0" suppressHydrationWarning>
-                {shortTime(conversation.lastMessageAt)}
-              </span>
-            </>
           ) : null}
         </div>
       </div>

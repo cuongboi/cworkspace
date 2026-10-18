@@ -28,7 +28,7 @@ export function ConversationAvatar({
 }: Props) {
   const online = useOnlineUsers()
   const others = otherUsers(members, meId)
-  const box = size === "lg" ? "size-12" : size === "sm" ? "size-7" : "size-10"
+  const box = size === "lg" ? "size-12" : size === "sm" ? "size-6" : "size-10"
 
   if (group) {
     return group.coverUrl ? (
@@ -68,14 +68,14 @@ export function ConversationAvatar({
         <UserAvatar
           user={b}
           size="sm"
-          className="absolute top-0 right-0 opacity-90"
+          className="absolute top-0 right-0 opacity-90 w-6 h-6"
         />
       ) : null}
       {a ? (
         <UserAvatar
           user={a}
           size="sm"
-          className="absolute bottom-0 left-0 rounded-full ring-2 ring-background"
+          className="absolute bottom-0 left-0 w-6 h-6 rounded-full ring-2 ring-background"
         />
       ) : null}
       {anyOnline ? (
