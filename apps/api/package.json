@@ -27,6 +27,7 @@
     "@elysia/cors": "^1.4.2",
     "@elysia/openapi": "^1.4.16",
     "@elysia/static": "^1.4.11",
+    "@google/genai": "^2.30.0",
     "@paralleldrive/cuid2": "^3.3.0",
     "@types/pg": "^8.23.1",
     "@zenstackhq/better-auth": "^3.9.7",

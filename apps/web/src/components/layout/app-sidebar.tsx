@@ -1,54 +1,18 @@
 import {
+  BellIcon,
   CalendarIcon,
-  ChevronsUpDownIcon,
   HomeIcon,
-  LogOutIcon,
+  type LucideIcon,
   MessageCircleIcon,
-  MonitorIcon,
-  MoonIcon,
-  PlusIcon,
   SettingsIcon,
-  SunIcon,
   UserIcon,
   UsersIcon,
 } from "lucide-react"
-import { Link } from "react-router-dom"
-import { useNavigate, useLocation } from "react-router-dom"
-import { useTheme } from "@/components/theme-provider"
-import { UserAvatar } from "@/components/common/user-avatar"
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuRadioGroup,
-  DropdownMenuRadioItem,
-  DropdownMenuSeparator,
-  DropdownMenuSub,
-  DropdownMenuSubContent,
-  DropdownMenuSubTrigger,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
-import {
-  Sidebar,
-  SidebarContent,
-  SidebarFooter,
-  SidebarGroup,
-  SidebarGroupAction,
-  SidebarGroupContent,
-  SidebarGroupLabel,
-  SidebarHeader,
-  SidebarMenu,
-  SidebarMenuBadge,
-  SidebarMenuButton,
-  SidebarMenuItem,
-  SidebarRail,
-} from "@/components/ui/sidebar"
+import { Link, useLocation } from "react-router-dom"
 import { useApp } from "@/hooks/use-app"
-import { accentFor } from "@/lib/accent"
-import { COMPANY_NAME } from "@/lib/company"
 import { db } from "@/lib/api-client"
-import { authClient } from "@/lib/auth-client"
 import { useDbQuery } from "@/lib/query"
+import { cn } from "@/lib/utils"
 
 /** Unread conversations: last message newer than my read marker. */
 function useUnreadChats() {
@@ -67,234 +31,83 @@ function useUnreadChats() {
   return data.filter((m) => m.conversation.lastMessageAt > m.lastReadAt).length
 }
 
-export function AppSidebar() {
-  const { pathname } = useLocation()
-  const { me, isAdmin } = useApp()
+type NavItem = {
+  label: string
+  icon: LucideIcon
+  path: string
+  badge?: number
+}
+
+export function useNavItems(): NavItem[] {
+  const { isAdmin } = useApp()
   const unreadChats = useUnreadChats()
-
-  const { data: groups = [] } = useDbQuery(
-    ["groupMember", "findMany", "sidebar"],
-    () =>
-      db.groupMember.findMany({
-        where: {
-          userId: me.id,
-          status: "ACTIVE",
-        },
-        select: {
-          group: {
-            select: { id: true, name: true, slug: true, isDefault: true },
-          },
-        },
-        orderBy: { createdAt: "asc" },
-        take: 12,
-      })
-  )
-
-  const nav = [
-    { label: "Home", icon: HomeIcon, path: "/" },
-    { label: "Groups", icon: UsersIcon, path: "/groups" },
+  return [
+    { label: "Activity", icon: BellIcon, path: "/notifications" },
     {
       label: "Chat",
       icon: MessageCircleIcon,
       path: "/chat",
       badge: unreadChats,
     },
+    { label: "Home", icon: HomeIcon, path: "/" },
+    { label: "Groups", icon: UsersIcon, path: "/groups" },
     { label: "Calendar", icon: CalendarIcon, path: "/calendar" },
     { label: "People", icon: UserIcon, path: "/people" },
+    ...(isAdmin
+      ? [{ label: "Admin", icon: SettingsIcon, path: "/settings" }]
+      : []),
   ]
-  const isActive = (path: string) => {
-    const full = path
-    return path === "/" ? pathname === full : pathname.startsWith(full)
-  }
+}
+
+export function useIsNavActive() {
+  const { pathname } = useLocation()
+  return (path: string) =>
+    path === "/" ? pathname === "/" : pathname.startsWith(path)
+}
+
+/** Teams-style app bar: a narrow column of icon + label buttons. */
+export function AppSidebar({ className }: { className?: string }) {
+  const nav = useNavItems()
+  const isActive = useIsNavActive()
 
   return (
-    <Sidebar collapsible="icon">
-      <SidebarHeader>
-        <Brand />
-      </SidebarHeader>
-      <SidebarContent>
-        <SidebarGroup>
-          <SidebarGroupContent>
-            <SidebarMenu>
-              {nav.map((item) => (
-                <SidebarMenuItem key={item.path}>
-                  <SidebarMenuButton
-                    asChild
-                    isActive={isActive(item.path)}
-                    tooltip={item.label}
-                  >
-                    <Link to={item.path}>
-                      <item.icon />
-                      <span>{item.label}</span>
-                    </Link>
-                  </SidebarMenuButton>
-                  {item.badge ? (
-                    <SidebarMenuBadge>
-                      {item.badge > 99 ? "99+" : item.badge}
-                    </SidebarMenuBadge>
-                  ) : null}
-                </SidebarMenuItem>
-              ))}
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
-        <SidebarGroup className="group-data-[collapsible=icon]:hidden">
-          <SidebarGroupLabel>Your groups</SidebarGroupLabel>
-          <SidebarGroupAction asChild title="Create group">
-            <Link to={"/groups?create=1"}>
-              <PlusIcon />
-              <span className="sr-only">Create group</span>
-            </Link>
-          </SidebarGroupAction>
-          <SidebarGroupContent>
-            <SidebarMenu>
-              {groups.map(({ group }) => (
-                <SidebarMenuItem key={group.id}>
-                  <SidebarMenuButton
-                    asChild
-                    size="sm"
-                    isActive={isActive(`/groups/${group.slug}`)}
-                  >
-                    <Link to={`/groups/${group.slug}`}>
-                      <span
-                        className="flex size-5 items-center justify-center rounded-md text-[10px] font-semibold text-white"
-                        style={{ backgroundColor: accentFor(group.id) }}
-                      >
-                        {group.name[0]?.toUpperCase()}
-                      </span>
-                      <span>{group.name}</span>
-                    </Link>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              ))}
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
-        {isAdmin ? (
-          <SidebarGroup className="mt-auto">
-            <SidebarGroupContent>
-              <SidebarMenu>
-                <SidebarMenuItem>
-                  <SidebarMenuButton
-                    asChild
-                    isActive={isActive("/settings")}
-                    tooltip="Admin settings"
-                  >
-                    <Link to={"/settings"}>
-                      <SettingsIcon />
-                      <span>Admin settings</span>
-                    </Link>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              </SidebarMenu>
-            </SidebarGroupContent>
-          </SidebarGroup>
+    <nav
+      aria-label="Main"
+      className={cn(
+        "flex w-17 shrink-0 flex-col items-stretch gap-1 py-2",
+        className
+      )}
+    >
+      {nav.map((item) => (
+        <NavButton key={item.path} item={item} active={isActive(item.path)} />
+      ))}
+    </nav>
+  )
+}
+
+function NavButton({ item, active }: { item: NavItem; active: boolean }) {
+  return (
+    <Link
+      to={item.path}
+      aria-current={active ? "page" : undefined}
+      className={cn(
+        "group relative mx-1 flex flex-col items-center gap-0.5 rounded-md py-1.5 text-[10px] text-muted-foreground transition-colors hover:bg-background hover:text-foreground",
+        active && "font-semibold text-foreground"
+      )}
+    >
+      {/* the active indicator sits on the rail's left edge like Teams */}
+      {active ? (
+        <span className="absolute top-2 bottom-2 -left-1 w-0.75 rounded-r bg-foreground" />
+      ) : null}
+      <span className="relative">
+        <item.icon className={cn("size-5", active && "fill-foreground/10")} />
+        {item.badge ? (
+          <span className="absolute -top-1.5 -right-2.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-destructive px-1 text-[10px] leading-none font-semibold text-white">
+            {item.badge > 99 ? "99+" : item.badge}
+          </span>
         ) : null}
-      </SidebarContent>
-      <SidebarFooter>
-        <UserMenu
-          name={me.name}
-          email={me.email}
-          image={me.image ?? null}
-          id={me.id}
-        />
-      </SidebarFooter>
-      <SidebarRail />
-    </Sidebar>
-  )
-}
-
-function Brand() {
-  return (
-    <SidebarMenu>
-      <SidebarMenuItem>
-        <SidebarMenuButton size="lg" asChild>
-          <Link to="/">
-            <span className="flex aspect-square size-8 items-center justify-center rounded-lg bg-primary font-bold text-primary-foreground">
-              {COMPANY_NAME[0]?.toUpperCase()}
-            </span>
-            <span className="grid flex-1 text-left leading-tight">
-              <span className="truncate font-semibold">{COMPANY_NAME}</span>
-              <span className="truncate text-xs text-muted-foreground">
-                Workplace
-              </span>
-            </span>
-          </Link>
-        </SidebarMenuButton>
-      </SidebarMenuItem>
-    </SidebarMenu>
-  )
-}
-
-function UserMenu({
-  id,
-  name,
-  email,
-  image,
-}: {
-  id: string
-  name: string
-  email: string
-  image: string | null
-}) {
-  const navigate = useNavigate()
-  const { theme, setTheme } = useTheme()
-  return (
-    <SidebarMenu>
-      <SidebarMenuItem>
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <SidebarMenuButton
-              size="lg"
-              className="data-[state=open]:bg-sidebar-accent"
-            >
-              <UserAvatar user={{ id, name, image }} size="sm" />
-              <span className="grid flex-1 text-left leading-tight">
-                <span className="truncate font-medium">{name}</span>
-                <span className="truncate text-xs text-muted-foreground">
-                  {email}
-                </span>
-              </span>
-              <ChevronsUpDownIcon className="ml-auto" />
-            </SidebarMenuButton>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent className="min-w-56" side="top" align="start">
-            <DropdownMenuItem onSelect={() => navigate(`/people/${id}`)}>
-              <UserIcon />
-              Profile
-            </DropdownMenuItem>
-            <DropdownMenuSub>
-              <DropdownMenuSubTrigger>
-                <SunIcon />
-                Theme
-              </DropdownMenuSubTrigger>
-              <DropdownMenuSubContent>
-                <DropdownMenuRadioGroup value={theme} onValueChange={setTheme}>
-                  <DropdownMenuRadioItem value="light">
-                    <SunIcon /> Light
-                  </DropdownMenuRadioItem>
-                  <DropdownMenuRadioItem value="dark">
-                    <MoonIcon /> Dark
-                  </DropdownMenuRadioItem>
-                  <DropdownMenuRadioItem value="system">
-                    <MonitorIcon /> System
-                  </DropdownMenuRadioItem>
-                </DropdownMenuRadioGroup>
-              </DropdownMenuSubContent>
-            </DropdownMenuSub>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem
-              onSelect={async () => {
-                await authClient.signOut()
-                window.location.href = "/sign-in"
-              }}
-            >
-              <LogOutIcon />
-              Sign out
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-      </SidebarMenuItem>
-    </SidebarMenu>
+      </span>
+      <span className="leading-tight">{item.label}</span>
+    </Link>
   )
 }

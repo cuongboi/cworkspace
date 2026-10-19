@@ -10,7 +10,7 @@ export function FeedShell({
   className?: string
 }) {
   return (
-    <div className="-m-4 min-h-[calc(100svh-3.5rem)] bg-muted/50 p-4 md:-m-6 md:p-6">
+    <div className="-m-4 min-h-[calc(100svh-3rem)] bg-muted/50 p-4 md:-m-6 md:p-6">
       <div
         className={cn(
           "mx-auto flex w-full max-w-2xl flex-col gap-4",

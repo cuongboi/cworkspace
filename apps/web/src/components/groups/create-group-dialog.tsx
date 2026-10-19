@@ -1,6 +1,7 @@
 import { useNavigate } from "react-router-dom"
-import { type FormEvent, useState } from "react"
 import { toast } from "sonner"
+import { z } from "zod"
+import { AutoForm, type AutoFormSchema } from "@/components/ui/auto-form"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -10,7 +11,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-import { Field, FieldGroup, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { Spinner } from "@/components/ui/spinner"
 import { Textarea } from "@/components/ui/textarea"
@@ -21,7 +21,38 @@ import { slugify } from "@/lib/slug"
 import { GroupPrivacy } from "@app/api/zenstack/models"
 import { PrivacyPicker } from "./privacy-picker"
 
-type Draft = { name: string; description: string; privacy: GroupPrivacy }
+const shape = {
+  name: z.string().trim().min(1, "Enter a group name").max(80),
+  description: z.string().trim().max(1000),
+  privacy: z.enum(GroupPrivacy).default(GroupPrivacy.PUBLIC),
+}
+type Draft = z.infer<z.ZodObject<typeof shape>>
+
+const schema: AutoFormSchema<typeof shape> = {
+  name: {
+    schema: shape.name,
+    as: Input,
+    placeholder: "e.g. Design team",
+    meta: { autoFocus: true },
+  },
+  description: {
+    schema: shape.description,
+    as: Textarea,
+    placeholder: "What is this group about?",
+    meta: { rows: 3 },
+  },
+  privacy: {
+    schema: shape.privacy,
+    render: ({ field }) => (
+      <PrivacyPicker
+        idPrefix="create-privacy"
+        value={field.value as GroupPrivacy}
+        onChange={field.onChange}
+        disabled={field.disabled}
+      />
+    ),
+  },
+}
 
 export function CreateGroupDialog({
   open,
@@ -32,21 +63,15 @@ export function CreateGroupDialog({
 }) {
   const navigate = useNavigate()
   const { me } = useApp()
-  const [draft, setDraft] = useState<Draft>({
-    name: "",
-    description: "",
-    privacy: GroupPrivacy.PUBLIC,
-  })
-
   const create = useDbMutation(
     async (d: Draft) => {
       const base = slugify(d.name) || "group"
       const attempt = (slug: string) =>
         db.group.create({
           data: {
-            name: d.name.trim(),
+            name: d.name,
             slug,
-            description: d.description.trim() || null,
+            description: d.description || null,
             privacy: d.privacy,
             members: { create: { userId: me.id, role: "ADMIN" } },
           },
@@ -64,65 +89,30 @@ export function CreateGroupDialog({
     { invalidates: ["group", "groupMember"] }
   )
 
-  const submit = (e: FormEvent) => {
-    e.preventDefault()
-    if (!draft.name.trim()) return
-    create.mutate(draft, {
-      onSuccess: (group) => {
-        toast.success("Group created")
-        // navigating away unmounts the dialog (and drops `?create=1`)
-        setDraft({ name: "", description: "", privacy: GroupPrivacy.PUBLIC })
-        void navigate(`/groups/${group.slug}`)
-      },
-      onError: (err) => toast.error(err.message),
-    })
-  }
-
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-lg">
-        <form onSubmit={submit} className="flex flex-col gap-6">
-          <DialogHeader>
-            <DialogTitle>Create a group</DialogTitle>
-            <DialogDescription>
-              Groups are where teams and communities share updates.
-            </DialogDescription>
-          </DialogHeader>
-          <FieldGroup>
-            <Field>
-              <FieldLabel htmlFor="group-name">Name</FieldLabel>
-              <Input
-                id="group-name"
-                value={draft.name}
-                onChange={(e) => setDraft({ ...draft, name: e.target.value })}
-                placeholder="e.g. Design team"
-                maxLength={80}
-                required
-                autoFocus
-              />
-            </Field>
-            <Field>
-              <FieldLabel htmlFor="group-description">Description</FieldLabel>
-              <Textarea
-                id="group-description"
-                value={draft.description}
-                onChange={(e) =>
-                  setDraft({ ...draft, description: e.target.value })
-                }
-                placeholder="What is this group about?"
-                rows={3}
-                maxLength={1000}
-              />
-            </Field>
-            <Field>
-              <FieldLabel>Privacy</FieldLabel>
-              <PrivacyPicker
-                idPrefix="create-privacy"
-                value={draft.privacy}
-                onChange={(privacy) => setDraft({ ...draft, privacy })}
-              />
-            </Field>
-          </FieldGroup>
+        <DialogHeader>
+          <DialogTitle>Create a group</DialogTitle>
+          <DialogDescription>
+            Groups are where teams and communities share updates.
+          </DialogDescription>
+        </DialogHeader>
+        <AutoForm
+          schema={schema}
+          className="flex flex-col gap-6"
+          onSubmit={(draft, form) =>
+            create.mutate(draft, {
+              onSuccess: (group) => {
+                toast.success("Group created")
+                // navigating away unmounts the dialog (and drops `?create=1`)
+                form.reset()
+                void navigate(`/groups/${group.slug}`)
+              },
+              onError: (err) => toast.error(err.message),
+            })
+          }
+        >
           <DialogFooter>
             <Button
               type="button"
@@ -131,15 +121,12 @@ export function CreateGroupDialog({
             >
               Cancel
             </Button>
-            <Button
-              type="submit"
-              disabled={!draft.name.trim() || create.isPending}
-            >
+            <Button type="submit" disabled={create.isPending}>
               {create.isPending ? <Spinner /> : null}
               Create group
             </Button>
           </DialogFooter>
-        </form>
+        </AutoForm>
       </DialogContent>
     </Dialog>
   )

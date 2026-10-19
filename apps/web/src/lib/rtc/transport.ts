@@ -1,7 +1,9 @@
 import type {
   CallPeer,
+  CaptionPrefs,
   CallSummary,
   MediaState,
+  TranscriptEntry,
   UserSummary,
 } from "@/lib/realtime-events"
 
@@ -27,6 +29,10 @@ export type JoinResult = {
   call: CallSummary
   peers: CallPeer[]
   title: string
+  /** live captions are configured on the server */
+  captions: boolean
+  transcript: TranscriptEntry[]
+  glossary: string[]
 }
 
 export type PeerConnectionState = RTCPeerConnectionState
@@ -36,6 +42,7 @@ export type TransportEvents = {
   "participant-joined": (peer: CallPeer) => void
   "participant-left": (id: string) => void
   "participant-media": (id: string, media: MediaState) => void
+  "participant-captions": (id: string, captions: CaptionPrefs) => void
   /** the remote media of a participant changed (a fresh MediaStream instance each time) */
   stream: (id: string, stream: MediaStream) => void
   "connection-state": (id: string, state: PeerConnectionState) => void
@@ -51,7 +58,11 @@ export type TransportEvents = {
 export interface CallTransport {
   readonly callId: string
   /** Joins the call and starts sending the local tracks (null = receive-only). */
-  join(localStream: MediaStream | null, media: MediaState): Promise<JoinResult>
+  join(
+    localStream: MediaStream | null,
+    media: MediaState,
+    captions: CaptionPrefs
+  ): Promise<JoinResult>
   /** Leaves the call and releases every connection. Idempotent. */
   leave(): void
   /** `leave()` + drops every event handler. */
@@ -64,6 +75,8 @@ export interface CallTransport {
   setScreenShare(track: MediaStreamTrack | null): Promise<void>
   /** Broadcasts our mute / camera / screen state to the other participants. */
   setMedia(media: MediaState): void
+  /** Broadcasts our caption language (others produce translations for it). */
+  setCaptions(captions: CaptionPrefs): void
   /** Subscribes to an event; returns the unsubscribe function. */
   on<E extends keyof TransportEvents>(
     event: E,

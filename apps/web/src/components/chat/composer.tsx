@@ -227,7 +227,7 @@ export function Composer({
   return (
     <div
       ref={wrapperRef}
-      className="shrink-0 border-t bg-background px-3 pt-2 pb-3 md:px-4"
+      className="mx-auto w-full max-w-5xl shrink-0 bg-background px-3 pt-1 pb-4 md:px-8"
       onPaste={(e) => {
         const files = Array.from(e.clipboardData.files)
         if (files.length === 0 || mode?.kind === "edit") return
@@ -236,7 +236,7 @@ export function Composer({
       }}
     >
       {mode && quoted ? (
-        <div className="mb-2 flex items-start gap-2 rounded-lg bg-muted px-3 py-2 text-sm">
+        <div className="mb-2 flex items-start gap-2 rounded-md border-l-2 border-foreground bg-muted px-3 py-2 text-sm">
           {mode.kind === "reply" ? (
             <ReplyIcon
               className="mt-0.5 size-4 shrink-0 text-muted-foreground"
@@ -301,36 +301,8 @@ export function Composer({
         </ScrollArea>
       ) : null}
 
-      <div className="flex items-end gap-1.5">
-        {mode?.kind !== "edit" ? (
-          <>
-            <input
-              ref={fileRef}
-              type="file"
-              multiple
-              hidden
-              onChange={(e) => {
-                if (e.target.files?.length) void uploads.add(e.target.files)
-                e.target.value = ""
-              }}
-            />
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="shrink-0 rounded-full text-primary"
-                  onClick={() => fileRef.current?.click()}
-                  aria-label="Attach files"
-                  disabled={disabled}
-                >
-                  <PaperclipIcon />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>Attach files</TooltipContent>
-            </Tooltip>
-          </>
-        ) : null}
+      {/* Teams-style compose box: one bordered field with the actions inside it */}
+      <div className="flex items-end gap-0.5 rounded-md border border-b-2 bg-card p-1 focus-within:border-b-foreground">
         <div className="min-w-0 flex-1">
           <MentionTextarea
             value={value}
@@ -348,20 +320,52 @@ export function Composer({
                 editLastOwn()
               }
             }}
-            placeholder={disabled ? "You can't send messages here" : "Aa"}
+            placeholder={
+              disabled ? "You can't send messages here" : "Type a message"
+            }
             aria-label="Message"
             rows={1}
             disabled={disabled}
             className={cn(
-              "field-sizing-content max-h-40 min-h-9 rounded-2xl bg-muted px-3.5 py-2 shadow-none",
-              "border-transparent focus-visible:border-ring"
+              "field-sizing-content max-h-40 min-h-9 rounded-none border-0 bg-transparent px-2 py-2 shadow-none",
+              "focus-visible:ring-0 dark:bg-transparent"
             )}
           />
         </div>
+        {mode?.kind !== "edit" ? (
+          <>
+            <input
+              ref={fileRef}
+              type="file"
+              multiple
+              hidden
+              onChange={(e) => {
+                if (e.target.files?.length) void uploads.add(e.target.files)
+                e.target.value = ""
+              }}
+            />
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="shrink-0 text-muted-foreground"
+                  onClick={() => fileRef.current?.click()}
+                  aria-label="Attach files"
+                  disabled={disabled}
+                >
+                  <PaperclipIcon />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Attach files</TooltipContent>
+            </Tooltip>
+          </>
+        ) : null}
         {canSend || mode ? (
           <Button
+            variant="ghost"
             size="icon"
-            className="shrink-0 rounded-full"
+            className="shrink-0"
             onClick={submit}
             disabled={
               !canSend ||
@@ -380,7 +384,7 @@ export function Composer({
           <Button
             variant="ghost"
             size="icon"
-            className="shrink-0 rounded-full text-xl"
+            className="shrink-0 text-xl"
             onClick={() => !disabled && !uploads.uploading && sendMessage("👍")}
             disabled={disabled || uploads.uploading}
             aria-label="Send a like"

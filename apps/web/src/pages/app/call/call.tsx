@@ -13,7 +13,7 @@ const CallPage = () => {
       {callId ? (
         <CallScreen key={callId} callId={callId} />
       ) : (
-        <div className="flex h-[calc(100svh-3.5rem)] items-center justify-center">
+        <div className="flex h-full items-center justify-center">
           <Spinner className="size-6" />
         </div>
       )}

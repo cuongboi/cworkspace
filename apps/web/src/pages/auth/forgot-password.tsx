@@ -1,6 +1,8 @@
-import { useState, type FormEvent } from "react"
+import { useState } from "react"
 import { Link } from "react-router-dom"
+import { z } from "zod"
 
+import { AutoForm, type AutoFormSchema } from "@/components/ui/auto-form"
 import { Button } from "@/components/ui/button"
 import {
   Card,
@@ -11,22 +13,29 @@ import {
   CardTitle,
 } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
 import { authClient } from "@/lib/auth-client"
 import { FormError } from "./auth-layout"
+
+const shape = { email: z.email("Enter a valid email") }
+
+const schema: AutoFormSchema<typeof shape> = {
+  email: {
+    schema: shape.email,
+    as: Input,
+    meta: { type: "email", autoComplete: "email" },
+  },
+}
 
 export function ForgotPasswordPage() {
   const [error, setError] = useState<string | null>(null)
   const [pending, setPending] = useState(false)
   const [sent, setSent] = useState(false)
 
-  async function onSubmit(e: FormEvent<HTMLFormElement>) {
-    e.preventDefault()
-    const form = new FormData(e.currentTarget)
+  async function onSubmit({ email }: { email: string }) {
     setPending(true)
     setError(null)
     const { error } = await authClient.requestPasswordReset({
-      email: String(form.get("email")),
+      email,
       redirectTo: `${window.location.origin}/reset-password`,
     })
     setPending(false)
@@ -45,28 +54,20 @@ export function ForgotPasswordPage() {
         </CardDescription>
       </CardHeader>
       {!sent && (
-        <form onSubmit={onSubmit}>
-          <CardContent className="flex flex-col gap-4">
-            <div className="flex flex-col gap-2">
-              <Label htmlFor="email">Email</Label>
-              <Input
-                id="email"
-                name="email"
-                type="email"
-                autoComplete="email"
-                required
-              />
-            </div>
+        <CardContent>
+          <AutoForm
+            schema={schema}
+            onSubmit={onSubmit}
+            className="flex flex-col gap-4"
+          >
             <FormError message={error} />
-          </CardContent>
-          <CardFooter className="mt-6">
-            <Button type="submit" className="w-full" disabled={pending}>
+            <Button type="submit" className="mt-2 w-full" disabled={pending}>
               {pending ? "Sending…" : "Send reset link"}
             </Button>
-          </CardFooter>
-        </form>
+          </AutoForm>
+        </CardContent>
       )}
-      <CardFooter className={sent ? undefined : "pt-0"}>
+      <CardFooter className={sent ? undefined : "mt-4"}>
         <Link
           to="/sign-in"
           className="text-sm text-muted-foreground underline-offset-4 hover:underline"

@@ -70,7 +70,7 @@ function initialState(
   meId: string
 ) {
   const start = event?.startAt ?? defaults?.start ?? new Date()
-  const end = event?.endAt ?? addHours(start, 1)
+  const end = event?.endAt ?? addHours(start, 0.5)
   return {
     title: event?.title ?? "",
     type: (event?.type ?? "MEETING") as EventType,
@@ -122,10 +122,10 @@ export function EventDialog({
   const startAt = form.allDay
     ? startOfDay(parse(form.startDate, DATE, new Date()))
     : parse(
-        `${form.startDate} ${form.startTime}`,
-        `${DATE} ${TIME}`,
-        new Date()
-      )
+      `${form.startDate} ${form.startTime}`,
+      `${DATE} ${TIME}`,
+      new Date()
+    )
   const endAt = form.allDay
     ? endOfDay(parse(form.endDate, DATE, new Date()))
     : parse(`${form.endDate} ${form.endTime}`, `${DATE} ${TIME}`, new Date())
@@ -206,24 +206,24 @@ export function EventDialog({
         // group events are announced in the group's feed as a Post(type EVENT)
         const created = groupId
           ? await db.event.create({
-              data: {
-                ...fields,
-                group: { connect: { id: groupId } },
-                post: {
-                  create: {
-                    group: { connect: { id: groupId } },
-                    type: "EVENT",
-                    content: fields.description ?? "",
-                  },
+            data: {
+              ...fields,
+              group: { connect: { id: groupId } },
+              post: {
+                create: {
+                  group: { connect: { id: groupId } },
+                  type: "EVENT",
+                  content: fields.description ?? "",
                 },
-                attendees,
               },
-              select: { id: true },
-            })
+              attendees,
+            },
+            select: { id: true },
+          })
           : await db.event.create({
-              data: { ...fields, attendees },
-              select: { id: true },
-            })
+            data: { ...fields, attendees },
+            select: { id: true },
+          })
         id = created.id
       }
       await invalidateModels(queryClient, [
@@ -350,7 +350,7 @@ export function EventDialog({
                             onChange={(e) =>
                               changeStart(form.startDate, e.target.value)
                             }
-                            className="w-32"
+                            className="w-40"
                             step={300}
                             required
                           />
@@ -375,7 +375,7 @@ export function EventDialog({
                             aria-label="End time"
                             value={form.endTime}
                             onChange={(e) => set("endTime", e.target.value)}
-                            className="w-32"
+                            className="w-40"
                             step={300}
                             aria-invalid={submitted && Boolean(rangeError)}
                             required

@@ -159,12 +159,10 @@ function CallMessage({
 
 function TextMessage({
   message,
-  isGroup,
   firstInGroup,
-  lastInGroup,
   status,
   actions,
-}: Omit<Props, "conversationId">) {
+}: Omit<Props, "conversationId" | "isGroup" | "lastInGroup">) {
   const { me } = useApp()
   const [active, setActive] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
@@ -172,11 +170,6 @@ function TextMessage({
   const deleted = Boolean(message.deletedAt)
   const hasText = !deleted && message.content.trim().length > 0
   const align = mine ? "end" : "start"
-
-  // bubble corners: tighten the side that touches the neighbouring bubble of the same sender
-  const corner = mine
-    ? cn(!firstInGroup && "rounded-tr-md", !lastInGroup && "rounded-br-md")
-    : cn(!firstInGroup && "rounded-tl-md", !lastInGroup && "rounded-bl-md")
 
   const reactionGroups = REACTIONS.map((r) => ({
     ...r,
@@ -238,21 +231,26 @@ function TextMessage({
         setActive((a) => !a)
       }}
     >
+      {/* Teams-style: avatar and "Name  time" sit at the top of each sender's run */}
       {!mine ? (
-        <MessageAvatar className="size-7 min-w-7 bg-transparent">
-          {lastInGroup ? (
+        <MessageAvatar className="size-8 min-w-8 self-start bg-transparent">
+          {firstInGroup ? (
             <UserAvatar
               user={message.sender}
               size="sm"
-              className="[&_[data-slot=avatar]]:size-7"
+              presence
+              className="[&_[data-slot=avatar]]:size-8"
             />
           ) : null}
         </MessageAvatar>
       ) : null}
       <MessageContent className="gap-1">
-        {isGroup && !mine && firstInGroup ? (
-          <MessageHeader className="px-3 font-normal">
-            {message.sender.name}
+        {firstInGroup ? (
+          <MessageHeader className="gap-2 px-0 pt-2 font-normal">
+            {!mine ? <span>{message.sender.name}</span> : null}
+            <span title={format(message.createdAt, "PPpp")}>
+              {format(message.createdAt, "EEE p")}
+            </span>
           </MessageHeader>
         ) : null}
 
@@ -321,7 +319,7 @@ function TextMessage({
             )}
           >
             <Bubble
-              variant={deleted ? "outline" : mine ? "default" : "muted"}
+              variant={deleted ? "outline" : mine ? "tinted" : "muted"}
               align={align}
               className="max-w-[min(80%,36rem)]"
             >
@@ -330,12 +328,8 @@ function TextMessage({
                 <TooltipTrigger asChild data-slot="bubble-content">
                   <BubbleContent
                     className={cn(
-                      "rounded-2xl",
-                      corner,
-                      deleted && "text-muted-foreground italic",
-                      mine &&
-                        !deleted &&
-                        "[&_a]:text-primary-foreground [&_a]:underline"
+                      "rounded-md px-4",
+                      deleted && "text-muted-foreground italic"
                     )}
                   >
                     {deleted ? (
@@ -374,16 +368,16 @@ function TextMessage({
         ) : null}
 
         {message.editedAt && !deleted ? (
-          <MessageFooter className="px-3 text-[11px] font-normal">
+          <MessageFooter className="px-0 text-[11px] font-normal">
             Edited
           </MessageFooter>
         ) : null}
         {message.pending ? (
-          <MessageFooter className="px-3 text-[11px] font-normal">
+          <MessageFooter className="px-0 text-[11px] font-normal">
             Sending…
           </MessageFooter>
         ) : status ? (
-          <MessageFooter className="px-3 text-[11px] font-normal">
+          <MessageFooter className="px-0 text-[11px] font-normal">
             {status}
           </MessageFooter>
         ) : null}

@@ -11,11 +11,14 @@ import {
 
 export type {
   CallPhase,
+  CaptionLine,
+  CaptionPart,
   CallState,
   DeviceOption,
   RemoteParticipant,
 } from "./call-session"
 export { SELF_ID } from "./call-session"
+export type { CaptionStatus } from "./caption-stream"
 
 async function fetchIceServers() {
   const { iceServers } = await api.get<{
@@ -63,6 +66,9 @@ export function useCall(callId: string, kind: CallKind | null) {
   useSocketEvent("call:ended", (p) => {
     if (p.callId === callId) session.markEnded()
   })
+  useSocketEvent("call:caption", (p) => session.receiveCaption(p))
+  useSocketEvent("call:caption-mark", (p) => session.receiveMark(p))
+  useSocketEvent("call:glossary", (p) => session.receiveGlossary(p))
 
   return {
     ...state,
@@ -74,6 +80,8 @@ export function useCall(callId: string, kind: CallKind | null) {
     toggleMic: () => void session.toggleMic(),
     toggleCamera: () => void session.toggleCamera(),
     toggleScreen: () => void session.toggleScreen(),
+    setCaptions: session.setCaptions,
+    setGlossary: session.setGlossary,
     selectDevice: (k: "audio" | "video", deviceId: string) =>
       void session.selectDevice(k, deviceId),
   }

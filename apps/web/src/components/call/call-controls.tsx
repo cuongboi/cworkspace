@@ -1,5 +1,7 @@
 import { cn } from "cn"
 import {
+  CaptionsIcon,
+  CaptionsOffIcon,
   MicIcon,
   MicOffIcon,
   MonitorOffIcon,
@@ -13,7 +15,9 @@ import type { ComponentProps, ReactNode } from "react"
 import { Button } from "@/components/ui/button"
 import {
   DropdownMenu,
+  DropdownMenuCheckboxItem,
   DropdownMenuContent,
+  DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuRadioGroup,
   DropdownMenuRadioItem,
@@ -25,7 +29,12 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip"
-import type { DeviceOption } from "@/lib/rtc/use-call"
+import {
+  CAPTION_LANGUAGES,
+  type CaptionPrefs,
+  isCaptionLang,
+} from "@/lib/realtime-events"
+import type { CaptionStatus, DeviceOption } from "@/lib/rtc/use-call"
 
 /** Round icon button with a tooltip; `off` renders the "disabled device" (red) look. */
 export function ControlButton({
@@ -211,6 +220,105 @@ export function DeviceMenu({
             </DropdownMenuRadioGroup>
           </>
         ) : null}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  )
+}
+
+/** CC: live captions on/off + the language the user speaks and reads them in. */
+const CAPTION_STATUS: Record<CaptionStatus, string> = {
+  off: "Speech is sent to Google Gemini only while someone reads captions",
+  connecting: "Connecting to live captions…",
+  live: "Live captions are on",
+  error: "Live captions failed",
+}
+
+export function CaptionsButton({
+  captions,
+  available,
+  status,
+  error,
+  onChange,
+  onEditGlossary,
+}: {
+  captions: CaptionPrefs
+  available: boolean
+  status: CaptionStatus
+  error: string | null
+  onChange: (captions: CaptionPrefs) => void
+  /** in the call only: the glossary is shared by the people in it */
+  onEditGlossary?: () => void
+}) {
+  const label = !available
+    ? "Live captions aren't available"
+    : captions.enabled
+      ? "Caption settings"
+      : "Turn on captions"
+  return (
+    <DropdownMenu>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <DropdownMenuTrigger asChild disabled={!available}>
+            <Button
+              type="button"
+              size="icon-lg"
+              variant="secondary"
+              aria-label={label}
+              aria-pressed={captions.enabled}
+              className={cn(
+                "size-12 rounded-full [&_svg:not([class*='size-'])]:size-5",
+                captions.enabled &&
+                  available &&
+                  "bg-primary text-primary-foreground hover:bg-primary/85"
+              )}
+            >
+              {captions.enabled && available ? (
+                <CaptionsIcon />
+              ) : (
+                <CaptionsOffIcon />
+              )}
+            </Button>
+          </DropdownMenuTrigger>
+        </TooltipTrigger>
+        <TooltipContent side="top">{label}</TooltipContent>
+      </Tooltip>
+      <DropdownMenuContent side="top" align="center" className="w-64">
+        <DropdownMenuCheckboxItem
+          checked={captions.enabled}
+          onCheckedChange={(enabled) => onChange({ ...captions, enabled })}
+        >
+          Show captions
+        </DropdownMenuCheckboxItem>
+        <p
+          className={cn(
+            "px-2 pb-1.5 text-xs text-muted-foreground",
+            status === "error" && "text-destructive"
+          )}
+        >
+          {CAPTION_STATUS[status]}
+          {status === "error" && error ? `: ${error}` : null}
+        </p>
+        {onEditGlossary ? (
+          <DropdownMenuItem onSelect={onEditGlossary}>
+            Glossary…
+          </DropdownMenuItem>
+        ) : null}
+        <DropdownMenuSeparator />
+        <DropdownMenuLabel className="text-xs font-normal text-muted-foreground">
+          I speak and read
+        </DropdownMenuLabel>
+        <DropdownMenuRadioGroup
+          value={captions.lang}
+          onValueChange={(lang) => {
+            if (isCaptionLang(lang)) onChange({ enabled: true, lang })
+          }}
+        >
+          {Object.entries(CAPTION_LANGUAGES).map(([code, name]) => (
+            <DropdownMenuRadioItem key={code} value={code}>
+              {name}
+            </DropdownMenuRadioItem>
+          ))}
+        </DropdownMenuRadioGroup>
       </DropdownMenuContent>
     </DropdownMenu>
   )

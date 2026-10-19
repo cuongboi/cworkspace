@@ -1,7 +1,9 @@
 import { CameraIcon } from "lucide-react"
-import { type FormEvent, useRef, useState } from "react"
+import { useMemo, useRef, useState } from "react"
 import { toast } from "sonner"
+import { z } from "zod"
 import { UserAvatar } from "@/components/common/user-avatar"
+import { AutoForm, type AutoFormSchema } from "@/components/ui/auto-form"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -11,12 +13,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-import {
-  Field,
-  FieldDescription,
-  FieldGroup,
-  FieldLabel,
-} from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { Spinner } from "@/components/ui/spinner"
 import { Textarea } from "@/components/ui/textarea"
@@ -38,37 +34,65 @@ export type EditableProfile = {
   bio: string | null
 }
 
-type Draft = {
-  name: string
-  image: string | null
-  title: string
-  department: string
-  location: string
-  phone: string
-  bio: string
-}
+const optionalText = (max: number) => z.string().trim().max(max)
 
-const TEXT_FIELDS = [
-  {
-    key: "title",
+const shape = {
+  name: z.string().trim().min(1, "Enter your name").max(100),
+  email: z.string(),
+  title: optionalText(100),
+  department: optionalText(100),
+  location: optionalText(100),
+  phone: optionalText(40),
+  bio: optionalText(1000),
+}
+type Draft = z.infer<z.ZodObject<typeof shape>>
+
+const FULL_WIDTH = { container: "sm:col-span-2" }
+
+const schema: AutoFormSchema<typeof shape> = {
+  name: {
+    schema: shape.name,
+    label: "Full name",
+    as: Input,
+    classNames: FULL_WIDTH,
+  },
+  email: {
+    schema: shape.email,
+    as: Input,
+    disabled: true,
+    description: "Your sign-in email can't be changed here.",
+    classNames: FULL_WIDTH,
+  },
+  title: {
+    schema: shape.title,
     label: "Job title",
+    as: Input,
     placeholder: "e.g. Product designer",
-    maxLength: 100,
   },
-  {
-    key: "department",
-    label: "Department",
+  department: {
+    schema: shape.department,
+    as: Input,
     placeholder: "e.g. Design",
-    maxLength: 100,
   },
-  {
-    key: "location",
-    label: "Location",
+  location: {
+    schema: shape.location,
+    as: Input,
     placeholder: "e.g. Ho Chi Minh City",
-    maxLength: 100,
   },
-  { key: "phone", label: "Phone", placeholder: "+84 …", maxLength: 40 },
-] as const
+  phone: {
+    schema: shape.phone,
+    as: Input,
+    placeholder: "+84 …",
+    meta: { type: "tel" },
+  },
+  bio: {
+    schema: shape.bio,
+    as: Textarea,
+    placeholder: "A few words about you and your work",
+    meta: { rows: 4 },
+    classNames: FULL_WIDTH,
+  },
+}
 
 /** Edits my own profile (`db.user.update` on my row; email is immutable). Mount it only while open. */
 export function EditProfileDialog({
@@ -80,15 +104,19 @@ export function EditProfileDialog({
 }) {
   const { me } = useApp()
   const session = authClient.useSession()
-  const [draft, setDraft] = useState<Draft>(() => ({
-    name: profile.name,
-    image: profile.image,
-    title: profile.title ?? "",
-    department: profile.department ?? "",
-    location: profile.location ?? "",
-    phone: profile.phone ?? "",
-    bio: profile.bio ?? "",
-  }))
+  const defaultValues = useMemo(
+    () => ({
+      name: profile.name,
+      email: profile.email,
+      title: profile.title ?? "",
+      department: profile.department ?? "",
+      location: profile.location ?? "",
+      phone: profile.phone ?? "",
+      bio: profile.bio ?? "",
+    }),
+    [profile]
+  )
+  const [image, setImage] = useState(profile.image)
   const [uploading, setUploading] = useState(false)
   const avatarRef = useRef<HTMLInputElement>(null)
 
@@ -97,13 +125,13 @@ export function EditProfileDialog({
       db.user.update({
         where: { id: me.id },
         data: {
-          name: d.name.trim(),
-          image: d.image,
-          title: d.title.trim() || null,
-          department: d.department.trim() || null,
-          location: d.location.trim() || null,
-          phone: d.phone.trim() || null,
-          bio: d.bio.trim() || null,
+          name: d.name,
+          image,
+          title: d.title || null,
+          department: d.department || null,
+          location: d.location || null,
+          phone: d.phone || null,
+          bio: d.bio || null,
         },
       }),
     { invalidates: ["user", "post", "comment", "groupMember"] }
@@ -118,7 +146,7 @@ export function EditProfileDialog({
     setUploading(true)
     try {
       const attachment = await uploadFile(file, { isPublic: true })
-      setDraft((d) => ({ ...d, image: fileUrl(attachment.id) }))
+      setImage(fileUrl(attachment.id))
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Upload failed")
     } finally {
@@ -126,9 +154,7 @@ export function EditProfileDialog({
     }
   }
 
-  const submit = (e: FormEvent) => {
-    e.preventDefault()
-    if (!draft.name.trim()) return
+  const submit = (draft: Draft) =>
     save.mutate(draft, {
       onSuccess: () => {
         toast.success("Profile updated")
@@ -138,7 +164,6 @@ export function EditProfileDialog({
       },
       onError: (err) => toast.error(err.message),
     })
-  }
 
   return (
     <Dialog open onOpenChange={onOpenChange}>
@@ -148,115 +173,71 @@ export function EditProfileDialog({
           viewportClassName="max-h-[90svh]"
         >
           <div className="grid gap-6 p-6">
-            <form onSubmit={submit} className="flex flex-col gap-6">
-              <DialogHeader>
-                <DialogTitle>Edit profile</DialogTitle>
-                <DialogDescription>
-                  This is what your colleagues see in the directory.
-                </DialogDescription>
-              </DialogHeader>
-              <div className="flex items-center gap-4">
-                <UserAvatar
-                  user={{ name: draft.name, image: draft.image }}
-                  size="xl"
-                />
-                <div className="flex flex-col gap-2">
-                  <div className="flex gap-2">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      disabled={uploading}
-                      onClick={() => avatarRef.current?.click()}
-                    >
-                      {uploading ? <Spinner /> : <CameraIcon />}
-                      Change photo
-                    </Button>
-                    {draft.image ? (
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => setDraft({ ...draft, image: null })}
-                      >
-                        Remove
-                      </Button>
-                    ) : null}
-                  </div>
-                  <p className="text-xs text-muted-foreground">
-                    PNG, JPG or WebP.
-                  </p>
-                </div>
-                <input
-                  ref={avatarRef}
-                  type="file"
-                  accept="image/png,image/jpeg,image/webp,image/gif"
-                  hidden
-                  onChange={(e) => {
-                    void onAvatar(e.target.files?.[0])
-                    e.target.value = ""
-                  }}
-                />
-              </div>
-              <FieldGroup>
-                <Field>
-                  <FieldLabel htmlFor="profile-name">Full name</FieldLabel>
-                  <Input
-                    id="profile-name"
-                    value={draft.name}
-                    onChange={(e) =>
-                      setDraft({ ...draft, name: e.target.value })
-                    }
-                    maxLength={100}
-                    required
-                  />
-                </Field>
-                <Field>
-                  <FieldLabel htmlFor="profile-email">Email</FieldLabel>
-                  <Input
-                    id="profile-email"
-                    value={profile.email}
-                    disabled
-                    readOnly
-                  />
-                  <FieldDescription>
-                    Your sign-in email can't be changed here.
-                  </FieldDescription>
-                </Field>
-                <div className="grid gap-4 sm:grid-cols-2">
-                  {TEXT_FIELDS.map((f) => (
-                    <Field key={f.key}>
-                      <FieldLabel htmlFor={`profile-${f.key}`}>
-                        {f.label}
-                      </FieldLabel>
-                      <Input
-                        id={`profile-${f.key}`}
-                        value={draft[f.key]}
-                        onChange={(e) =>
-                          setDraft({ ...draft, [f.key]: e.target.value })
-                        }
-                        placeholder={f.placeholder}
-                        maxLength={f.maxLength}
-                        type={f.key === "phone" ? "tel" : "text"}
+            <DialogHeader>
+              <DialogTitle>Edit profile</DialogTitle>
+              <DialogDescription>
+                This is what your colleagues see in the directory.
+              </DialogDescription>
+            </DialogHeader>
+            <AutoForm
+              schema={schema}
+              defaultValues={defaultValues}
+              onSubmit={submit}
+              className="grid gap-4 sm:grid-cols-2"
+              panels={[
+                {
+                  before: "name",
+                  // the avatar fallback shows the initials of the typed name
+                  watch: ["name"],
+                  render: ({ form }) => (
+                    <div className="flex items-center gap-4 sm:col-span-2">
+                      <UserAvatar
+                        user={{ name: form.getValues("name"), image }}
+                        size="xl"
                       />
-                    </Field>
-                  ))}
-                </div>
-                <Field>
-                  <FieldLabel htmlFor="profile-bio">Bio</FieldLabel>
-                  <Textarea
-                    id="profile-bio"
-                    value={draft.bio}
-                    onChange={(e) =>
-                      setDraft({ ...draft, bio: e.target.value })
-                    }
-                    placeholder="A few words about you and your work"
-                    rows={4}
-                    maxLength={1000}
-                  />
-                </Field>
-              </FieldGroup>
-              <DialogFooter>
+                      <div className="flex flex-col gap-2">
+                        <div className="flex gap-2">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            disabled={uploading}
+                            onClick={() => avatarRef.current?.click()}
+                          >
+                            {uploading ? <Spinner /> : <CameraIcon />}
+                            Change photo
+                          </Button>
+                          {image ? (
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => setImage(null)}
+                            >
+                              Remove
+                            </Button>
+                          ) : null}
+                        </div>
+                        <p className="text-xs text-muted-foreground">
+                          PNG, JPG or WebP.
+                        </p>
+                      </div>
+                      <input
+                        ref={avatarRef}
+                        type="file"
+                        accept="image/png,image/jpeg,image/webp,image/gif"
+                        hidden
+                        onChange={(e) => {
+                          void onAvatar(e.target.files?.[0])
+                          e.target.value = ""
+                        }}
+                      />
+                    </div>
+                  ),
+                },
+              ]}
+            >
+              <DialogFooter className="sm:col-span-2">
                 <Button
                   type="button"
                   variant="outline"
@@ -264,15 +245,12 @@ export function EditProfileDialog({
                 >
                   Cancel
                 </Button>
-                <Button
-                  type="submit"
-                  disabled={!draft.name.trim() || save.isPending || uploading}
-                >
+                <Button type="submit" disabled={save.isPending || uploading}>
                   {save.isPending ? <Spinner /> : null}
                   Save
                 </Button>
               </DialogFooter>
-            </form>
+            </AutoForm>
           </div>
         </ScrollArea>
       </DialogContent>

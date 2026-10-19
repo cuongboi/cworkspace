@@ -115,6 +115,8 @@ function Thread({
   const [viewport, setViewport] = useState<HTMLDivElement | null>(null)
   const [ready, setReady] = useState(false)
   const [highlight, setHighlight] = useState<string | null>(null)
+  // snapshot: the live marker moves as soon as we mark read, which would hide the divider
+  const [lastReadAtOpen] = useState(myLastReadAt)
   const isGroup = conversation.type === "GROUP"
   const count = messages.length
 
@@ -265,21 +267,36 @@ function Thread({
                 prev &&
                 differenceInMinutes(m.createdAt, prev.createdAt) >= TIME_GAP_MIN
               const first = !sameGroup(prev, m)
+              const lastRead = Boolean(
+                lastReadAtOpen &&
+                prev &&
+                m.senderId !== me.id &&
+                prev.createdAt <= lastReadAtOpen &&
+                m.createdAt > lastReadAtOpen
+              )
               return (
                 <div
                   key={item.key}
                   data-index={item.index}
                   ref={virtualizer.measureElement}
-                  className="absolute inset-x-0 top-0 px-3 md:px-6"
+                  className="absolute inset-x-0 top-0 px-3 md:px-8"
                   style={{ transform: `translateY(${item.start}px)` }}
                 >
                   <div
                     className={cn(
-                      "min-w-0 rounded-xl transition-colors duration-700",
+                      "mx-auto max-w-5xl min-w-0 rounded-md transition-colors duration-700",
                       first ? "pt-3" : "pt-0.5",
                       highlight === m.id && "bg-primary/10"
                     )}
                   >
+                    {lastRead ? (
+                      <Marker
+                        variant="separator"
+                        className="py-2 text-xs font-semibold text-foreground"
+                      >
+                        <MarkerContent>Last read</MarkerContent>
+                      </Marker>
+                    ) : null}
                     {newDay ? (
                       <Marker variant="separator" className="py-3 text-xs">
                         <MarkerContent>{dayLabel(m.createdAt)}</MarkerContent>
@@ -413,7 +430,7 @@ function ThreadSkeleton() {
           className={cn("flex items-end gap-2", r.mine && "flex-row-reverse")}
         >
           {!r.mine ? <Skeleton className="size-7 rounded-full" /> : null}
-          <Skeleton className={cn("h-9 rounded-2xl", r.w)} />
+          <Skeleton className={cn("h-9 rounded-md", r.w)} />
         </div>
       ))}
     </div>

@@ -2,7 +2,6 @@ import { useEffect, useState } from "react"
 import { Outlet, useLocation, useMatches } from "react-router-dom"
 import { CallProvider } from "@/components/call/call-provider"
 import { ScrollArea } from "@/components/ui/scroll-area"
-import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar"
 import { Spinner } from "@/components/ui/spinner"
 import { AppProvider } from "@/hooks/use-app"
 import { PageScrollContext } from "@/hooks/use-page-scroll"
@@ -48,15 +47,15 @@ export function AppLayout() {
       <PresenceProvider>
         <CallProvider>
           <RealtimeSync />
-          <SidebarProvider>
-            <AppSidebar />
-            {/* the shell is pinned to the viewport so only the page area scrolls */}
-            <SidebarInset className="h-svh min-w-0 overflow-hidden">
-              <AppHeader />
-              <div className="flex min-h-0 flex-1">
+          {/* Teams-style frame: top bar, app bar on the left, pages on a raised card surface */}
+          <div className="flex h-svh flex-col overflow-hidden bg-muted">
+            <AppHeader />
+            <div className="flex min-h-0 flex-1">
+              <AppSidebar className="hidden md:flex" />
+              <div className="flex min-w-0 flex-1 overflow-hidden border-t bg-background md:rounded-tl-xl md:border-l">
                 {bleed ? (
-                  // full-bleed pages size themselves and manage their own scrolling
-                  <main className="flex min-w-0 flex-1 flex-col">
+                  // full-bleed pages fill this box (h-full) and manage their own scrolling
+                  <main className="flex min-h-0 min-w-0 flex-1 flex-col">
                     <Outlet />
                   </main>
                 ) : (
@@ -64,8 +63,8 @@ export function AppLayout() {
                 )}
                 {rail ? <ContactsRail /> : null}
               </div>
-            </SidebarInset>
-          </SidebarProvider>
+            </div>
+          </div>
         </CallProvider>
       </PresenceProvider>
     </AppProvider>

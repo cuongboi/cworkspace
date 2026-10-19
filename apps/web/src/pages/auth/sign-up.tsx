@@ -1,7 +1,10 @@
 import { useQueryState } from "nuqs"
-import { useState, type FormEvent } from "react"
+import { useMemo, useState } from "react"
 import { Link, useNavigate } from "react-router-dom"
+import type { UseFormReturn } from "react-hook-form"
+import { z } from "zod"
 
+import { AutoForm, type AutoFormSchema } from "@/components/ui/auto-form"
 import { Button } from "@/components/ui/button"
 import {
   Card,
@@ -12,32 +15,60 @@ import {
   CardTitle,
 } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
 import { authClient } from "@/lib/auth-client"
 import { redirectParser, safeRedirect } from "@/lib/search-params"
 import { FormError } from "./auth-layout"
+
+const shape = {
+  name: z.string().trim().min(1, "Enter your name"),
+  email: z.email("Enter a valid email"),
+  password: z.string().min(8, "Use at least 8 characters"),
+  confirmPassword: z.string().min(8, "Use at least 8 characters"),
+}
+type Values = z.infer<z.ZodObject<typeof shape>>
+
+const newPassword = { type: "password", autoComplete: "new-password" }
+
+const schema: AutoFormSchema<typeof shape> = {
+  name: { schema: shape.name, as: Input, meta: { autoComplete: "name" } },
+  email: {
+    schema: shape.email,
+    as: Input,
+    meta: { type: "email", autoComplete: "email" },
+  },
+  password: { schema: shape.password, as: Input, meta: newPassword },
+  confirmPassword: {
+    schema: shape.confirmPassword,
+    label: "Confirm password",
+    as: Input,
+    meta: newPassword,
+  },
+}
 
 export function SignUpPage() {
   const navigate = useNavigate()
   const [redirect] = useQueryState("redirect", redirectParser)
   // prefilled from an invitation link (/invite/:id)
   const [invitedEmail] = useQueryState("email")
+  const defaultValues = useMemo(
+    () => ({ email: invitedEmail ?? "" }),
+    [invitedEmail]
+  )
   const [error, setError] = useState<string | null>(null)
   const [pending, setPending] = useState(false)
 
-  async function onSubmit(e: FormEvent<HTMLFormElement>) {
-    e.preventDefault()
-    const form = new FormData(e.currentTarget)
-    const password = String(form.get("password"))
-    if (password !== form.get("confirmPassword")) {
-      return setError("Passwords do not match")
+  async function onSubmit(values: Values, form: UseFormReturn<Values>) {
+    if (values.password !== values.confirmPassword) {
+      return form.setError("confirmPassword", {
+        message: "Passwords do not match",
+      })
     }
     setPending(true)
     setError(null)
     const { error } = await authClient.signUp.email({
-      name: String(form.get("name")),
-      email: String(form.get("email")),
-      password,
+      name: values.name,
+      email: values.email,
+      password: values.password,
     })
     setPending(false)
     if (error) return setError(error.message ?? "Unable to sign up")
@@ -50,62 +81,30 @@ export function SignUpPage() {
         <CardTitle>Create an account</CardTitle>
         <CardDescription>Fill in your details to get started.</CardDescription>
       </CardHeader>
-      <form onSubmit={onSubmit}>
-        <CardContent className="flex flex-col gap-4">
-          <div className="flex flex-col gap-2">
-            <Label htmlFor="name">Name</Label>
-            <Input id="name" name="name" autoComplete="name" required />
-          </div>
-          <div className="flex flex-col gap-2">
-            <Label htmlFor="email">Email</Label>
-            <Input
-              id="email"
-              name="email"
-              type="email"
-              autoComplete="email"
-              defaultValue={invitedEmail ?? undefined}
-              required
-            />
-          </div>
-          <div className="flex flex-col gap-2">
-            <Label htmlFor="password">Password</Label>
-            <Input
-              id="password"
-              name="password"
-              type="password"
-              autoComplete="new-password"
-              minLength={8}
-              required
-            />
-          </div>
-          <div className="flex flex-col gap-2">
-            <Label htmlFor="confirmPassword">Confirm password</Label>
-            <Input
-              id="confirmPassword"
-              name="confirmPassword"
-              type="password"
-              autoComplete="new-password"
-              minLength={8}
-              required
-            />
-          </div>
+      <CardContent>
+        <AutoForm
+          schema={schema}
+          defaultValues={defaultValues}
+          onSubmit={onSubmit}
+          className="flex flex-col gap-4"
+        >
           <FormError message={error} />
-        </CardContent>
-        <CardFooter className="mt-6 flex flex-col gap-4">
-          <Button type="submit" className="w-full" disabled={pending}>
+          <Button type="submit" className="mt-2 w-full" disabled={pending}>
             {pending ? "Creating account…" : "Sign up"}
           </Button>
-          <p className="text-sm text-muted-foreground">
-            Already have an account?{" "}
-            <Link
-              to={{ pathname: "/sign-in", search: window.location.search }}
-              className="text-foreground underline-offset-4 hover:underline"
-            >
-              Sign in
-            </Link>
-          </p>
-        </CardFooter>
-      </form>
+        </AutoForm>
+      </CardContent>
+      <CardFooter className="mt-4">
+        <p className="text-sm text-muted-foreground">
+          Already have an account?{" "}
+          <Link
+            to={{ pathname: "/sign-in", search: window.location.search }}
+            className="text-foreground underline-offset-4 hover:underline"
+          >
+            Sign in
+          </Link>
+        </p>
+      </CardFooter>
     </Card>
   )
 }

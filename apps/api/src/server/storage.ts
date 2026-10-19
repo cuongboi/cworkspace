@@ -8,7 +8,7 @@ import { env } from "@/env";
  * presigned POST and download through short-lived presigned GETs; the bucket is never public.
  */
 
-export const MAX_UPLOAD_BYTES = 25 * 1024 * 1024;
+export const MAX_UPLOAD_BYTES = 100 * 1024 * 1024;
 
 const bucket = env.S3_BUCKET;
 

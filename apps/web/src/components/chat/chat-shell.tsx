@@ -42,7 +42,7 @@ export function ChatShell({ conversationId }: { conversationId?: string }) {
   )
 
   return (
-    <div className="h-[calc(100svh-3.5rem)] min-h-0 overflow-hidden">
+    <div className="h-full min-h-0 overflow-hidden">
       {isMobile ? (
         conversationId || opening ? (
           thread

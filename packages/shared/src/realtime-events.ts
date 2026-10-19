@@ -64,27 +64,87 @@ export type GroupCallState = {
 
 export type MediaState = { audio: boolean; video: boolean; screen: boolean };
 
+/** Languages offered for live captions (BCP-47); also the speaker's spoken language. */
+export const CAPTION_LANGUAGES = {
+  en: "English",
+  ja: "日本語",
+  vi: "Tiếng Việt",
+  zh: "中文",
+  ko: "한국어",
+  fr: "Français",
+  de: "Deutsch",
+  es: "Español",
+} as const;
+export type CaptionLang = keyof typeof CAPTION_LANGUAGES;
+export const isCaptionLang = (v: unknown): v is CaptionLang =>
+  typeof v === "string" && Object.hasOwn(CAPTION_LANGUAGES, v);
+
+/** `lang` is both what the peer speaks and the language they read captions in. */
+export type CaptionPrefs = { enabled: boolean; lang: CaptionLang };
+
+/**
+ * Live captions: every speaker transcribes their own microphone (Transcribe Live) and sends the
+ * original over `/ws`; every reader translates each remote speaker's audio into their own
+ * language (Live Translate) in their browser. Translations never go through the server.
+ */
+
+/** Original text of one utterance. Partial updates replace `text` until `final`. */
+export type CaptionSegment = {
+  utteranceId: string;
+  /** the speaker's language */
+  lang: CaptionLang;
+  text: string;
+  final: boolean;
+};
+
+/**
+ * Utterance boundaries from the speaker's voice detection. Readers open their translation of
+ * that speaker on `start` and file what it produces under the same `utteranceId`.
+ */
+export type CaptionMark = {
+  utteranceId: string;
+  lang: CaptionLang;
+  state: "start" | "end";
+};
+
+/** A final original kept by the server while the call lasts (never stored), in order. */
+export type TranscriptEntry = {
+  seq: number;
+  socketId: string;
+  user: UserSummary;
+  utteranceId: string;
+  lang: CaptionLang;
+  text: string;
+  /** when the utterance started (server clock): the transcript is ordered by it */
+  ts: number;
+};
+
+/** Words the transcriber should recognise (names, product terms); shared by the call. */
+export const MAX_GLOSSARY_TERMS = 100;
+export const MAX_GLOSSARY_TERM_CHARS = 60;
+
 export type CallPeer = {
   socketId: string;
   user: UserSummary;
   media: MediaState;
+  captions: CaptionPrefs;
 };
 
 /** WebRTC signaling payload relayed verbatim between two sockets of the same call. */
 export type RtcSignal =
   | {
-      description: {
-        type: "offer" | "answer" | "pranswer" | "rollback";
-        sdp?: string;
-      };
-    }
-  | {
-      candidate: {
-        candidate?: string;
-        sdpMid?: string | null;
-        sdpMLineIndex?: number | null;
-      } | null;
+    description: {
+      type: "offer" | "answer" | "pranswer" | "rollback";
+      sdp?: string;
     };
+  }
+  | {
+    candidate: {
+      candidate?: string;
+      sdpMid?: string | null;
+      sdpMLineIndex?: number | null;
+    } | null;
+  };
 
 /** Server → client */
 export interface ServerToClientEvents {
@@ -150,6 +210,21 @@ export interface ServerToClientEvents {
   "call:answered": (p: { callId: string }) => void;
   "call:declined": (p: { callId: string; user: UserSummary }) => void;
   "call:ended": (p: { callId: string }) => void;
+  "call:peer-captions": (p: { callId: string; socketId: string; captions: CaptionPrefs }) => void;
+  /** to everyone in the call reading captions; `seq` is set on finals */
+  "call:caption": (
+    p: CaptionSegment & {
+      callId: string;
+      from: string;
+      userId: string;
+      name: string;
+      ts: number;
+      seq: number | null;
+    },
+  ) => void;
+  /** to the other readers of the call */
+  "call:caption-mark": (p: CaptionMark & { callId: string; from: string }) => void;
+  "call:glossary": (p: { callId: string; terms: string[] }) => void;
   "rtc:signal": (p: { callId: string; from: string; data: RtcSignal }) => void;
 }
 
@@ -166,12 +241,25 @@ export interface ClientToServerEvents {
   ) => void;
   "group:call:get": (p: { groupId: string }, ack: Ack<GroupCallState>) => void;
   "call:join": (
-    p: { callId: string; media: MediaState },
-    ack: Ack<{ call: CallSummary; peers: CallPeer[]; title: string }>,
+    p: { callId: string; media: MediaState; captions?: CaptionPrefs },
+    ack: Ack<{
+      call: CallSummary;
+      peers: CallPeer[];
+      title: string;
+      /** false without a Gemini key: live captions are off for the deployment */
+      captions: boolean;
+      /** finals said so far in this call (late joiners catch up), ordered */
+      transcript: TranscriptEntry[];
+      glossary: string[];
+    }>,
   ) => void;
   "call:leave": (p: { callId: string }) => void;
   "call:decline": (p: { callId: string }) => void;
   "call:media": (p: { callId: string; media: MediaState }) => void;
+  "call:captions": (p: { callId: string; captions: CaptionPrefs }) => void;
+  "call:caption": (p: CaptionSegment & { callId: string }) => void;
+  "call:caption-mark": (p: CaptionMark & { callId: string }) => void;
+  "call:glossary": (p: { callId: string; terms: string[] }) => void;
   "rtc:signal": (p: { callId: string; to: string; data: RtcSignal }) => void;
 }
 

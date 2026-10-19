@@ -8,6 +8,7 @@ import {
 } from "lucide-react"
 import { Link } from "react-router-dom"
 import { useState } from "react"
+import { useQueryState } from "nuqs"
 import { Button } from "@/components/ui/button"
 import {
   Empty,
@@ -26,6 +27,7 @@ import {
 } from "@/components/ui/tooltip"
 import { useApp } from "@/hooks/use-app"
 import { useDbQuery } from "@/lib/query"
+import { type ChatFilter, chatFilterParser } from "@/lib/search-params"
 import {
   type ConversationListItem,
   conversationListKey,
@@ -53,52 +55,78 @@ export function ConversationList({ activeId }: { activeId?: string }) {
       me.id
     ),
   }))
+  const [filter, setFilter] = useQueryState("filter", chatFilterParser)
+  const byFilter = rows.filter(({ item }) => {
+    if (filter === "unread") return isUnread(item, me.id)
+    if (filter === "direct") return item.conversation.type === "DIRECT"
+    if (filter === "group") return item.conversation.type === "GROUP"
+    return true
+  })
   const filtered = term
-    ? rows.filter(
-      ({ item, title }) =>
-        title.toLowerCase().includes(term) ||
-        item.conversation.members.some((m) =>
-          m.user.name.toLowerCase().includes(term)
-        )
-    )
-    : rows
+    ? byFilter.filter(
+        ({ item, title }) =>
+          title.toLowerCase().includes(term) ||
+          item.conversation.members.some((m) =>
+            m.user.name.toLowerCase().includes(term)
+          )
+      )
+    : byFilter
 
   return (
-    <div className="flex h-full min-h-0 flex-col bg-background">
-      <div className="flex items-center justify-between gap-2 px-4 pt-4 pb-2">
-        <h1 className="text-2xl font-bold tracking-tight">Chats</h1>
-        <Tooltip>
-          <NewConversationDialog>
-            <TooltipTrigger asChild>
-              <Button
-                variant="secondary"
-                size="icon"
-                className="rounded-full"
-                aria-label="New message"
-              >
-                <SquarePenIcon />
-              </Button>
-            </TooltipTrigger>
-          </NewConversationDialog>
-          <TooltipContent>New message</TooltipContent>
-        </Tooltip>
+    <div className="flex h-full min-h-0 flex-col bg-muted/40">
+      <div className="flex h-14 shrink-0 items-center justify-between gap-2 px-4">
+        <h1 className="text-lg font-bold">Chat</h1>
+        <div className="flex items-center">
+          <Tooltip>
+            <NewConversationDialog>
+              <TooltipTrigger asChild>
+                <Button variant="ghost" size="icon-sm" aria-label="New message">
+                  <SquarePenIcon />
+                </Button>
+              </TooltipTrigger>
+            </NewConversationDialog>
+            <TooltipContent>New message</TooltipContent>
+          </Tooltip>
+        </div>
       </div>
-      <div className="px-4 pb-2">
+      <div className="px-3 pb-2">
         <div className="relative">
-          <SearchIcon className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
+          <SearchIcon className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             value={q}
             onChange={(e) => setQ(e.target.value)}
             onKeyDown={(e) => e.key === "Escape" && setQ("")}
             placeholder="Search chats"
             aria-label="Search chats"
-            className="rounded-full bg-muted pl-9 shadow-none"
+            className="h-8 bg-card pl-8 shadow-none"
           />
         </div>
       </div>
+      <div
+        className="flex flex-wrap gap-1.5 border-b px-3 pb-2.5"
+        role="tablist"
+        aria-label="Filter chats"
+      >
+        {FILTERS.map((f) => (
+          <button
+            key={f.value}
+            type="button"
+            role="tab"
+            aria-selected={filter === f.value}
+            onClick={() => void setFilter(f.value === "all" ? null : f.value)}
+            className={cn(
+              "rounded-full border bg-card px-3 py-0.5 text-xs transition-colors hover:bg-accent",
+              filter === f.value &&
+                "border-foreground bg-foreground text-background hover:bg-foreground/90"
+            )}
+          >
+            {f.label}
+          </button>
+        ))}
+      </div>
 
       <ScrollArea viewportRef={setViewport} className="min-h-0 flex-1">
-        <nav aria-label="Conversations" className="px-2 pb-2">
+        <nav aria-label="Conversations" className="px-2 py-2">
           {isPending ? (
             <ListSkeleton />
           ) : error ? (
@@ -124,7 +152,7 @@ export function ConversationList({ activeId }: { activeId?: string }) {
             </Empty>
           ) : filtered.length === 0 ? (
             <p className="px-3 py-6 text-center text-sm text-muted-foreground">
-              No chats match “{q.trim()}”
+              {term ? `No chats match “${q.trim()}”` : "No chats here"}
             </p>
           ) : (
             <VirtualConversationRows
@@ -151,7 +179,7 @@ function VirtualConversationRows({
   const virtualizer = useVirtualizer({
     count: rows.length,
     getScrollElement: () => scrollElement,
-    estimateSize: () => 56,
+    estimateSize: () => 40,
     getItemKey: (i) => rows[i]?.item.conversation.id ?? i,
     gap: 2,
     overscan: 8,
@@ -198,12 +226,7 @@ function ConversationRow({
 }) {
   const { me } = useApp()
   const { conversation } = item
-  const last = conversation.messages[0]
-  const unread = Boolean(
-    last &&
-    last.senderId !== me.id &&
-    conversation.lastMessageAt > item.lastReadAt
-  )
+  const unread = isUnread(item, me.id)
   const muted = Boolean(item.mutedUntil && item.mutedUntil > new Date())
 
   return (
@@ -211,8 +234,8 @@ function ConversationRow({
       to={`/chat/${conversation.id}`}
       aria-current={active ? "page" : undefined}
       className={cn(
-        "flex items-center gap-3 rounded-lg px-2 py-2 transition-colors outline-none hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring",
-        active && "bg-accent"
+        "flex items-center gap-2.5 rounded-md px-2 py-1.5 transition-colors outline-none hover:bg-card focus-visible:ring-2 focus-visible:ring-ring",
+        active && "bg-card ring-1 ring-border"
       )}
     >
       <ConversationAvatar
@@ -227,7 +250,7 @@ function ConversationRow({
           <span
             className={cn(
               "truncate text-sm",
-              unread ? "font-semibold" : "font-medium"
+              unread ? "font-semibold" : "font-normal"
             )}
           >
             {title}
@@ -245,7 +268,7 @@ function ConversationRow({
           role="img"
           aria-label="Unread"
           className={cn(
-            "size-2.5 shrink-0 rounded-full",
+            "size-2 shrink-0 rounded-full",
             muted ? "bg-muted-foreground" : "bg-primary"
           )}
         />
@@ -254,16 +277,29 @@ function ConversationRow({
   )
 }
 
+const FILTERS: { value: ChatFilter; label: string }[] = [
+  { value: "all", label: "All" },
+  { value: "unread", label: "Unread" },
+  { value: "direct", label: "Chats" },
+  { value: "group", label: "Group chats" },
+]
+
+function isUnread(item: ConversationListItem, meId: string) {
+  const last = item.conversation.messages[0]
+  return Boolean(
+    last &&
+    last.senderId !== meId &&
+    item.conversation.lastMessageAt > item.lastReadAt
+  )
+}
+
 function ListSkeleton() {
   return (
     <div className="flex flex-col gap-1 px-2" aria-hidden="true">
       {[0, 1, 2, 3, 4, 5].map((i) => (
-        <div key={i} className="flex items-center gap-3 py-2">
-          <Skeleton className="size-10 rounded-full" />
-          <div className="flex flex-1 flex-col gap-2">
-            <Skeleton className="h-3.5 w-1/2" />
-            <Skeleton className="h-3 w-3/4" />
-          </div>
+        <div key={i} className="flex items-center gap-2.5 py-1.5">
+          <Skeleton className="size-6 rounded-full" />
+          <Skeleton className="h-3.5 w-1/2" />
         </div>
       ))}
     </div>

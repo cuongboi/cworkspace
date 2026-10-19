@@ -121,7 +121,7 @@ const GroupPage = () => {
     <Tabs
       value={tab}
       onValueChange={setTab}
-      className="-m-4 min-h-[calc(100svh-3.5rem)] gap-0 bg-muted/50 md:-m-6"
+      className="-m-4 min-h-[calc(100svh-3rem)] gap-0 bg-muted/50 md:-m-6"
     >
       <GroupHeader group={group} live={isMember ? live : null} onTab={setTab} />
       <div

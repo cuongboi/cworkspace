@@ -104,6 +104,11 @@ const CalendarPage = () => {
 
   const openCreate = (start?: Date, allDay?: boolean) => {
     const at = start ?? startOfHour(addHours(new Date(), 1))
+
+    if (at < new Date()) {
+      return
+    }
+
     setDialog({
       key: Date.now(),
       event: null,
@@ -126,7 +131,7 @@ const CalendarPage = () => {
   return (
     <>
       <PageTitle title="Calendar" />
-      <div className="flex h-[calc(100svh-3.5rem)] min-h-0 flex-1">
+      <div className="flex h-full min-h-0 flex-1">
         <CalendarSidebar
           className="hidden lg:flex"
           date={date}

@@ -1,9 +1,11 @@
 import { cn } from "cn"
 import {
   ArrowLeftIcon,
+  CaptionsIcon,
   MessageSquareIcon,
   PhoneIcon,
   PhoneOffIcon,
+  ScrollTextIcon,
   UsersIcon,
   VideoIcon,
   WifiOffIcon,
@@ -40,14 +42,18 @@ import type { UserSummary } from "@/lib/realtime-events"
 import { SELF_ID, type UseCall, useCall } from "@/lib/rtc/use-call"
 import {
   CameraButton,
+  CaptionsButton,
   ControlButton,
   DeviceMenu,
   LeaveButton,
   MicButton,
   ScreenButton,
 } from "./call-controls"
+import { CaptionsOverlay } from "./captions-overlay"
+import { GlossaryDialog } from "./glossary-dialog"
 import { RemoteAudio, StreamVideo } from "./media-elements"
 import { ParticipantTile, type TileProps } from "./participant-tile"
+import { TranscriptPanel } from "./transcript-panel"
 import { ScrollArea } from "@/components/ui/scroll-area"
 
 /**
@@ -82,7 +88,7 @@ export function CallScreen({ callId }: { callId: string }) {
   }
 
   return (
-    <div className="dark flex h-[calc(100svh-3.5rem)] min-h-0 flex-col bg-background text-foreground">
+    <div className="dark flex h-full min-h-0 flex-col bg-background text-foreground">
       {unavailable ? (
         <CallEnded
           reason={
@@ -179,6 +185,13 @@ function Lobby({
                 videoDeviceId={call.videoDeviceId}
                 onSelect={call.selectDevice}
               />
+              <CaptionsButton
+                captions={call.captions}
+                available={call.captionsAvailable}
+                status={call.captionStatus}
+                error={call.captionError}
+                onChange={call.setCaptions}
+              />
             </div>
           </div>
 
@@ -273,6 +286,11 @@ function InCall({
 }) {
   const goBack = useGoBack()
   const chat = useCallChat(conversationId, self.id)
+  const transcript = useTranscriptPanel()
+  const [glossaryOpen, setGlossaryOpen] = useQueryState(
+    "glossary",
+    parseAsBoolean.withDefault(false)
+  )
   const canShare =
     typeof navigator !== "undefined" &&
     Boolean(navigator.mediaDevices?.getDisplayMedia)
@@ -280,7 +298,7 @@ function InCall({
   const selfTile: Tile = {
     key: SELF_ID,
     user: self,
-    label: "You",
+    label: self.name,
     stream: call.cameraStream,
     videoOn: call.camera && !call.screen,
     micOn: call.mic,
@@ -400,6 +418,21 @@ function InCall({
               Waiting for others to join…
             </output>
           ) : null}
+          {call.captionsActive ? (
+            <output className="pointer-events-none absolute top-4 left-4 z-10 flex max-w-[calc(100%-2rem)] items-center gap-1.5 rounded-full bg-background/70 px-3 py-1 text-xs text-muted-foreground backdrop-blur-sm">
+              <CaptionsIcon className="size-3.5 shrink-0" />
+              <span>
+                Live captions on: speech is transcribed and translated by Google
+                Gemini, nothing is kept after the call
+              </span>
+            </output>
+          ) : null}
+          {call.captions.enabled ? (
+            <CaptionsOverlay
+              lines={call.captionLines}
+              lang={call.captions.lang}
+            />
+          ) : null}
         </main>
 
         <footer className="flex shrink-0 items-center justify-center gap-3 px-4 pt-1 pb-4">
@@ -414,6 +447,21 @@ function InCall({
             videoDeviceId={call.videoDeviceId}
             onSelect={call.selectDevice}
           />
+          <CaptionsButton
+            captions={call.captions}
+            available={call.captionsAvailable}
+            status={call.captionStatus}
+            error={call.captionError}
+            onChange={call.setCaptions}
+            onEditGlossary={() => void setGlossaryOpen(true)}
+          />
+          <ControlButton
+            label={transcript.open ? "Hide transcript" : "Show transcript"}
+            aria-pressed={transcript.open}
+            onClick={transcript.toggle}
+          >
+            <ScrollTextIcon />
+          </ControlButton>
           {conversationId ? (
             <ControlButton
               label={chat.open ? "Hide chat" : "Show chat"}
@@ -430,6 +478,19 @@ function InCall({
           <LeaveButton onLeave={leave} />
         </footer>
       </div>
+      <TranscriptPanel
+        lines={call.transcript}
+        lang={call.captions.lang}
+        title={call.title}
+        open={transcript.open}
+        onClose={transcript.close}
+      />
+      <GlossaryDialog
+        open={glossaryOpen}
+        terms={call.glossary}
+        onOpenChange={(o) => void setGlossaryOpen(o || null)}
+        onSave={call.setGlossary}
+      />
       {conversationId ? (
         <CallChat
           conversationId={conversationId}
@@ -439,6 +500,19 @@ function InCall({
       ) : null}
     </div>
   )
+}
+
+/** Transcript panel open state (in the URL, `?transcript=1`). */
+function useTranscriptPanel() {
+  const [open, setOpen] = useQueryState(
+    "transcript",
+    parseAsBoolean.withDefault(false)
+  )
+  return {
+    open,
+    toggle: () => void setOpen(!open || null),
+    close: () => void setOpen(null),
+  }
 }
 
 /** Chat panel open state (in the URL, `?chat=1`) + an unread dot for messages while it's closed. */

@@ -1,6 +1,7 @@
 import type { RealtimeClient } from "@/lib/realtime"
 import type {
   CallPeer,
+  CaptionPrefs,
   MediaState,
   RtcSignal,
   UserSummary,
@@ -69,6 +70,7 @@ export class MeshTransport
   private cameraTrack: MediaStreamTrack | null = null
   private screenTrack: MediaStreamTrack | null = null
   private media: MediaState = { audio: false, video: false, screen: false }
+  private captions: CaptionPrefs = { enabled: false, lang: "en" }
   private selfId: string | null = null
   private joined = false
   private closed = false
@@ -83,9 +85,11 @@ export class MeshTransport
 
   async join(
     localStream: MediaStream | null,
-    media: MediaState
+    media: MediaState,
+    captions: CaptionPrefs
   ): Promise<JoinResult> {
     if (this.closed) throw new Error("This call was left")
+    this.captions = captions
     this.audioTrack = localStream?.getAudioTracks()[0] ?? null
     this.cameraTrack = localStream?.getVideoTracks()[0] ?? null
     this.media = media
@@ -131,12 +135,22 @@ export class MeshTransport
       this.socket.emit("call:media", { callId: this.callId, media })
   }
 
+  setCaptions(captions: CaptionPrefs) {
+    this.captions = captions
+    if (this.joined && this.socket.connected)
+      this.socket.emit("call:captions", { callId: this.callId, captions })
+  }
+
   // --- signaling -------------------------------------------------------------------------------
 
   private async signalJoin(): Promise<JoinResult> {
     const res = await this.socket
       .timeout(JOIN_TIMEOUT_MS)
-      .emitWithAck("call:join", { callId: this.callId, media: this.media })
+      .emitWithAck("call:join", {
+        callId: this.callId,
+        media: this.media,
+        captions: this.captions,
+      })
       .catch(() => ({
         ok: false as const,
         error: "The server didn't answer, check your connection",
@@ -192,6 +206,18 @@ export class MeshTransport
       if (this.joined && callId === this.callId)
         this.emit("participant-media", socketId, media)
     }
+    const onPeerCaptions = ({
+      callId,
+      socketId,
+      captions,
+    }: {
+      callId: string
+      socketId: string
+      captions: CaptionPrefs
+    }) => {
+      if (this.joined && callId === this.callId)
+        this.emit("participant-captions", socketId, captions)
+    }
     const onSignal = ({
       callId,
       from,
@@ -242,6 +268,7 @@ export class MeshTransport
     s.on("call:peer-joined", onPeerJoined)
     s.on("call:peer-left", onPeerLeft)
     s.on("call:peer-media", onPeerMedia)
+    s.on("call:peer-captions", onPeerCaptions)
     s.on("rtc:signal", onSignal)
     s.on("call:ended", onEnded)
     s.on("call:declined", onDeclined)
@@ -251,6 +278,7 @@ export class MeshTransport
       s.off("call:peer-joined", onPeerJoined)
       s.off("call:peer-left", onPeerLeft)
       s.off("call:peer-media", onPeerMedia)
+      s.off("call:peer-captions", onPeerCaptions)
       s.off("rtc:signal", onSignal)
       s.off("call:ended", onEnded)
       s.off("call:declined", onDeclined)

@@ -5,6 +5,7 @@ import {
   MessageCircleOffIcon,
   PhoneIcon,
   UploadIcon,
+  UsersIcon,
   VideoIcon,
 } from "lucide-react"
 import { Link } from "react-router-dom"
@@ -342,7 +343,7 @@ function ThreadHeader({
 
   if (variant === "panel") {
     return (
-      <header className="flex h-12 shrink-0 items-center gap-2 border-b px-2">
+      <header className="flex h-14 shrink-0 items-center gap-2 border-b px-2">
         <button
           type="button"
           onClick={onOpenInfo}
@@ -374,9 +375,9 @@ function ThreadHeader({
   }
 
   return (
-    <header className="flex h-16 shrink-0 items-center gap-2 border-b px-2 md:px-4">
+    <header className="flex h-14 shrink-0 items-center gap-2 border-b px-2 md:px-5">
       {isMobile ? (
-        <Button asChild variant="ghost" size="icon" className="rounded-full">
+        <Button asChild variant="ghost" size="icon-sm">
           <Link to={"/chat"} aria-label="Back to chats">
             <ArrowLeftIcon />
           </Link>
@@ -385,45 +386,61 @@ function ThreadHeader({
       <button
         type="button"
         onClick={onOpenInfo}
-        className="flex min-w-0 flex-1 items-center gap-3 rounded-lg p-1 text-left outline-none hover:bg-accent/50 focus-visible:ring-2 focus-visible:ring-ring"
+        className="flex min-w-0 shrink items-center gap-2.5 rounded-md p-1 text-left outline-none hover:bg-accent/50 focus-visible:ring-2 focus-visible:ring-ring"
       >
         <ConversationAvatar
           type={conversation.type}
           group={conversation.group}
           members={members}
           meId={me.id}
+          size="sm"
         />
         <span className="min-w-0">
-          <span className="block truncate text-sm font-semibold">{title}</span>
-          {subtitle ? (
+          <span className="block truncate text-base font-bold">{title}</span>
+          {subtitle && !isGroup ? (
             <span className="block truncate text-xs text-muted-foreground">
               {subtitle}
             </span>
           ) : null}
         </span>
       </button>
-      <div className="flex shrink-0 items-center text-primary">
+      {/* Teams-style tab strip; the thread is the only tab, details live in the info sheet */}
+      <nav
+        className="hidden h-full items-stretch gap-4 pl-3 text-sm sm:flex"
+        aria-label="Conversation tabs"
+      >
+        <span
+          className="relative flex items-center font-semibold"
+          aria-current="page"
+        >
+          Chat
+          <span className="absolute inset-x-0 bottom-0 h-0.5 rounded-full bg-foreground" />
+        </span>
+        <button
+          type="button"
+          onClick={onOpenInfo}
+          className="flex items-center text-muted-foreground hover:text-foreground"
+        >
+          Details
+        </button>
+      </nav>
+      <div className="ml-auto flex shrink-0 items-center gap-1">
+        <Button
+          variant="outline"
+          size="sm"
+          className="hidden sm:inline-flex"
+          disabled={calling !== null}
+          onClick={() => void call("VIDEO")}
+        >
+          <VideoIcon />
+          Meet now
+        </Button>
         <Tooltip>
           <TooltipTrigger asChild>
             <Button
               variant="ghost"
-              size="icon"
-              className="rounded-full text-primary"
-              aria-label="Start audio call"
-              disabled={calling !== null}
-              onClick={() => void call("AUDIO")}
-            >
-              <PhoneIcon />
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent>Audio call</TooltipContent>
-        </Tooltip>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="rounded-full text-primary"
+              size="icon-sm"
+              className="sm:hidden"
               aria-label="Start video call"
               disabled={calling !== null}
               onClick={() => void call("VIDEO")}
@@ -437,8 +454,38 @@ function ThreadHeader({
           <TooltipTrigger asChild>
             <Button
               variant="ghost"
-              size="icon"
-              className="rounded-full text-primary"
+              size="icon-sm"
+              aria-label="Start audio call"
+              disabled={calling !== null}
+              onClick={() => void call("AUDIO")}
+            >
+              <PhoneIcon />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>Audio call</TooltipContent>
+        </Tooltip>
+        {isGroup ? (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="gap-1 px-2"
+                aria-label="People"
+                onClick={onOpenInfo}
+              >
+                <UsersIcon />
+                {members.length}
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>People</TooltipContent>
+          </Tooltip>
+        ) : null}
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon-sm"
               aria-label="Conversation info"
               onClick={onOpenInfo}
             >
