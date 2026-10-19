@@ -2,6 +2,7 @@ import { env } from "@/env";
 import { db } from "@/lib/db";
 import {
   CAPTION_PAIR,
+  type ServerPayload,
   type CallPeer,
   type CallSummary,
   type CaptionPrefs,
@@ -16,6 +17,7 @@ import {
 } from "@app/shared/realtime-events";
 import { ensureGroupConversation } from "@/server/group-chat";
 import { notify } from "@/server/notify";
+import { sendPush } from "@/server/push";
 import { rateLimit } from "@/server/rate-limit";
 import { dbFor } from "@/server/session";
 import {
@@ -36,6 +38,21 @@ import {
  */
 
 const RING_TIMEOUT_MS = 45_000;
+
+/**
+ * Calls still ringing, so a device that connects mid-ring (opened from the push notification)
+ * shows the incoming-call card too.
+ */
+const ringing = new Map<
+  string,
+  { startedAt: number; invites: Map<string, ServerPayload<"call:incoming">> }
+>();
+
+function stopRinging(callId: string, userIds: string[]) {
+  ringing.delete(callId);
+  // closes the ringing notification on devices that never opened the app
+  void sendPush(userIds, { title: "", body: "", url: "/", tag: `call:${callId}`, kind: "dismiss" });
+}
 const MAX_CAPTION_CHARS = 500;
 const MAX_TRANSCRIPT = 2_000;
 /** utterance start times kept for ordering; older ones fall back to "now" */
@@ -203,6 +220,7 @@ async function endCall(callId: string) {
   const isGroupCall = Boolean(group || call.conversation?.groupId);
   const ringing = isGroupCall ? [] : await invitees(call, call.startedById);
   emitTo([rooms.call(callId), ...ringing.map(rooms.user)], "call:ended", { callId });
+  stopRinging(callId, ringing);
   clearRoom(rooms.call(callId));
 
   const wasAnswered = answered.delete(callId);
@@ -293,11 +311,52 @@ onGroupMembershipEnded((groupId, userId) => {
   }
 });
 
+/** Declines a ringing call (socket, or the push notification's Decline button). */
+export async function declineCall(
+  user: { id: string; name: string; image?: string | null },
+  userDb: ReturnType<typeof dbFor>,
+  callId: string,
+) {
+  const call = await userDb.call.findUnique({
+    where: { id: callId },
+    select: callSelect,
+  });
+  if (!call || call.status === "ENDED") return;
+  const me: UserSummary = { id: user.id, name: user.name, image: user.image ?? null };
+  ringing.get(call.id)?.invites.delete(user.id);
+  void sendPush([user.id], {
+    title: "",
+    body: "",
+    url: "/",
+    tag: `call:${call.id}`,
+    kind: "dismiss",
+  });
+  emitTo([rooms.call(call.id), rooms.user(call.startedById)], "call:declined", {
+    callId: call.id,
+    user: me,
+  });
+  // a declined 1:1 call is over
+  if (call.conversationId) {
+    const convo = await db.conversation.findUnique({
+      where: { id: call.conversationId },
+      select: { type: true },
+    });
+    if (convo?.type === "DIRECT" && !answered.has(call.id)) await endCall(call.id);
+  }
+}
+
 export function registerCalls(socket: Conn) {
   const { user } = socket;
   const me: UserSummary = { id: user.id, name: user.name, image: user.image };
   const fail = (error: string) => ({ ok: false as const, error });
   conns.set(socket.id, socket);
+
+  for (const [callId, ring] of ringing) {
+    const invite = ring.invites.get(user.id);
+    if (!invite || answered.has(callId)) continue;
+    if (Date.now() - ring.startedAt > RING_TIMEOUT_MS) ringing.delete(callId);
+    else emitToConn(socket.id, "call:incoming", invite);
+  }
 
   socket.on("group:call:get", async ({ groupId }, ack) => {
     const membership = await dbFor(user).groupMember.findFirst({
@@ -397,11 +456,24 @@ export function registerCalls(socket: Conn) {
 
       ack({ ok: true, data: { callId: call.id } });
 
+      const invites = new Map<string, ServerPayload<"call:incoming">>();
+      ringing.set(call.id, { startedAt: Date.now(), invites });
       for (const userId of await invitees(call, user.id)) {
-        emitToUsers([userId], "call:incoming", {
-          call: summary(call),
-          from: me,
-          title: await callTitle(call, userId),
+        const title = await callTitle(call, userId);
+        const payload = { call: summary(call), from: me, title };
+        invites.set(userId, payload);
+        emitToUsers([userId], "call:incoming", payload);
+        void sendPush([userId], {
+          title: `Incoming ${type === "VIDEO" ? "video" : "audio"} call`,
+          body: title || me.name,
+          url: call.conversationId
+            ? `/chat/${call.conversationId}`
+            : call.eventId
+              ? `/calendar?event=${call.eventId}`
+              : "/chat",
+          tag: `call:${call.id}`,
+          kind: "call",
+          callId: call.id,
         });
       }
       setTimeout(() => {
@@ -466,6 +538,15 @@ export function registerCalls(socket: Conn) {
       });
       socket.broadcast(rooms.call(call.id), "call:peer-joined", { ...self, callId: call.id });
       emitToUsers([user.id], "call:answered", { callId: call.id });
+      if (answered.has(call.id)) ringing.delete(call.id);
+      // stop ringing on this user's other devices
+      void sendPush([user.id], {
+        title: "",
+        body: "",
+        url: "/",
+        tag: `call:${call.id}`,
+        kind: "dismiss",
+      });
       const group = groupCalls.get(call.id);
       if (group) emitGroupCall(group.groupId);
     } catch (err) {
@@ -479,25 +560,7 @@ export function registerCalls(socket: Conn) {
   });
 
   socket.on("call:decline", ({ callId }) => {
-    (async () => {
-      const call = await dbFor(user).call.findUnique({
-        where: { id: String(callId) },
-        select: callSelect,
-      });
-      if (!call || call.status === "ENDED") return;
-      emitTo([rooms.call(call.id), rooms.user(call.startedById)], "call:declined", {
-        callId: call.id,
-        user: me,
-      });
-      // a declined 1:1 call is over
-      if (call.conversationId) {
-        const convo = await db.conversation.findUnique({
-          where: { id: call.conversationId },
-          select: { type: true },
-        });
-        if (convo?.type === "DIRECT" && !answered.has(call.id)) await endCall(call.id);
-      }
-    })().catch(logError("decline"));
+    declineCall(user, dbFor(user), String(callId)).catch(logError("decline"));
   });
 
   socket.on("call:media", ({ callId, media }) => {

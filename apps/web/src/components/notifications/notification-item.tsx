@@ -32,6 +32,13 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { db } from "@/lib/api-client"
 import { toPlainText } from "@/lib/mentions"
 import { useDbMutation } from "@/lib/query"
+import {
+  REACTION_EMOJI,
+  dataField,
+  notificationHref,
+} from "@app/shared/notifications"
+
+export { notificationHref }
 
 /** `include` used by every notification list so the renderer gets the same shape. */
 export const notificationInclude = {
@@ -62,15 +69,6 @@ export type NotificationLike = {
   event?: { title: string } | null
 }
 
-const REACTION_EMOJI: Record<string, string> = {
-  LIKE: "👍",
-  LOVE: "❤️",
-  HAHA: "😆",
-  WOW: "😮",
-  SAD: "😢",
-  ANGRY: "😡",
-}
-
 const TYPE_META: Record<string, { icon: LucideIcon; className: string }> = {
   MENTION: { icon: AtSignIcon, className: "bg-blue-500" },
   POST_COMMENT: { icon: MessageCircleIcon, className: "bg-emerald-500" },
@@ -82,14 +80,6 @@ const TYPE_META: Record<string, { icon: LucideIcon; className: string }> = {
   EVENT_INVITE: { icon: CalendarPlusIcon, className: "bg-violet-500" },
   EVENT_REMINDER: { icon: BellRingIcon, className: "bg-amber-500" },
   MISSED_CALL: { icon: PhoneMissedIcon, className: "bg-red-500" },
-}
-
-function dataField(data: unknown, key: string): string | undefined {
-  if (data && typeof data === "object" && key in data) {
-    const value = (data as Record<string, unknown>)[key]
-    return typeof value === "string" ? value : undefined
-  }
-  return undefined
 }
 
 /** The sentence describing a notification, with emphasized names. */
@@ -151,29 +141,6 @@ export function describeNotification(n: NotificationLike): ReactNode {
       return <>Missed call from {actor}</>
     default:
       return <>New activity from {actor}</>
-  }
-}
-
-/** Where a notification leads. `groupSlug` is needed for group notifications. */
-export function notificationHref(
-  n: NotificationLike,
-  groupSlug = n.group?.slug
-): string {
-  switch (n.type) {
-    case "GROUP_JOIN_REQUEST":
-      return groupSlug ? `/groups/${groupSlug}?tab=members` : "/groups"
-    case "GROUP_JOIN_APPROVED":
-      return groupSlug ? `/groups/${groupSlug}` : "/groups"
-    case "EVENT_INVITE":
-    case "EVENT_REMINDER":
-      return n.eventId ? `/calendar?event=${n.eventId}` : "/calendar"
-    case "MISSED_CALL":
-      if (n.conversationId) return `/chat/${n.conversationId}`
-      return n.eventId ? `/calendar?event=${n.eventId}` : "/chat"
-    default:
-      if (n.postId) return `/posts/${n.postId}`
-      if (groupSlug) return `/groups/${groupSlug}`
-      return "/notifications"
   }
 }
 

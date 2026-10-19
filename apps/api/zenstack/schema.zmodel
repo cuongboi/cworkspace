@@ -62,6 +62,7 @@ model User {
     messageReactions        MessageReaction[]
     notifications           Notification[]      @relation('NotificationRecipient')
     notificationsActed      Notification[]      @relation('NotificationActor')
+    pushTokens              PushToken[]
     eventsCreated           Event[]
     eventAttendances        EventAttendee[]
     callsStarted            Call[]
@@ -806,4 +807,19 @@ model WikiRevision {
 
     @@index([pageId, createdAt])
     @@map('wiki_revision')
+}
+
+// FCM registration token of one browser/device. Written only by routes/push.ts.
+model PushToken {
+    id        String   @id @default(cuid())
+    userId    String
+    user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+    token     String   @unique
+    userAgent String?
+    createdAt DateTime @default(now())
+    updatedAt DateTime @updatedAt
+
+    @@deny('all', true)
+    @@index([userId])
+    @@map('push_token')
 }

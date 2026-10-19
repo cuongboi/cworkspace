@@ -87,6 +87,7 @@ Read env **only** through `env` from `@/env`. When adding a key, add it to `src/
 | `S3_ENDPOINT`, `S3_REGION`, `S3_BUCKET`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY` | for uploads           | unset → uploads answer 502 `UPSTREAM_ERROR`   |
 | `STUN_URLS`, `TURN_URLS`, `TURN_SECRET`                                             | for calls across NATs | Google STUN, no TURN                          |
 | `GEMINI_API_KEY`, `GEMINI_TRANSCRIBE_MODEL`, `GEMINI_TRANSLATE_MODEL`              | for live captions     | unset → captions off                          |
+| `FIREBASE_PROJECT_ID`, `FIREBASE_CLIENT_EMAIL`, `FIREBASE_PRIVATE_KEY`, `FIREBASE_API_KEY`, `FIREBASE_APP_ID`, `FIREBASE_MESSAGING_SENDER_ID`, `FIREBASE_VAPID_KEY` | for background push | unset → push off |
 | `VITE_BETTER_AUTH_URL`                                                              | no                    | —                                             |
 | `DB_LOG_QUERIES`                                                                    | no                    | `false`                                       |
 

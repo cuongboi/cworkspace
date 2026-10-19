@@ -52,6 +52,15 @@ export const env = {
   GEMINI_API_KEY: read("GEMINI_API_KEY", ""),
   GEMINI_TRANSCRIBE_MODEL: read("GEMINI_TRANSCRIBE_MODEL", "gemini-3.5-transcribe-live"),
   GEMINI_TRANSLATE_MODEL: read("GEMINI_TRANSLATE_MODEL", "gemini-3.8-live"),
+
+  // Push notifications (Firebase Cloud Messaging). Disabled unless all are set.
+  FIREBASE_PROJECT_ID: read("FIREBASE_PROJECT_ID", ""),
+  FIREBASE_CLIENT_EMAIL: read("FIREBASE_CLIENT_EMAIL", ""),
+  FIREBASE_PRIVATE_KEY: read("FIREBASE_PRIVATE_KEY", "").replace(/\\n/g, "\n"),
+  FIREBASE_API_KEY: read("FIREBASE_API_KEY", ""),
+  FIREBASE_APP_ID: read("FIREBASE_APP_ID", ""),
+  FIREBASE_MESSAGING_SENDER_ID: read("FIREBASE_MESSAGING_SENDER_ID", ""),
+  FIREBASE_VAPID_KEY: read("FIREBASE_VAPID_KEY", ""),
 } as const;
 
 export type Env = typeof env;

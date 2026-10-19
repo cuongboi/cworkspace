@@ -38,6 +38,7 @@
     "better-auth": "^1.7.10",
     "elysia": "latest",
     "elysia-local-https": "^1.0.2",
+    "firebase-admin": "^14.5.0",
     "pg": "^8.23.1",
     "resend": "^6.33.0"
   },

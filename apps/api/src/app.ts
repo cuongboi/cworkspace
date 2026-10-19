@@ -7,12 +7,14 @@ import { env } from "@/env";
 import * as pkg from "../package.json";
 import { notFound, toErrorResponse } from "./lib/errors";
 import { BetterAuthOpenApi, betterAuthPlugin } from "./plugins/auth";
+import { callsRoute } from "./routes/calls";
 import { captionsRoute } from "./routes/captions";
 import { conversationsRoute } from "./routes/conversations";
 import { executeRoute } from "./routes/execute";
 import { filesRoute } from "./routes/files";
 import { groupsRoute } from "./routes/groups";
 import { invitationsRoute } from "./routes/invitations";
+import { pushRoute } from "./routes/push";
 import { rtcRoute } from "./routes/rtc";
 import { uploadsRoute } from "./routes/uploads";
 import { webSocketPlugin } from "./websocket";
@@ -62,6 +64,8 @@ export const app = new Elysia()
   .use(groupsRoute)
   .use(invitationsRoute)
   .use(rtcRoute)
+  .use(callsRoute)
+  .use(pushRoute)
   .use(captionsRoute)
   .use(webSocketPlugin())
   // unknown API paths answer with the JSON envelope, not the SPA's index.html

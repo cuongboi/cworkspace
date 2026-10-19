@@ -34,6 +34,7 @@ export type Call = $ModelResult<$Schema, "Call">;
 export type CallParticipant = $ModelResult<$Schema, "CallParticipant">;
 export type WikiPage = $ModelResult<$Schema, "WikiPage">;
 export type WikiRevision = $ModelResult<$Schema, "WikiRevision">;
+export type PushToken = $ModelResult<$Schema, "PushToken">;
 export type PermissionType = $TypeDefResult<$Schema, "PermissionType">;
 export const InvitationStatus = $schema.enums.InvitationStatus.values;
 export type InvitationStatus = (typeof InvitationStatus)[keyof typeof InvitationStatus];

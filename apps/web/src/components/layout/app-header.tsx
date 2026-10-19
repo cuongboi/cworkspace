@@ -31,6 +31,7 @@ import {
 import { Input } from "@/components/ui/input"
 import { useApp } from "@/hooks/use-app"
 import { authClient } from "@/lib/auth-client"
+import { disablePush } from "@/lib/push"
 import { COMPANY_NAME } from "@/lib/company"
 import { useIsNavActive, useNavItems } from "./app-sidebar"
 
@@ -205,6 +206,7 @@ function UserMenu() {
         <DropdownMenuSeparator />
         <DropdownMenuItem
           onSelect={async () => {
+            await disablePush().catch(() => {})
             await authClient.signOut()
             window.location.href = "/sign-in"
           }}

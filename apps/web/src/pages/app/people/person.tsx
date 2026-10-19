@@ -17,6 +17,7 @@ import { UserAvatar } from "@/components/common/user-avatar"
 import { FeedShell } from "@/components/feed/feed-shell"
 import { PostFeed } from "@/components/feed/post-feed"
 import { EditProfileDialog } from "@/components/people/edit-profile-dialog"
+import { PushSettings } from "@/components/people/push-settings"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
@@ -195,6 +196,8 @@ const ProfilePage = () => {
           </dl>
         </CardContent>
       </Card>
+
+      {isMe ? <PushSettings /> : null}
 
       <h2 className="mt-2 text-lg font-semibold">
         {isMe ? "Your posts" : `Posts by ${user.name.split(" ")[0]}`}

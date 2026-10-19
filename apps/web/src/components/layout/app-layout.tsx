@@ -6,6 +6,7 @@ import { Spinner } from "@/components/ui/spinner"
 import { AppProvider } from "@/hooks/use-app"
 import { PageScrollContext } from "@/hooks/use-page-scroll"
 import { PresenceProvider } from "@/hooks/use-presence"
+import { usePushRefresh } from "@/hooks/use-push"
 import { useRealtimeSync } from "@/hooks/use-realtime-sync"
 import { authClient } from "@/lib/auth-client"
 import { AppHeader } from "./app-header"
@@ -94,5 +95,6 @@ function PageScroll() {
 
 function RealtimeSync() {
   useRealtimeSync()
+  usePushRefresh()
   return null
 }

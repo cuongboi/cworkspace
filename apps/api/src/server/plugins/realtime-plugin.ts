@@ -1,8 +1,10 @@
 import { definePlugin } from "@zenstackhq/orm";
-import { extractMentionIds } from "@app/shared/mentions";
+import { extractMentionIds, toPlainText } from "@app/shared/mentions";
+import { notificationHref, notificationText } from "@app/shared/notifications";
 import type { ChatMessagePayload, MutationAction } from "@app/shared/realtime-events";
 import type { SchemaType } from "../../../zenstack/schema";
 import { notify } from "../notify";
+import { sendPush } from "../push";
 import {
   emitToRoom,
   emitToUsers,
@@ -58,6 +60,51 @@ async function conversationMemberIds(conversationId: string) {
     select: { userId: true },
   });
   return members.map((m) => m.userId);
+}
+
+async function pushNotification(id: string) {
+  const db = await getDb();
+  const n = await db.notification.findUnique({
+    where: { id },
+    include: {
+      actor: { select: { name: true } },
+      group: { select: { name: true, slug: true } },
+      event: { select: { title: true } },
+    },
+  });
+  if (!n) return;
+  await sendPush([n.userId], {
+    title: notificationText(n),
+    body: n.event?.title ?? n.group?.name ?? "",
+    url: notificationHref(n),
+    tag: `notification:${n.id}`,
+  });
+}
+
+async function pushMessage(
+  message: { conversationId: string; senderId: string; content: string; sender: { name: string } },
+  memberIds: string[],
+) {
+  const db = await getDb();
+  const conversation = await db.conversation.findUnique({
+    where: { id: message.conversationId },
+    select: { type: true, title: true, group: { select: { name: true } } },
+  });
+  if (!conversation) return;
+  const preview = toPlainText(message.content).trim() || "Sent an attachment";
+  const isDirect = conversation.type === "DIRECT";
+  await sendPush(
+    memberIds.filter((id) => id !== message.senderId),
+    {
+      title: isDirect
+        ? message.sender.name
+        : (conversation.title ?? conversation.group?.name ?? "Group chat"),
+      body: isDirect ? preview : `${message.sender.name}: ${preview}`,
+      url: `/chat/${message.conversationId}`,
+      tag: `conversation:${message.conversationId}`,
+      kind: "message",
+    },
+  );
 }
 
 const handlers: Partial<Record<string, Handler>> = {
@@ -311,6 +358,7 @@ const handlers: Partial<Record<string, Handler>> = {
           data: { lastMessageAt: message.createdAt },
         });
         emitToUsers(memberIds, "message:new", message as ChatMessagePayload);
+        if (message.type === "TEXT") void pushMessage(message, memberIds);
       } else {
         emitToUsers(memberIds, "message:changed", {
           conversationId,
@@ -373,7 +421,9 @@ const handlers: Partial<Record<string, Handler>> = {
         where: { id: str(row.id) },
         include: { actor: userSummary },
       });
-      if (notification) emitToUsers([notification.userId], "notification:new", notification);
+      if (!notification) continue;
+      emitToUsers([notification.userId], "notification:new", notification);
+      void pushNotification(notification.id);
     }
   },
 
