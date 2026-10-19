@@ -23,12 +23,14 @@ export function useRealtimeSync() {
   useSocketEvent("group:changed", () =>
     invalidateModels(qc, ["group", "groupMember"])
   )
+  useSocketEvent("channel:changed", () => invalidateModels(qc, ["channel"]))
   useSocketEvent("wiki:changed", () =>
     invalidateModels(qc, ["wikiPage", "wikiRevision"])
   )
 
+  // channel lists carry unread state
   useSocketEvent("message:new", () =>
-    invalidateModels(qc, ["conversation", "conversationMember"])
+    invalidateModels(qc, ["conversation", "conversationMember", "channel"])
   )
   useSocketEvent("message:changed", () =>
     invalidateModels(qc, ["message", "messageReaction"])
@@ -37,7 +39,7 @@ export function useRealtimeSync() {
     invalidateModels(qc, ["conversation", "conversationMember"])
   )
   useSocketEvent("conversation:read", () =>
-    invalidateModels(qc, ["conversationMember"])
+    invalidateModels(qc, ["conversationMember", "channel"])
   )
 
   useSocketEvent("notification:new", () =>

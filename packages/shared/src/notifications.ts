@@ -39,6 +39,7 @@ export function notificationText(n: NotificationLinkable): string {
   const event = n.event?.title ?? dataField(n.data, "title") ?? "an event";
   switch (n.type) {
     case "MENTION":
+      if (n.conversationId) return `${actor} mentioned you in a chat`;
       return `${actor} mentioned you in a ${n.commentId ? "comment" : "post"}`;
     case "POST_COMMENT":
       return `${actor} commented on your post`;
@@ -78,8 +79,10 @@ export function notificationHref(
     case "EVENT_INVITE":
     case "EVENT_REMINDER":
       return n.eventId ? `/calendar?event=${n.eventId}` : "/calendar";
+    case "MENTION":
     case "MISSED_CALL":
       if (n.conversationId) return `/chat/${n.conversationId}`;
+      if (n.type === "MENTION") return n.postId ? `/posts/${n.postId}` : "/notifications";
       return n.eventId ? `/calendar?event=${n.eventId}` : "/chat";
     default:
       if (n.postId) return `/posts/${n.postId}`;

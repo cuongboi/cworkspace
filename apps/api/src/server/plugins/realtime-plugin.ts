@@ -1,8 +1,9 @@
 import { definePlugin } from "@zenstackhq/orm";
-import { extractMentionIds, toPlainText } from "@app/shared/mentions";
-import { notificationHref, notificationText } from "@app/shared/notifications";
+import { EVERYONE_ID, extractMentionIds, toPlainText } from "@app/shared/mentions";
+import { dataField, notificationHref, notificationText } from "@app/shared/notifications";
 import type { ChatMessagePayload, MutationAction } from "@app/shared/realtime-events";
 import type { SchemaType } from "../../../zenstack/schema";
+import { dispatchOutgoing } from "../integrations/outgoing";
 import { notify } from "../notify";
 import { sendPush } from "../push";
 import {
@@ -75,10 +76,37 @@ async function pushNotification(id: string) {
   if (!n) return;
   await sendPush([n.userId], {
     title: notificationText(n),
-    body: n.event?.title ?? n.group?.name ?? "",
+    body: n.event?.title ?? n.group?.name ?? dataField(n.data, "preview") ?? "",
     url: notificationHref(n),
     tag: `notification:${n.id}`,
   });
+}
+
+/**
+ * Members a chat message mentions: named members always (even if they muted the chat), and with
+ * `@everyone` in a group chat every member who hasn't muted it. Never the sender.
+ */
+async function mentionedMembers(message: {
+  conversationId: string;
+  senderId: string;
+  content: string;
+}) {
+  const ids = extractMentionIds(message.content);
+  if (ids.length === 0) return [];
+  const db = await getDb();
+  const members = await db.conversationMember.findMany({
+    where: { conversationId: message.conversationId },
+    select: { userId: true, mutedUntil: true, conversation: { select: { type: true } } },
+  });
+  const now = new Date();
+  const everyone = ids.includes(EVERYONE_ID) && members[0]?.conversation.type === "GROUP";
+  return members
+    .filter(
+      (m) =>
+        m.userId !== message.senderId &&
+        (ids.includes(m.userId) || (everyone && !(m.mutedUntil && m.mutedUntil > now))),
+    )
+    .map((m) => m.userId);
 }
 
 async function pushMessage(
@@ -350,7 +378,10 @@ const handlers: Partial<Record<string, Handler>> = {
       if (action === "create") {
         const message = await db.message.findUnique({
           where: { id: str(row.id) },
-          include: { sender: userSummary },
+          include: {
+            sender: userSummary,
+            integration: { select: { id: true, name: true, avatarUrl: true } },
+          },
         });
         if (!message) continue;
         await db.conversation.update({
@@ -358,7 +389,25 @@ const handlers: Partial<Record<string, Handler>> = {
           data: { lastMessageAt: message.createdAt },
         });
         emitToUsers(memberIds, "message:new", message as ChatMessagePayload);
-        if (message.type === "TEXT") void pushMessage(message, memberIds);
+        if (message.type === "BOT") void pushMessage(message, memberIds);
+        if (message.type === "TEXT") {
+          void dispatchOutgoing(message);
+          // mentioned members get the MENTION notification (and its push) instead of the plain one
+          const mentioned = await mentionedMembers(message);
+          void pushMessage(
+            message,
+            memberIds.filter((id) => !mentioned.includes(id)),
+          );
+          await notify(
+            mentioned.map((userId) => ({
+              userId,
+              actorId: message.senderId,
+              type: "MENTION" as const,
+              conversationId,
+              data: { preview: toPlainText(message.content).slice(0, 140) },
+            })),
+          );
+        }
       } else {
         emitToUsers(memberIds, "message:changed", {
           conversationId,

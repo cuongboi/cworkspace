@@ -1,14 +1,17 @@
 import { cn } from "cn"
+import { UsersRoundIcon } from "lucide-react"
 import {
   type ComponentProps,
   type KeyboardEvent,
+  type Ref,
+  useImperativeHandle,
   useRef,
   useState,
 } from "react"
 import { Textarea } from "@/components/ui/textarea"
 import { useApp } from "@/hooks/use-app"
 import { db } from "@/lib/api-client"
-import { formatMention, MENTION_RE } from "@/lib/mentions"
+import { EVERYONE_ID, formatMention, MENTION_RE } from "@/lib/mentions"
 import { useDbQuery } from "@/lib/query"
 import { UserAvatar } from "./user-avatar"
 
@@ -26,7 +29,19 @@ type Props = Omit<
   onChange: (serialized: string) => void
   /** Enter submits (Shift+Enter for a newline) */
   onSubmit?: () => void
+  /** limit suggestions to these people (e.g. a chat's members) instead of the whole company */
+  people?: Person[]
+  /** offer `@everyone` first (group chats) */
+  everyone?: boolean
+  /** imperative handle: open the suggestions as if "@" was typed (toolbar button) */
+  controlRef?: Ref<MentionTextareaHandle>
 }
+
+type Person = { id: string; name: string; image: string | null }
+
+export type MentionTextareaHandle = { openMention: () => void }
+
+const EVERYONE: Person = { id: EVERYONE_ID, name: "everyone", image: null }
 
 type Mention = { name: string; userId: string }
 
@@ -57,6 +72,9 @@ export function MentionTextarea({
   onSubmit,
   className,
   onKeyDown,
+  people,
+  everyone = false,
+  controlRef,
   ...props
 }: Props) {
   const { me } = useApp()
@@ -74,7 +92,7 @@ export function MentionTextarea({
   if (value !== state.serialized)
     setState({ ...deserialize(value), serialized: value })
 
-  const { data: candidates = [] } = useDbQuery(
+  const { data: companyPeople = [] } = useDbQuery(
     ["user", "findMany", "mention", query?.text],
     () =>
       db.user.findMany({
@@ -88,8 +106,17 @@ export function MentionTextarea({
         orderBy: { name: "asc" },
         take: 6,
       }),
-    { enabled: query !== null, staleTime: 60_000 }
+    { enabled: query !== null && !people, staleTime: 60_000 }
   )
+  const term = query?.text.toLowerCase() ?? ""
+  const candidates: Person[] = people
+    ? [
+        ...(everyone && "everyone".startsWith(term) ? [EVERYONE] : []),
+        ...people
+          .filter((p) => p.id !== me.id && p.name.toLowerCase().includes(term))
+          .slice(0, 8),
+      ]
+    : companyPeople
 
   const update = (display: string, mentions: Mention[]) => {
     const kept = mentions.filter((m) => display.includes(`@${m.name}`))
@@ -97,6 +124,24 @@ export function MentionTextarea({
     setState({ display, mentions: kept, serialized })
     onChange(serialized)
   }
+
+  useImperativeHandle(controlRef, () => ({
+    openMention: () => {
+      const el = ref.current
+      const caret = el?.selectionStart ?? state.display.length
+      const before = state.display.slice(0, caret)
+      const prefix = before && !/\s$/.test(before) ? " @" : "@"
+      const display = `${before}${prefix}${state.display.slice(caret)}`
+      update(display, state.mentions)
+      const pos = caret + prefix.length
+      setQuery({ text: "", start: pos - 1 })
+      setHighlight(0)
+      requestAnimationFrame(() => {
+        el?.focus()
+        el?.setSelectionRange(pos, pos)
+      })
+    },
+  }))
 
   const detectQuery = (text: string, caret: number) => {
     const before = text.slice(0, caret)
@@ -195,8 +240,24 @@ export function MentionTextarea({
                   : "hover:bg-accent/60"
               )}
             >
-              <UserAvatar user={user} size="sm" />
-              <span className="truncate">{user.name}</span>
+              {user.id === EVERYONE_ID ? (
+                <>
+                  <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-muted">
+                    <UsersRoundIcon className="size-3.5" />
+                  </span>
+                  <span className="min-w-0 flex-1 truncate">
+                    Everyone
+                    <span className="ml-1.5 text-xs text-muted-foreground">
+                      Notify all members
+                    </span>
+                  </span>
+                </>
+              ) : (
+                <>
+                  <UserAvatar user={user} size="sm" />
+                  <span className="truncate">{user.name}</span>
+                </>
+              )}
             </button>
           ))}
         </div>

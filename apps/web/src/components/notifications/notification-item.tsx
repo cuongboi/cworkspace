@@ -99,7 +99,8 @@ export function describeNotification(n: NotificationLike): ReactNode {
     case "MENTION":
       return (
         <>
-          {actor} mentioned you in a {n.commentId ? "comment" : "post"}
+          {actor} mentioned you in a{" "}
+          {n.conversationId ? "chat" : n.commentId ? "comment" : "post"}
         </>
       )
     case "POST_COMMENT":

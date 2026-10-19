@@ -40,7 +40,7 @@ apps/
       env.ts                # Validated env vars (fail fast)
       lib/                  # auth.ts (better-auth + sign-up hooks), db.ts (ZenStack clients), errors.ts, mail.ts
       plugins/auth.ts       # better-auth routes + `auth: true` macro
-      routes/               # execute, uploads, files, conversations, groups, invitations, rtc, captions
+      routes/               # execute, uploads, files, conversations, groups, channels, hooks (webhooks + bot API), invitations, rtc, captions
       server/               # session (dbFor), company ("All company", invitations), notify, storage (S3), rate-limit,
                             # plugins/realtime-plugin.ts (mutation side effects), jobs/reminders.ts
       websocket/            # index (/ws endpoint), hub (rooms/emit), presence + typing, calls (signaling)
@@ -88,6 +88,7 @@ Read env **only** through `env` from `@/env`. When adding a key, add it to `src/
 | `STUN_URLS`, `TURN_URLS`, `TURN_SECRET`                                             | for calls across NATs | Google STUN, no TURN                          |
 | `GEMINI_API_KEY`, `GEMINI_TRANSCRIBE_MODEL`, `GEMINI_TRANSLATE_MODEL`              | for live captions     | unset → captions off                          |
 | `FIREBASE_PROJECT_ID`, `FIREBASE_CLIENT_EMAIL`, `FIREBASE_PRIVATE_KEY`, `FIREBASE_API_KEY`, `FIREBASE_APP_ID`, `FIREBASE_MESSAGING_SENDER_ID`, `FIREBASE_VAPID_KEY` | for background push | unset → push off |
+| `TRUST_PROXY`, `ALLOW_PRIVATE_WEBHOOKS`                                             | no                    | `false` (channel integrations: trust `X-Forwarded-For`; let outgoing webhooks reach private hosts in dev) |
 | `VITE_BETTER_AUTH_URL`                                                              | no                    | —                                             |
 | `DB_LOG_QUERIES`                                                                    | no                    | `false`                                       |
 

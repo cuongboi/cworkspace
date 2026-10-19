@@ -65,7 +65,9 @@ export function CreateGroupDialog({
   const { me } = useApp()
   const create = useDbMutation(
     async (d: Draft) => {
-      const base = slugify(d.name) || "group"
+      // "discover" is the /groups/discover page, not a group
+      const raw = slugify(d.name) || "group"
+      const base = raw === "discover" ? "discover-group" : raw
       const attempt = (slug: string) =>
         db.group.create({
           data: {

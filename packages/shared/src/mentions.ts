@@ -5,6 +5,9 @@
 
 export const MENTION_RE = /@\[([^\]]{1,100})\]\(([A-Za-z0-9_-]{1,64})\)/g;
 
+/** `@[everyone](everyone)`: notifies every member of a group chat. */
+export const EVERYONE_ID = "everyone";
+
 export function formatMention(name: string, userId: string) {
   return `@[${name.replace(/[[\]]/g, "")}](${userId})`;
 }

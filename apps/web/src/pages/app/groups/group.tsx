@@ -2,6 +2,7 @@ import { cn } from "cn"
 import { LockIcon, MessageSquareIcon, SearchXIcon } from "lucide-react"
 import { parseAsString, useQueryState } from "nuqs"
 import { Link, useParams } from "react-router-dom"
+import { useEffect } from "react"
 import { PostComposer } from "@/components/feed/post-composer"
 import { PostFeed } from "@/components/feed/post-feed"
 import { GroupAbout } from "@/components/groups/group-about"
@@ -30,13 +31,13 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { useApp } from "@/hooks/use-app"
 import { db } from "@/lib/api-client"
+import { rememberGroup } from "@/lib/last-group"
 import { useDbQuery } from "@/lib/query"
 import type { GroupCallState } from "@/lib/realtime-events"
 import { ScrollArea } from "@/components/ui/scroll-area"
 
 const TABS = [
   "discussion",
-  "chat",
   "knowledge",
   "calendar",
   "members",
@@ -72,6 +73,9 @@ const GroupPage = () => {
 
   const isMember = group?.members[0]?.status === "ACTIVE"
   const live = useGroupCall(group?.id ?? "", Boolean(group) && isMember)
+  useEffect(() => {
+    if (isMember && group) rememberGroup(group.slug)
+  }, [isMember, group])
 
   if (isPending) return <GroupSkeleton />
 
@@ -89,7 +93,7 @@ const GroupPage = () => {
         </EmptyHeader>
         <EmptyContent>
           <Button asChild variant="outline">
-            <Link to={"/groups"}>Browse groups</Link>
+            <Link to={"/groups/discover"}>Browse groups</Link>
           </Button>
         </EmptyContent>
       </Empty>
@@ -118,84 +122,90 @@ const GroupPage = () => {
   )
 
   return (
-    <Tabs
-      value={tab}
-      onValueChange={setTab}
-      className="-m-4 min-h-[calc(100svh-3rem)] gap-0 bg-muted/50 md:-m-6"
-    >
-      <GroupHeader group={group} live={isMember ? live : null} onTab={setTab} />
-      <div
-        className={cn(
-          "mx-auto flex w-full flex-col gap-4 p-4 md:p-6",
-          WIDE_TABS.includes(tab) ? "max-w-5xl" : "max-w-2xl"
-        )}
+    <ScrollArea className="h-full">
+      <Tabs
+        value={tab}
+        onValueChange={setTab}
+        className="min-h-full gap-0 bg-muted/50"
       >
-        {isMember && live ? <GroupLiveCallBanner live={live} /> : null}
-        <TabsContent value="discussion" className="flex flex-col gap-4">
-          {canSeePosts ? (
-            <>
-              {isMember ? (
-                <PostComposer groupId={group.id} groupName={group.name} />
-              ) : null}
-              <PostFeed
-                scope={["group", group.id, me.id]}
-                where={{ groupId: group.id }}
-                pinnedFirst
-                showGroup={false}
-                empty={
-                  <Empty className="rounded-xl border border-dashed bg-card">
-                    <EmptyHeader>
-                      <EmptyMedia variant="icon">
-                        <MessageSquareIcon />
-                      </EmptyMedia>
-                      <EmptyTitle>No posts yet</EmptyTitle>
-                      <EmptyDescription>
-                        {isMember
-                          ? "Start the conversation with the first post."
-                          : "Join the group to post here."}
-                      </EmptyDescription>
-                    </EmptyHeader>
-                  </Empty>
-                }
-              />
-            </>
-          ) : (
-            <Empty className="rounded-xl border border-dashed bg-card">
-              <EmptyHeader>
-                <EmptyMedia variant="icon">
-                  <LockIcon />
-                </EmptyMedia>
-                <EmptyTitle>This group is closed</EmptyTitle>
-                <EmptyDescription>
-                  {membership?.status === "PENDING"
-                    ? "Your request is waiting for an admin's approval."
-                    : "Only members can see posts. Request to join to take part."}
-                </EmptyDescription>
-              </EmptyHeader>
-              <EmptyContent>
-                <MembershipButton group={group} membership={membership} />
-              </EmptyContent>
-            </Empty>
+        <GroupHeader
+          group={group}
+          live={isMember ? live : null}
+          onTab={setTab}
+        />
+        <div
+          className={cn(
+            "mx-auto flex w-full flex-col gap-4 p-4 md:p-6",
+            WIDE_TABS.includes(tab) ? "max-w-5xl" : "max-w-2xl"
           )}
-        </TabsContent>
-        <TabsContent value="knowledge">
-          {canSeePosts ? <GroupKnowledge group={group} /> : locked}
-        </TabsContent>
-        <TabsContent value="calendar">
-          {canSeePosts ? (
-            <GroupCalendar group={group} canCreate={isMember} />
-          ) : (
-            locked
-          )}
-        </TabsContent>
-        <TabsContent value="members">
-          <GroupMembers group={group} />
-        </TabsContent>
-        <TabsContent value="about">
-          <GroupAbout group={group} />
-        </TabsContent>
-      </div>
-    </Tabs>
+        >
+          {isMember && live ? <GroupLiveCallBanner live={live} /> : null}
+          <TabsContent value="discussion" className="flex flex-col gap-4">
+            {canSeePosts ? (
+              <>
+                {isMember ? (
+                  <PostComposer groupId={group.id} groupName={group.name} />
+                ) : null}
+                <PostFeed
+                  scope={["group", group.id, me.id]}
+                  where={{ groupId: group.id }}
+                  pinnedFirst
+                  showGroup={false}
+                  empty={
+                    <Empty className="rounded-xl border border-dashed bg-card">
+                      <EmptyHeader>
+                        <EmptyMedia variant="icon">
+                          <MessageSquareIcon />
+                        </EmptyMedia>
+                        <EmptyTitle>No posts yet</EmptyTitle>
+                        <EmptyDescription>
+                          {isMember
+                            ? "Start the conversation with the first post."
+                            : "Join the group to post here."}
+                        </EmptyDescription>
+                      </EmptyHeader>
+                    </Empty>
+                  }
+                />
+              </>
+            ) : (
+              <Empty className="rounded-xl border border-dashed bg-card">
+                <EmptyHeader>
+                  <EmptyMedia variant="icon">
+                    <LockIcon />
+                  </EmptyMedia>
+                  <EmptyTitle>This group is closed</EmptyTitle>
+                  <EmptyDescription>
+                    {membership?.status === "PENDING"
+                      ? "Your request is waiting for an admin's approval."
+                      : "Only members can see posts. Request to join to take part."}
+                  </EmptyDescription>
+                </EmptyHeader>
+                <EmptyContent>
+                  <MembershipButton group={group} membership={membership} />
+                </EmptyContent>
+              </Empty>
+            )}
+          </TabsContent>
+          <TabsContent value="knowledge">
+            {canSeePosts ? <GroupKnowledge group={group} /> : locked}
+          </TabsContent>
+          <TabsContent value="calendar">
+            {canSeePosts ? (
+              <GroupCalendar group={group} canCreate={isMember} />
+            ) : (
+              locked
+            )}
+          </TabsContent>
+          <TabsContent value="members">
+            <GroupMembers group={group} />
+          </TabsContent>
+          <TabsContent value="about">
+            <GroupAbout group={group} />
+          </TabsContent>
+        </div>
+      </Tabs>
+    </ScrollArea>
   )
 }
 
@@ -269,7 +279,7 @@ function GroupHeader({
 
 function GroupSkeleton() {
   return (
-    <div className="-m-4 md:-m-6" aria-busy>
+    <div aria-busy>
       <div className="mx-auto max-w-4xl">
         <Skeleton className="h-36 rounded-none md:h-56 md:rounded-b-xl" />
         <div className="flex flex-col gap-3 p-4 md:px-6">

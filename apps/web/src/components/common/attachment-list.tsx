@@ -20,6 +20,12 @@ export function formatBytes(bytes: number) {
   return `${(bytes / 1024 / 1024).toFixed(1)} MB`
 }
 
+/** "PDF", "ZIP", … from the file name, falling back to the mime subtype. */
+function fileKind(f: AttachmentLike) {
+  const ext = /\.([a-z0-9]{1,5})$/i.exec(f.name)?.[1]
+  return (ext ?? f.mimeType.split("/")[1] ?? "file").toUpperCase()
+}
+
 const isImage = (a: AttachmentLike) => a.mimeType.startsWith("image/")
 
 /** Image grid (click to enlarge) + file chips. `onRemove` turns it into an editable list. */
@@ -80,18 +86,23 @@ export function AttachmentList({
       {files.map((f) => (
         <div
           key={f.id}
-          className="flex items-center gap-3 rounded-lg border bg-muted/40 px-3 py-2"
+          className="flex items-center gap-3 rounded-md border bg-card p-3"
         >
-          <FileIcon className="size-5 shrink-0 text-muted-foreground" />
-          <a
-            href={fileUrl(f.id, { download: true })}
-            className="min-w-0 flex-1 truncate text-sm font-medium hover:underline"
-          >
-            {f.name}
-          </a>
-          <span className="shrink-0 text-xs text-muted-foreground">
-            {formatBytes(f.size)}
+          <span className="flex size-8 shrink-0 items-center justify-center rounded-md bg-muted">
+            <FileIcon className="size-4 text-muted-foreground" />
           </span>
+          <span className="flex min-w-0 flex-1 flex-col">
+            <span className="truncate text-xs font-semibold">{f.name}</span>
+            <span className="truncate text-[10px] text-muted-foreground">
+              {formatBytes(f.size)}
+              {f.mimeType ? ` · ${fileKind(f)}` : ""}
+            </span>
+          </span>
+          {onRemove ? null : (
+            <Button asChild variant="outline" size="sm" className="h-7 text-xs">
+              <a href={fileUrl(f.id, { download: true })}>Download</a>
+            </Button>
+          )}
           {onRemove ? (
             <Button
               variant="ghost"

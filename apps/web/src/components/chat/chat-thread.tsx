@@ -1,13 +1,15 @@
 import { useQueryClient } from "@tanstack/react-query"
 import {
   ArrowLeftIcon,
-  InfoIcon,
+  HashIcon,
   MessageCircleOffIcon,
+  PanelRightIcon,
   PhoneIcon,
   UploadIcon,
-  UsersIcon,
   VideoIcon,
 } from "lucide-react"
+import { cn } from "cn"
+import { useQueryState } from "nuqs"
 import { Link } from "react-router-dom"
 import { type ReactNode, useEffect, useState } from "react"
 import { toast } from "sonner"
@@ -37,13 +39,14 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip"
-import { useIsMobile } from "@/hooks/use-mobile"
+import { useIsMobile, useIsWide } from "@/hooks/use-mobile"
 import { useApp } from "@/hooks/use-app"
 import { useIsOnline } from "@/hooks/use-presence"
 import { useSocketEvent } from "@/hooks/use-socket"
 import { useUploads } from "@/hooks/use-uploads"
 import { ApiError, db } from "@/lib/api-client"
 import { useDbQuery } from "@/lib/query"
+import { chatInfoParser } from "@/lib/search-params"
 import type { CallKind } from "@/lib/realtime-events"
 import type { ReactionType } from "@app/api/zenstack/models"
 import {
@@ -65,6 +68,7 @@ import {
 } from "./chat-data"
 import { Composer, type ComposerMode } from "./composer"
 import { ConversationAvatar } from "./conversation-avatar"
+import { ConversationInfoPanel } from "./conversation-info-panel"
 import { ConversationInfoSheet } from "./conversation-info-sheet"
 import { MessageList } from "./message-list"
 import { ThreadScrollProvider } from "./thread-scroll"
@@ -79,10 +83,13 @@ export function ChatThread({
   conversationId,
   variant = "page",
   actions,
+  crumbs,
 }: {
   conversationId: string
   variant?: ThreadVariant
   actions?: ReactNode
+  /** page variant: replaces the default "Section / title" breadcrumb */
+  crumbs?: ReactNode
 }) {
   useLiveMessages(conversationId)
   const conversation = useDbQuery(conversationKey(conversationId), () =>
@@ -123,6 +130,7 @@ export function ChatThread({
         members={members.data ?? []}
         variant={variant}
         actions={actions}
+        crumbs={crumbs}
       />
     </ThreadScrollProvider>
   )
@@ -133,17 +141,27 @@ function ThreadView({
   members,
   variant,
   actions,
+  crumbs,
 }: {
   conversation: ThreadConversation
   members: ThreadMember[]
   variant: ThreadVariant
   actions?: ReactNode
+  crumbs?: ReactNode
 }) {
   const { me } = useApp()
   const qc = useQueryClient()
   const uploads = useUploads()
   const [mode, setMode] = useState<ComposerMode | null>(null)
+  const isWide = useIsWide()
+  // wide pages show details as a column (toggle kept in the URL); otherwise as a sheet
+  const [infoColumn, setInfoColumn] = useQueryState("info", chatInfoParser)
   const [infoOpen, setInfoOpen] = useState(false)
+  const showColumn = variant === "page" && isWide && infoColumn
+  const toggleInfo = () =>
+    variant === "page" && isWide
+      ? void setInfoColumn(infoColumn ? false : null)
+      : setInfoOpen(true)
   const [toDelete, setToDelete] = useState<ChatMessage | null>(null)
   const [dragging, setDragging] = useState(false)
   const typing = useTypingUsers(conversation.id)
@@ -213,95 +231,113 @@ function ThreadView({
   }
 
   return (
-    <section
-      aria-label="Conversation"
-      className="relative flex h-full min-h-0 flex-col bg-background"
-      onDragEnter={(e) => {
-        if (e.dataTransfer.types.includes("Files")) setDragging(true)
-      }}
-      onDragOver={(e) => {
-        if (e.dataTransfer.types.includes("Files")) e.preventDefault()
-      }}
-      onDragLeave={(e) => {
-        if (!e.currentTarget.contains(e.relatedTarget as Node | null))
-          setDragging(false)
-      }}
-      onDrop={(e) => {
-        if (!e.dataTransfer.files.length) return
-        e.preventDefault()
-        setDragging(false)
-        void uploads.add(e.dataTransfer.files)
-      }}
-    >
-      <ThreadHeader
-        conversation={conversation}
-        members={members}
-        variant={variant}
-        actions={actions}
-        onOpenInfo={() => setInfoOpen(true)}
-      />
-      <MessageList
-        conversation={conversation}
-        members={members}
-        actions={{
-          onReact: react,
-          onReply: (message) => setMode({ kind: "reply", message }),
-          onEdit: (message) => setMode({ kind: "edit", message }),
-          onDelete: setToDelete,
+    <div className="flex h-full min-h-0">
+      <section
+        aria-label="Conversation"
+        className="relative flex h-full min-h-0 min-w-0 flex-1 flex-col bg-background"
+        onDragEnter={(e) => {
+          if (e.dataTransfer.types.includes("Files")) setDragging(true)
         }}
-      />
-      <TypingIndicator names={typing} />
-      <Composer
-        key={conversation.id}
-        conversationId={conversation.id}
-        mode={mode}
-        onModeChange={setMode}
-        uploads={uploads}
-        disabled={!isMember}
-      />
-
-      {dragging ? (
-        <div className="pointer-events-none absolute inset-2 z-30 flex flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-primary bg-background/90 text-primary">
-          <UploadIcon className="size-8" />
-          <p className="text-sm font-medium">Drop files to attach</p>
-        </div>
-      ) : null}
-
-      <ConversationInfoSheet
-        key={`info-${conversation.id}-${conversation.title ?? ""}`}
-        open={infoOpen}
-        onOpenChange={setInfoOpen}
-        conversation={conversation}
-        members={members}
-      />
-
-      <AlertDialog
-        open={toDelete !== null}
-        onOpenChange={(o) => !o && setToDelete(null)}
+        onDragOver={(e) => {
+          if (e.dataTransfer.types.includes("Files")) e.preventDefault()
+        }}
+        onDragLeave={(e) => {
+          if (!e.currentTarget.contains(e.relatedTarget as Node | null))
+            setDragging(false)
+        }}
+        onDrop={(e) => {
+          if (!e.dataTransfer.files.length) return
+          e.preventDefault()
+          setDragging(false)
+          void uploads.add(e.dataTransfer.files)
+        }}
       >
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Unsend this message?</AlertDialogTitle>
-            <AlertDialogDescription>
-              It will be removed for everyone in the conversation. People will
-              see that a message was deleted.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              variant="destructive"
-              onClick={() => {
-                if (toDelete) unsend(toDelete)
-                setToDelete(null)
-              }}
-            >
-              Unsend
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-    </section>
+        <ThreadHeader
+          conversation={conversation}
+          members={members}
+          variant={variant}
+          actions={actions}
+          crumbs={crumbs}
+          infoShown={showColumn}
+          onOpenInfo={toggleInfo}
+        />
+        <MessageList
+          conversation={conversation}
+          members={members}
+          actions={{
+            onReact: react,
+            onReply: (message) => setMode({ kind: "reply", message }),
+            onEdit: (message) => setMode({ kind: "edit", message }),
+            onDelete: setToDelete,
+          }}
+        />
+        <TypingIndicator names={typing} />
+        <Composer
+          key={conversation.id}
+          conversationId={conversation.id}
+          mode={mode}
+          onModeChange={setMode}
+          uploads={uploads}
+          members={members.map((m) => m.user)}
+          isGroup={conversation.type === "GROUP"}
+          disabled={!isMember}
+        />
+
+        {dragging ? (
+          <div className="pointer-events-none absolute inset-2 z-30 flex flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-primary bg-background/90 text-primary">
+            <UploadIcon className="size-8" />
+            <p className="text-sm font-medium">Drop files to attach</p>
+          </div>
+        ) : null}
+
+        <ConversationInfoSheet
+          key={`info-${conversation.id}-${conversation.title ?? ""}`}
+          open={infoOpen && !showColumn}
+          onOpenChange={setInfoOpen}
+          conversation={conversation}
+          members={members}
+        />
+
+        <AlertDialog
+          open={toDelete !== null}
+          onOpenChange={(o) => !o && setToDelete(null)}
+        >
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Unsend this message?</AlertDialogTitle>
+              <AlertDialogDescription>
+                It will be removed for everyone in the conversation. People will
+                see that a message was deleted.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogAction
+                variant="destructive"
+                onClick={() => {
+                  if (toDelete) unsend(toDelete)
+                  setToDelete(null)
+                }}
+              >
+                Unsend
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      </section>
+      {showColumn ? (
+        <aside
+          aria-label="Conversation details"
+          className="w-80 shrink-0 border-l"
+        >
+          <ConversationInfoPanel
+            key={`info-${conversation.id}-${conversation.title ?? ""}`}
+            conversation={conversation}
+            members={members}
+          />
+        </aside>
+      ) : null}
+    </div>
   )
 }
 
@@ -310,12 +346,16 @@ function ThreadHeader({
   members,
   variant,
   actions,
+  crumbs,
+  infoShown = false,
   onOpenInfo,
 }: {
   conversation: ThreadConversation
   members: ThreadMember[]
   variant: ThreadVariant
   actions?: ReactNode
+  crumbs?: ReactNode
+  infoShown?: boolean
   onOpenInfo: () => void
 }) {
   const { me } = useApp()
@@ -375,7 +415,7 @@ function ThreadHeader({
   }
 
   return (
-    <header className="flex h-14 shrink-0 items-center gap-2 border-b px-2 md:px-5">
+    <header className="flex h-12 shrink-0 items-center gap-2 border-b px-2 md:px-5">
       {isMobile ? (
         <Button asChild variant="ghost" size="icon-sm">
           <Link to={"/chat"} aria-label="Back to chats">
@@ -383,64 +423,49 @@ function ThreadHeader({
           </Link>
         </Button>
       ) : null}
-      <button
-        type="button"
-        onClick={onOpenInfo}
-        className="flex min-w-0 shrink items-center gap-2.5 rounded-md p-1 text-left outline-none hover:bg-accent/50 focus-visible:ring-2 focus-visible:ring-ring"
-      >
-        <ConversationAvatar
-          type={conversation.type}
-          group={conversation.group}
-          members={members}
-          meId={me.id}
-          size="sm"
-        />
-        <span className="min-w-0">
-          <span className="block truncate text-base font-bold">{title}</span>
-          {subtitle && !isGroup ? (
-            <span className="block truncate text-xs text-muted-foreground">
-              {subtitle}
-            </span>
-          ) : null}
-        </span>
-      </button>
-      {/* Teams-style tab strip; the thread is the only tab, details live in the info sheet */}
       <nav
-        className="hidden h-full items-stretch gap-4 pl-3 text-sm sm:flex"
-        aria-label="Conversation tabs"
+        aria-label="Breadcrumb"
+        className="flex min-w-0 flex-1 items-center gap-2 text-xs"
       >
-        <span
-          className="relative flex items-center font-semibold"
-          aria-current="page"
-        >
-          Chat
-          <span className="absolute inset-x-0 bottom-0 h-0.5 rounded-full bg-foreground" />
-        </span>
-        <button
-          type="button"
-          onClick={onOpenInfo}
-          className="flex items-center text-muted-foreground hover:text-foreground"
-        >
-          Details
-        </button>
+        {crumbs ?? (
+          <>
+            <Link
+              to={"/chat"}
+              className="hidden shrink-0 text-muted-foreground hover:text-foreground sm:inline"
+            >
+              {isGroup ? "Groups" : "Direct messages"}
+            </Link>
+            <span className="hidden text-muted-foreground/60 sm:inline">/</span>
+            {isGroup ? (
+              <HashIcon className="size-3 shrink-0 text-muted-foreground" />
+            ) : (
+              <ConversationAvatar
+                type={conversation.type}
+                group={conversation.group}
+                members={members}
+                meId={me.id}
+                size="sm"
+                className="size-5"
+              />
+            )}
+            <h2 className="min-w-0 truncate font-medium" aria-current="page">
+              {title}
+            </h2>
+            {subtitle ? (
+              <span className="hidden shrink-0 text-[11px] text-muted-foreground md:inline">
+                · {subtitle}
+              </span>
+            ) : null}
+          </>
+        )}
       </nav>
-      <div className="ml-auto flex shrink-0 items-center gap-1">
-        <Button
-          variant="outline"
-          size="sm"
-          className="hidden sm:inline-flex"
-          disabled={calling !== null}
-          onClick={() => void call("VIDEO")}
-        >
-          <VideoIcon />
-          Meet now
-        </Button>
+      <div className="flex shrink-0 items-center gap-0.5">
+        {actions}
         <Tooltip>
           <TooltipTrigger asChild>
             <Button
               variant="ghost"
               size="icon-sm"
-              className="sm:hidden"
               aria-label="Start video call"
               disabled={calling !== null}
               onClick={() => void call("VIDEO")}
@@ -464,35 +489,22 @@ function ThreadHeader({
           </TooltipTrigger>
           <TooltipContent>Audio call</TooltipContent>
         </Tooltip>
-        {isGroup ? (
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="gap-1 px-2"
-                aria-label="People"
-                onClick={onOpenInfo}
-              >
-                <UsersIcon />
-                {members.length}
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>People</TooltipContent>
-          </Tooltip>
-        ) : null}
         <Tooltip>
           <TooltipTrigger asChild>
             <Button
               variant="ghost"
               size="icon-sm"
-              aria-label="Conversation info"
+              aria-label="Conversation details"
+              aria-pressed={infoShown}
+              className={cn(infoShown && "bg-accent")}
               onClick={onOpenInfo}
             >
-              <InfoIcon />
+              <PanelRightIcon />
             </Button>
           </TooltipTrigger>
-          <TooltipContent>Conversation info</TooltipContent>
+          <TooltipContent>
+            {infoShown ? "Hide details" : "Show details"}
+          </TooltipContent>
         </Tooltip>
       </div>
     </header>
@@ -575,16 +587,13 @@ function TypingIndicator({ names }: { names: string[] }) {
 function ThreadLoading() {
   return (
     <div className="flex h-full flex-col" aria-busy="true">
-      <div className="flex h-16 items-center gap-3 border-b px-4">
-        <Skeleton className="size-8 rounded-full" />
-        <div className="flex flex-col gap-1.5">
-          <Skeleton className="h-3.5 w-32" />
-          <Skeleton className="h-3 w-20" />
-        </div>
+      <div className="flex h-12 items-center gap-2 border-b px-5">
+        <Skeleton className="h-3 w-20" />
+        <Skeleton className="h-3 w-32" />
       </div>
       <div className="flex-1" />
-      <div className="border-t p-3">
-        <Skeleton className="h-9 w-full rounded-2xl" />
+      <div className="px-3 pb-4 md:px-6 md:pb-6">
+        <Skeleton className="h-28 w-full rounded-lg" />
       </div>
     </div>
   )
@@ -608,6 +617,7 @@ function useLiveMessages(conversationId: string) {
       data: (payload.data ?? null) as ChatMessage["data"],
       attachments: [],
       reactions: [],
+      integration: payload.integration ?? null,
       replyTo: quoted
         ? {
             id: quoted.id,

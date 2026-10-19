@@ -51,12 +51,28 @@ export const router = createBrowserRouter([
                 handle: rail,
               },
               {
+                // groups sidebar | group overview, channel chat or discover
                 path: "groups",
-                lazy: page(() => import("@/pages/app/groups/index")),
-              },
-              {
-                path: "groups/:groupSlug",
-                lazy: page(() => import("@/pages/app/groups/group")),
+                lazy: page(() => import("@/pages/app/groups/layout")),
+                handle: bleed,
+                children: [
+                  {
+                    index: true,
+                    lazy: page(() => import("@/pages/app/groups/home")),
+                  },
+                  {
+                    path: "discover",
+                    lazy: page(() => import("@/pages/app/groups/index")),
+                  },
+                  {
+                    path: ":groupSlug",
+                    lazy: page(() => import("@/pages/app/groups/group")),
+                  },
+                  {
+                    path: ":groupSlug/c/:channelId",
+                    lazy: page(() => import("@/pages/app/groups/channel")),
+                  },
+                ],
               },
               {
                 path: "posts/:postId",

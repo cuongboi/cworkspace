@@ -14,13 +14,16 @@ export type ChatMessagePayload = {
   conversationId: string;
   senderId: string;
   content: string;
-  type: "TEXT" | "SYSTEM" | "CALL";
+  type: "TEXT" | "SYSTEM" | "CALL" | "BOT";
   data: unknown;
   replyToId: string | null;
   editedAt: Date | null;
   deletedAt: Date | null;
   createdAt: Date;
   sender: UserSummary;
+  /** BOT messages: the posting integration */
+  integrationId: string | null;
+  integration: { id: string; name: string; avatarUrl: string | null } | null;
 };
 
 export type NotificationPayload = {
@@ -172,6 +175,8 @@ export interface ServerToClientEvents {
     pollId: string;
   }) => void;
   "group:changed": (p: { groupId: string }) => void;
+  /** a channel of the group was created, renamed, moved or deleted */
+  "channel:changed": (p: { groupId: string }) => void;
   "group:call": (p: GroupCallState) => void;
   "wiki:changed": (p: { groupId: string; pageId: string; action: MutationAction }) => void;
   // chat

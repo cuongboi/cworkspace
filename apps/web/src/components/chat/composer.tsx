@@ -1,16 +1,13 @@
 import { useQueryClient } from "@tanstack/react-query"
 import { cn } from "cn"
-import {
-  PaperclipIcon,
-  PencilIcon,
-  ReplyIcon,
-  SendHorizontalIcon,
-  XIcon,
-} from "lucide-react"
-import { useEffect, useRef, useState } from "react"
+import { AtSignIcon, PaperclipIcon, ThumbsUpIcon, XIcon } from "lucide-react"
+import { type ReactNode, useEffect, useRef, useState } from "react"
 import { toast } from "sonner"
 import { AttachmentList } from "@/components/common/attachment-list"
-import { MentionTextarea } from "@/components/common/mention-textarea"
+import {
+  MentionTextarea,
+  type MentionTextareaHandle,
+} from "@/components/common/mention-textarea"
 import { Button } from "@/components/ui/button"
 import { Spinner } from "@/components/ui/spinner"
 import {
@@ -46,6 +43,9 @@ type Props = {
   mode: ComposerMode | null
   onModeChange: (mode: ComposerMode | null) => void
   uploads: ReturnType<typeof useUploads>
+  /** who can be @mentioned; mentions are offered in group chats only */
+  members: { id: string; name: string; image: string | null }[]
+  isGroup: boolean
   disabled?: boolean
 }
 
@@ -56,6 +56,8 @@ export function Composer({
   mode,
   onModeChange,
   uploads,
+  members,
+  isGroup,
   disabled,
 }: Props) {
   const { me } = useApp()
@@ -66,6 +68,7 @@ export function Composer({
   const [draft, setDraft] = useState("")
   const wrapperRef = useRef<HTMLDivElement>(null)
   const fileRef = useRef<HTMLInputElement>(null)
+  const mentionRef = useRef<MentionTextareaHandle>(null)
   const lastTypingRef = useRef(0)
 
   // entering edit mode loads the message into the box; leaving it restores the draft
@@ -116,6 +119,7 @@ export function Composer({
       sender: { id: me.id, name: me.name, image: me.image ?? null },
       attachments,
       reactions: [],
+      integration: null,
       replyTo: replyTo
         ? {
             id: replyTo.id,
@@ -224,10 +228,19 @@ export function Composer({
     ? (findCachedMessage(qc, conversationId, mode.message.id) ?? mode.message)
     : null
 
+  const discard = () => {
+    setValue("")
+    for (const a of uploads.attachments) uploads.remove(a.id)
+    onModeChange(null)
+  }
+  const dirty =
+    value.trim().length > 0 || uploads.attachments.length > 0 || mode !== null
+  const sending = uploads.uploading && mode?.kind !== "edit"
+
   return (
     <div
       ref={wrapperRef}
-      className="mx-auto w-full max-w-5xl shrink-0 bg-background px-3 pt-1 pb-4 md:px-8"
+      className="w-full shrink-0 bg-background px-3 pt-1 pb-4 md:px-6 md:pb-6"
       onPaste={(e) => {
         const files = Array.from(e.clipboardData.files)
         if (files.length === 0 || mode?.kind === "edit") return
@@ -235,164 +248,197 @@ export function Composer({
         void uploads.add(files)
       }}
     >
-      {mode && quoted ? (
-        <div className="mb-2 flex items-start gap-2 rounded-md border-l-2 border-foreground bg-muted px-3 py-2 text-sm">
-          {mode.kind === "reply" ? (
-            <ReplyIcon
-              className="mt-0.5 size-4 shrink-0 text-muted-foreground"
-              aria-hidden="true"
-            />
-          ) : (
-            <PencilIcon
-              className="mt-0.5 size-4 shrink-0 text-muted-foreground"
-              aria-hidden="true"
-            />
-          )}
-          <div className="min-w-0 flex-1">
-            <p className="text-xs font-medium">
-              {mode.kind === "edit"
-                ? "Editing message"
-                : `Replying to ${quoted.senderId === me.id ? "yourself" : quoted.sender.name}`}
-            </p>
-            {mode.kind === "reply" ? (
-              <p className="truncate text-xs text-muted-foreground">
-                {toPlainText(quoted.content) ||
-                  (quoted.attachments.length ? "Attachment" : "")}
-              </p>
-            ) : (
-              <p className="text-xs text-muted-foreground">
-                Press Enter to save, Esc to cancel
-              </p>
-            )}
-          </div>
-          <Button
-            variant="ghost"
-            size="icon-xs"
-            className="rounded-full"
-            onClick={() => onModeChange(null)}
-            aria-label={
-              mode.kind === "edit" ? "Cancel editing" : "Cancel reply"
-            }
-          >
-            <XIcon />
-          </Button>
-        </div>
-      ) : null}
-
-      {mode?.kind !== "edit" &&
-      (uploads.attachments.length > 0 || uploads.pending.length > 0) ? (
-        <ScrollArea className="mb-2" viewportClassName="max-h-56">
-          <div className="flex flex-col gap-2">
-            <AttachmentList
-              attachments={uploads.attachments}
-              onRemove={uploads.remove}
-              className="max-w-sm"
-            />
-            {uploads.pending.map((p) => (
-              <div
-                key={p.key}
-                className="flex items-center gap-2 text-xs text-muted-foreground"
-              >
-                <Spinner className="size-3.5" />
-                <span className="truncate">Uploading {p.name}…</span>
-              </div>
-            ))}
-          </div>
-        </ScrollArea>
-      ) : null}
-
-      {/* Teams-style compose box: one bordered field with the actions inside it */}
-      <div className="flex items-end gap-0.5 rounded-md border border-b-2 bg-card p-1 focus-within:border-b-foreground">
-        <div className="min-w-0 flex-1">
-          <MentionTextarea
-            value={value}
-            onChange={(next) => {
-              setValue(next)
-              emitTyping(next)
-            }}
-            onSubmit={submit}
-            onKeyDown={(e) => {
-              if (e.key === "Escape" && mode) {
-                e.preventDefault()
-                onModeChange(null)
-              } else if (e.key === "ArrowUp" && !value && !mode) {
-                e.preventDefault()
-                editLastOwn()
+      <div className="flex flex-col gap-2.5 rounded-lg border bg-card p-3.5 transition-colors focus-within:border-ring">
+        <div className="flex items-center justify-between gap-2">
+          <p className="text-[11px] text-muted-foreground">
+            {mode?.kind === "edit"
+              ? "Editing message"
+              : mode?.kind === "reply"
+                ? "Reply"
+                : "Message"}
+          </p>
+          {mode ? (
+            <Button
+              variant="ghost"
+              size="icon-xs"
+              className="-my-1 text-muted-foreground"
+              onClick={() => onModeChange(null)}
+              aria-label={
+                mode.kind === "edit" ? "Cancel editing" : "Cancel reply"
               }
-            }}
-            placeholder={
-              disabled ? "You can't send messages here" : "Type a message"
-            }
-            aria-label="Message"
-            rows={1}
-            disabled={disabled}
-            className={cn(
-              "field-sizing-content max-h-40 min-h-9 rounded-none border-0 bg-transparent px-2 py-2 shadow-none",
-              "focus-visible:ring-0 dark:bg-transparent"
-            )}
-          />
+            >
+              <XIcon />
+            </Button>
+          ) : null}
         </div>
-        {mode?.kind !== "edit" ? (
-          <>
-            <input
-              ref={fileRef}
-              type="file"
-              multiple
-              hidden
-              onChange={(e) => {
-                if (e.target.files?.length) void uploads.add(e.target.files)
-                e.target.value = ""
-              }}
-            />
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="shrink-0 text-muted-foreground"
-                  onClick={() => fileRef.current?.click()}
-                  aria-label="Attach files"
+
+        {mode && quoted ? (
+          <div className="flex gap-2 border-l-2 pl-2 text-[10px] leading-normal">
+            <div className="min-w-0 flex-1">
+              <p className="font-semibold">
+                {quoted.senderId === me.id ? "You" : quoted.sender.name}
+              </p>
+              <p className="truncate text-muted-foreground">
+                {mode.kind === "edit"
+                  ? "Press Enter to save, Esc to cancel"
+                  : toPlainText(quoted.content) ||
+                    (quoted.attachments.length ? "Attachment" : "")}
+              </p>
+            </div>
+          </div>
+        ) : null}
+
+        {mode?.kind !== "edit" &&
+        (uploads.attachments.length > 0 || uploads.pending.length > 0) ? (
+          <ScrollArea viewportClassName="max-h-56">
+            <div className="flex flex-col gap-2">
+              <AttachmentList
+                attachments={uploads.attachments}
+                onRemove={uploads.remove}
+                className="max-w-sm"
+              />
+              {uploads.pending.map((p) => (
+                <div
+                  key={p.key}
+                  className="flex items-center gap-2 text-xs text-muted-foreground"
+                >
+                  <Spinner className="size-3.5" />
+                  <span className="truncate">Uploading {p.name}…</span>
+                </div>
+              ))}
+            </div>
+          </ScrollArea>
+        ) : null}
+
+        <MentionTextarea
+          controlRef={mentionRef}
+          // 1:1 chats have nobody else worth tagging: no suggestions at all
+          people={isGroup ? members : []}
+          everyone={isGroup}
+          value={value}
+          onChange={(next) => {
+            setValue(next)
+            emitTyping(next)
+          }}
+          onSubmit={submit}
+          onKeyDown={(e) => {
+            if (e.key === "Escape" && mode) {
+              e.preventDefault()
+              onModeChange(null)
+            } else if (e.key === "ArrowUp" && !value && !mode) {
+              e.preventDefault()
+              editLastOwn()
+            }
+          }}
+          placeholder={
+            disabled ? "You can't send messages here" : "Write a message…"
+          }
+          aria-label="Message"
+          rows={2}
+          disabled={disabled}
+          className={cn(
+            "field-sizing-content max-h-40 min-h-10 rounded-none border-0 bg-transparent p-0 text-xs leading-relaxed shadow-none md:text-xs",
+            "focus-visible:ring-0 dark:bg-transparent"
+          )}
+        />
+
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-1 text-muted-foreground">
+            {mode?.kind !== "edit" ? (
+              <>
+                <input
+                  ref={fileRef}
+                  type="file"
+                  multiple
+                  hidden
+                  onChange={(e) => {
+                    if (e.target.files?.length) void uploads.add(e.target.files)
+                    e.target.value = ""
+                  }}
+                />
+                <ToolButton
+                  label="Attach files"
                   disabled={disabled}
+                  onClick={() => fileRef.current?.click()}
                 >
                   <PaperclipIcon />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>Attach files</TooltipContent>
-            </Tooltip>
-          </>
-        ) : null}
-        {canSend || mode ? (
-          <Button
-            variant="ghost"
-            size="icon"
-            className="shrink-0"
-            onClick={submit}
-            disabled={
-              !canSend ||
-              disabled ||
-              (uploads.uploading && mode?.kind !== "edit")
-            }
-            aria-label={mode?.kind === "edit" ? "Save" : "Send"}
-          >
-            {uploads.uploading && mode?.kind !== "edit" ? (
-              <Spinner />
-            ) : (
-              <SendHorizontalIcon />
-            )}
-          </Button>
-        ) : (
-          <Button
-            variant="ghost"
-            size="icon"
-            className="shrink-0 text-xl"
-            onClick={() => !disabled && !uploads.uploading && sendMessage("👍")}
-            disabled={disabled || uploads.uploading}
-            aria-label="Send a like"
-          >
-            <span aria-hidden="true">👍</span>
-          </Button>
-        )}
+                </ToolButton>
+              </>
+            ) : null}
+            {isGroup ? (
+              <ToolButton
+                label="Mention someone"
+                disabled={disabled}
+                onClick={() => mentionRef.current?.openMention()}
+              >
+                <AtSignIcon />
+              </ToolButton>
+            ) : null}
+            {mode?.kind !== "edit" ? (
+              <ToolButton
+                label="Send a like"
+                disabled={disabled || uploads.uploading}
+                onClick={() => sendMessage("👍")}
+              >
+                <ThumbsUpIcon />
+              </ToolButton>
+            ) : null}
+          </div>
+          <div className="flex items-center gap-1.5">
+            {dirty ? (
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-7 text-xs"
+                onClick={discard}
+              >
+                {mode?.kind === "edit" ? "Cancel" : "Discard"}
+              </Button>
+            ) : null}
+            <Button
+              size="sm"
+              className="h-7 text-xs"
+              onClick={submit}
+              disabled={!canSend || disabled || sending}
+            >
+              {sending ? <Spinner /> : null}
+              {mode?.kind === "edit" ? "Save" : "Send"}
+            </Button>
+          </div>
+        </div>
       </div>
     </div>
+  )
+}
+
+function ToolButton({
+  label,
+  onClick,
+  disabled,
+  children,
+}: {
+  label: string
+  onClick: () => void
+  disabled?: boolean
+  children: ReactNode
+}) {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Button
+          variant="ghost"
+          size="icon-xs"
+          aria-label={label}
+          disabled={disabled}
+          onClick={onClick}
+          // keep the textarea focused so its caret (and mention query) survive the click
+          onMouseDown={(e) => e.preventDefault()}
+          className="[&_svg:not([class*='size-'])]:size-[15px]"
+        >
+          {children}
+        </Button>
+      </TooltipTrigger>
+      <TooltipContent>{label}</TooltipContent>
+    </Tooltip>
   )
 }

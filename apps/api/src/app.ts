@@ -9,17 +9,19 @@ import { notFound, toErrorResponse } from "./lib/errors";
 import { BetterAuthOpenApi, betterAuthPlugin } from "./plugins/auth";
 import { callsRoute } from "./routes/calls";
 import { captionsRoute } from "./routes/captions";
+import { channelsRoute } from "./routes/channels";
 import { conversationsRoute } from "./routes/conversations";
 import { executeRoute } from "./routes/execute";
 import { filesRoute } from "./routes/files";
 import { groupsRoute } from "./routes/groups";
+import { hooksRoute } from "./routes/hooks";
 import { invitationsRoute } from "./routes/invitations";
 import { pushRoute } from "./routes/push";
 import { rtcRoute } from "./routes/rtc";
 import { uploadsRoute } from "./routes/uploads";
 import { webSocketPlugin } from "./websocket";
 
-const ASSET_PATH = path.join(import.meta.dir, "public")
+const ASSET_PATH = path.join(import.meta.dir, "public");
 
 /** The whole server (API, auth, `/ws`, SPA) without `listen`, so tests can call `app.handle()`. */
 export const app = new Elysia()
@@ -62,6 +64,8 @@ export const app = new Elysia()
   .use(filesRoute)
   .use(conversationsRoute)
   .use(groupsRoute)
+  .use(channelsRoute)
+  .use(hooksRoute)
   .use(invitationsRoute)
   .use(rtcRoute)
   .use(callsRoute)
@@ -78,17 +82,16 @@ export const app = new Elysia()
       assets: ASSET_PATH,
       prefix: "/",
       alwaysStatic: true,
-    })
+    }),
   )
-  .get('*', async ({ set }) => {
-    const file = Bun.file(path.join(ASSET_PATH, 'index.html'))
-    const exists = await file.exists()
+  .get("*", async ({ set }) => {
+    const file = Bun.file(path.join(ASSET_PATH, "index.html"));
+    const exists = await file.exists();
 
     if (exists) {
-      set.headers['content-type'] = 'text/html'
-      return file
+      set.headers["content-type"] = "text/html";
+      return file;
     }
-  })
-  ;
+  });
 
 export type App = typeof app;

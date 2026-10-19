@@ -21,7 +21,8 @@ export const conversationListKey = () =>
 /** My memberships (read state + mute) with the conversation, members and last message. */
 export function fetchConversationList(meId: string) {
   return db.conversationMember.findMany({
-    where: { userId: meId },
+    // group and channel chats live under Groups
+    where: { userId: meId, conversation: { groupId: null, channelId: null } },
     orderBy: { conversation: { lastMessageAt: "desc" } },
     take: 100,
     select: {
@@ -75,7 +76,30 @@ export function fetchConversation(id: string) {
       type: true,
       title: true,
       createdById: true,
+      createdAt: true,
+      channelId: true,
+      createdBy: { select: { id: true, name: true } },
       group: groupSummary,
+    },
+  })
+}
+
+export const conversationFilesKey = (conversationId: string) =>
+  ["attachment", "findMany", "chat-files", conversationId] as const
+
+/** Files shared in a conversation, newest first (details panel). */
+export function fetchConversationFiles(conversationId: string) {
+  return db.attachment.findMany({
+    where: { message: { conversationId, deletedAt: null } },
+    orderBy: { createdAt: "desc" },
+    take: 60,
+    select: {
+      id: true,
+      name: true,
+      mimeType: true,
+      size: true,
+      createdAt: true,
+      uploader: { select: { name: true } },
     },
   })
 }
@@ -110,6 +134,8 @@ export const MESSAGE_PAGE_SIZE = 30
 
 export const messageInclude = {
   sender: userSummary,
+  /** BOT messages render as the integration, not its creator */
+  integration: { select: { id: true, name: true, avatarUrl: true } },
   attachments: {
     select: {
       id: true,

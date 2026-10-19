@@ -68,14 +68,14 @@ export function ConversationAvatar({
         <UserAvatar
           user={b}
           size="sm"
-          className="absolute top-0 right-0 opacity-90 w-6 h-6"
+          className="absolute top-0 right-0 h-6 w-6 opacity-90"
         />
       ) : null}
       {a ? (
         <UserAvatar
           user={a}
           size="sm"
-          className="absolute bottom-0 left-0 w-6 h-6 rounded-full ring-2 ring-background"
+          className="absolute bottom-0 left-0 h-6 w-6 rounded-full ring-2 ring-background"
         />
       ) : null}
       {anyOnline ? (

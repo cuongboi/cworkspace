@@ -61,6 +61,11 @@ export const env = {
   FIREBASE_APP_ID: read("FIREBASE_APP_ID", ""),
   FIREBASE_MESSAGING_SENDER_ID: read("FIREBASE_MESSAGING_SENDER_ID", ""),
   FIREBASE_VAPID_KEY: read("FIREBASE_VAPID_KEY", ""),
+
+  // Channel integrations. Behind a reverse proxy, trust X-Forwarded-For for IP allowlists.
+  TRUST_PROXY: read("TRUST_PROXY", "false") === "true",
+  // Let outgoing webhooks reach private/loopback addresses (local development only).
+  ALLOW_PRIVATE_WEBHOOKS: read("ALLOW_PRIVATE_WEBHOOKS", "false") === "true",
 } as const;
 
 export type Env = typeof env;

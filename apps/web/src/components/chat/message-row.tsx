@@ -1,6 +1,7 @@
 import { cn } from "cn"
 import { format } from "date-fns"
 import {
+  BotIcon,
   CopyIcon,
   MoreHorizontalIcon,
   PencilIcon,
@@ -17,7 +18,6 @@ import { useCalls } from "@/components/call/call-provider"
 import { AttachmentList } from "@/components/common/attachment-list"
 import { RichText } from "@/components/common/rich-text"
 import { UserAvatar } from "@/components/common/user-avatar"
-import { Bubble, BubbleContent, BubbleReactions } from "@/components/ui/bubble"
 import { Button } from "@/components/ui/button"
 import {
   DropdownMenu,
@@ -27,13 +27,6 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { Marker, MarkerContent } from "@/components/ui/marker"
-import {
-  Message,
-  MessageAvatar,
-  MessageContent,
-  MessageFooter,
-  MessageHeader,
-} from "@/components/ui/message"
 import {
   Popover,
   PopoverContent,
@@ -166,115 +159,92 @@ function TextMessage({
   const { me } = useApp()
   const [active, setActive] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
-  const mine = message.senderId === me.id
+  const bot = message.integration
+  // a bot's messages are stored with its creator as sender, but they aren't theirs to edit
+  const mine = message.senderId === me.id && !bot
   const deleted = Boolean(message.deletedAt)
   const hasText = !deleted && message.content.trim().length > 0
-  const align = mine ? "end" : "start"
 
   const reactionGroups = REACTIONS.map((r) => ({
     ...r,
     users: message.reactions.filter((x) => x.type === r.type),
   })).filter((g) => g.users.length > 0)
   const myReaction = message.reactions.find((r) => r.userId === me.id)?.type
-  const reactionNames = message.reactions.map((r) =>
-    r.userId === me.id ? "You" : r.user.name
-  )
 
   const replyTo = message.replyTo
   const showActions = !message.pending && !deleted
-
-  const reactionBadge = (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <button
-          type="button"
-          className="flex items-center gap-0.5 rounded-full px-1.5 py-0.5"
-          onClick={() => myReaction && actions.onReact(message, myReaction)}
-          aria-label={`Reactions: ${reactionNames.join(", ")}`}
-        >
-          {reactionGroups.slice(0, 3).map((g) => (
-            <span key={g.type} aria-hidden="true">
-              {g.emoji}
-            </span>
-          ))}
-          {message.reactions.length > 1 ? (
-            <span className="ml-0.5 text-muted-foreground">
-              {message.reactions.length}
-            </span>
-          ) : null}
-        </button>
-      </TooltipTrigger>
-      <TooltipContent>
-        <div className="flex flex-col gap-0.5">
-          {reactionGroups.map((g) => (
-            <span key={g.type}>
-              {g.emoji}{" "}
-              {g.users
-                .map((u) => (u.userId === me.id ? "You" : u.user.name))
-                .join(", ")}
-            </span>
-          ))}
-        </div>
-      </TooltipContent>
-    </Tooltip>
-  )
+  const meta = [
+    message.editedAt && !deleted ? "Edited" : null,
+    message.pending ? "Sending…" : status,
+  ].filter(Boolean)
 
   return (
-    <Message
-      align={align}
+    <div
       data-active={active || menuOpen}
-      className={cn("group/message", message.pending && "opacity-60")}
+      className={cn(
+        "group/message relative flex gap-3.5 rounded-md px-2 py-0.5 hover:bg-muted/50 data-[active=true]:bg-muted/50",
+        message.pending && "opacity-60"
+      )}
       onPointerUp={(e) => {
-        // touch devices have no hover: tapping a bubble reveals its actions
+        // touch devices have no hover: tapping a message reveals its actions
         if (e.pointerType !== "touch") return
         if ((e.target as HTMLElement).closest("a,button")) return
         setActive((a) => !a)
       }}
     >
-      {/* Teams-style: avatar and "Name  time" sit at the top of each sender's run */}
-      {!mine ? (
-        <MessageAvatar className="size-8 min-w-8 self-start bg-transparent">
-          {firstInGroup ? (
+      {/* Flat, left-aligned rows: avatar and "Name  time" head each sender's run */}
+      <div className="w-8 shrink-0">
+        {firstInGroup ? (
+          bot ? (
+            <BotAvatar name={bot.name} avatarUrl={bot.avatarUrl} />
+          ) : (
             <UserAvatar
               user={message.sender}
               size="sm"
               presence
-              className="[&_[data-slot=avatar]]:size-8"
+              className="mt-0.5 [&_[data-slot=avatar]]:size-8"
             />
-          ) : null}
-        </MessageAvatar>
-      ) : null}
-      <MessageContent className="gap-1">
+          )
+        ) : (
+          <span
+            className="block pt-1 text-right text-[10px] leading-4 text-muted-foreground opacity-0 group-hover/message:opacity-100"
+            aria-hidden="true"
+          >
+            {format(message.createdAt, "HH:mm")}
+          </span>
+        )}
+      </div>
+      <div className="flex min-w-0 flex-1 flex-col gap-2">
         {firstInGroup ? (
-          <MessageHeader className="gap-2 px-0 pt-2 font-normal">
-            {!mine ? <span>{message.sender.name}</span> : null}
-            <span title={format(message.createdAt, "PPpp")}>
-              {format(message.createdAt, "EEE p")}
+          <div className="-mb-1 flex items-baseline gap-2">
+            <span className="text-xs font-semibold">
+              {bot ? bot.name : mine ? "You" : message.sender.name}
             </span>
-          </MessageHeader>
+            {bot ? (
+              <span className="rounded-sm bg-accent px-1 py-px text-[9px] font-medium tracking-wide text-muted-foreground">
+                APP
+              </span>
+            ) : null}
+            <time
+              dateTime={message.createdAt.toISOString()}
+              title={format(message.createdAt, "PPpp")}
+              className="text-[10px] text-muted-foreground"
+            >
+              {format(message.createdAt, "p")}
+            </time>
+          </div>
         ) : null}
 
         {replyTo ? (
           <button
             type="button"
             onClick={() => actions.onJumpTo(replyTo.id)}
-            className={cn(
-              "mb-[-0.75rem] flex max-w-[80%] flex-col gap-0.5 rounded-xl bg-muted/60 px-3 pt-1.5 pb-4 text-left text-xs text-muted-foreground hover:bg-muted",
-              mine && "self-end"
-            )}
+            className="flex max-w-xl flex-col border-l-2 pl-2 text-left text-[11px] leading-normal hover:border-foreground/40"
           >
-            <span className="flex items-center gap-1 font-medium">
-              <ReplyIcon className="size-3" aria-hidden="true" />
-              {mine ? "You" : message.sender.name.split(/\s+/)[0]} replied to{" "}
-              {replyTo.senderId === me.id
-                ? mine
-                  ? "yourself"
-                  : "you"
-                : replyTo.senderId === message.senderId
-                  ? "themself"
-                  : replyTo.sender.name}
+            <span className="font-semibold">
+              {replyTo.senderId === me.id ? "You" : replyTo.sender.name}
             </span>
-            <span className="line-clamp-2 break-words">
+            <span className="line-clamp-1 break-words text-muted-foreground">
               {replyTo.deletedAt
                 ? "Message deleted"
                 : toPlainText(replyTo.content) || "Attachment"}
@@ -282,107 +252,100 @@ function TextMessage({
           </button>
         ) : null}
 
-        {!deleted && message.attachments.length > 0 ? (
-          <div
-            className={cn(
-              "flex items-center gap-1",
-              mine && "flex-row-reverse self-end"
-            )}
-          >
-            <AttachmentList
-              attachments={message.attachments}
-              className="w-64 sm:w-72"
-            />
-            {!hasText && reactionGroups.length > 0 ? (
-              <div className="self-end rounded-full bg-muted text-xs">
-                {reactionBadge}
-              </div>
-            ) : null}
-            {!hasText && showActions ? (
-              <Toolbar
-                message={message}
-                mine={mine}
-                myReaction={myReaction}
-                actions={actions}
-                onOpenChange={setMenuOpen}
-              />
-            ) : null}
-          </div>
-        ) : null}
-
         {hasText || deleted ? (
           <div
             className={cn(
-              "flex w-full items-center gap-1",
-              mine && "flex-row-reverse",
-              reactionGroups.length > 0 && "mb-3.5"
+              "max-w-3xl text-xs leading-relaxed break-words text-foreground/80",
+              deleted && "text-muted-foreground italic"
             )}
           >
-            <Bubble
-              variant={deleted ? "outline" : mine ? "tinted" : "muted"}
-              align={align}
-              className="max-w-[min(80%,36rem)]"
-            >
-              <Tooltip delayDuration={700}>
-                {/* keep the bubble's slot: Bubble styles its `bubble-content` child by data-slot */}
-                <TooltipTrigger asChild data-slot="bubble-content">
-                  <BubbleContent
-                    className={cn(
-                      "rounded-md px-4",
-                      deleted && "text-muted-foreground italic"
-                    )}
-                  >
-                    {deleted ? (
-                      "Message deleted"
-                    ) : (
-                      <RichText text={message.content} />
-                    )}
-                  </BubbleContent>
-                </TooltipTrigger>
-                <TooltipContent side={mine ? "left" : "right"}>
-                  {format(message.createdAt, "PPp")}
-                  {message.editedAt
-                    ? ` · edited ${format(message.editedAt, "PPp")}`
-                    : ""}
-                </TooltipContent>
-              </Tooltip>
-              {reactionGroups.length > 0 ? (
-                <BubbleReactions
-                  align={mine ? "start" : "end"}
-                  className="text-xs"
-                >
-                  {reactionBadge}
-                </BubbleReactions>
-              ) : null}
-            </Bubble>
-            {showActions ? (
-              <Toolbar
-                message={message}
-                mine={mine}
-                myReaction={myReaction}
-                actions={actions}
-                onOpenChange={setMenuOpen}
-              />
-            ) : null}
+            {deleted ? "Message deleted" : <RichText text={message.content} />}
           </div>
         ) : null}
 
-        {message.editedAt && !deleted ? (
-          <MessageFooter className="px-0 text-[11px] font-normal">
-            Edited
-          </MessageFooter>
+        {!deleted && message.attachments.length > 0 ? (
+          <AttachmentList
+            attachments={message.attachments}
+            className="w-full max-w-md"
+          />
         ) : null}
-        {message.pending ? (
-          <MessageFooter className="px-0 text-[11px] font-normal">
-            Sending…
-          </MessageFooter>
-        ) : status ? (
-          <MessageFooter className="px-0 text-[11px] font-normal">
-            {status}
-          </MessageFooter>
+
+        {reactionGroups.length > 0 ? (
+          <div className="flex flex-wrap gap-1.5">
+            {reactionGroups.map((g) => {
+              const mineHere = g.users.some((u) => u.userId === me.id)
+              const names = g.users
+                .map((u) => (u.userId === me.id ? "You" : u.user.name))
+                .join(", ")
+              return (
+                <Tooltip key={g.type}>
+                  <TooltipTrigger asChild>
+                    <button
+                      type="button"
+                      aria-pressed={mineHere}
+                      aria-label={`${g.label}: ${names}`}
+                      onClick={() => actions.onReact(message, g.type)}
+                      className={cn(
+                        "flex h-6 items-center gap-1 rounded-md border bg-muted/60 px-1.5 text-xs transition-colors hover:bg-accent",
+                        mineHere && "border-primary/30 bg-primary/5"
+                      )}
+                    >
+                      <span aria-hidden="true">{g.emoji}</span>
+                      <span className="text-[10px] text-muted-foreground tabular-nums">
+                        {g.users.length}
+                      </span>
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent>{names}</TooltipContent>
+                </Tooltip>
+              )
+            })}
+          </div>
         ) : null}
-      </MessageContent>
-    </Message>
+
+        {meta.length ? (
+          <p className="-mt-1 text-[10px] text-muted-foreground">
+            {meta.join(" · ")}
+          </p>
+        ) : null}
+      </div>
+
+      {showActions ? (
+        <div className="absolute -top-3 right-2 rounded-md border bg-background opacity-0 transition-opacity group-hover/message:opacity-100 group-data-[active=true]/message:opacity-100 focus-within:opacity-100">
+          <Toolbar
+            message={message}
+            mine={mine}
+            myReaction={myReaction}
+            actions={actions}
+            onOpenChange={setMenuOpen}
+          />
+        </div>
+      ) : null}
+    </div>
+  )
+}
+
+function BotAvatar({
+  name,
+  avatarUrl,
+}: {
+  name: string
+  avatarUrl: string | null
+}) {
+  return avatarUrl ? (
+    <img
+      src={avatarUrl}
+      alt=""
+      className="mt-0.5 size-8 rounded-md border object-cover"
+    />
+  ) : (
+    <span
+      aria-hidden="true"
+      title={name}
+      className="mt-0.5 flex size-8 items-center justify-center rounded-md border bg-muted text-muted-foreground"
+    >
+      <BotIcon className="size-4" />
+    </span>
   )
 }
 
@@ -415,10 +378,7 @@ function Toolbar({
 
   return (
     <div
-      className={cn(
-        "flex shrink-0 items-center text-muted-foreground opacity-0 transition-opacity group-hover/message:opacity-100 group-data-[active=true]/message:opacity-100 focus-within:opacity-100",
-        mine && "flex-row-reverse"
-      )}
+      className={cn("flex shrink-0 items-center p-0.5 text-muted-foreground")}
     >
       <Popover
         open={reactOpen}
@@ -430,12 +390,7 @@ function Toolbar({
         <Tooltip>
           <TooltipTrigger asChild>
             <PopoverTrigger asChild>
-              <Button
-                variant="ghost"
-                size="icon-sm"
-                className="rounded-full"
-                aria-label="React"
-              >
+              <Button variant="ghost" size="icon-xs" aria-label="React">
                 <SmilePlusIcon />
               </Button>
             </PopoverTrigger>
@@ -475,8 +430,7 @@ function Toolbar({
         <TooltipTrigger asChild>
           <Button
             variant="ghost"
-            size="icon-sm"
-            className="rounded-full"
+            size="icon-xs"
             aria-label="Reply"
             onClick={() => actions.onReply(message)}
           >
@@ -493,16 +447,11 @@ function Toolbar({
         }}
       >
         <DropdownMenuTrigger asChild>
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            className="rounded-full"
-            aria-label="More actions"
-          >
+          <Button variant="ghost" size="icon-xs" aria-label="More actions">
             <MoreHorizontalIcon />
           </Button>
         </DropdownMenuTrigger>
-        <DropdownMenuContent align={mine ? "end" : "start"}>
+        <DropdownMenuContent align="end">
           {message.content.trim() ? (
             <DropdownMenuItem onSelect={() => void copy()}>
               <CopyIcon /> Copy text

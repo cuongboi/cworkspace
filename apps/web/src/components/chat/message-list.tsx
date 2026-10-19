@@ -202,9 +202,10 @@ function Thread({
     Boolean(
       a &&
       b &&
-      a.type === "TEXT" &&
-      b.type === "TEXT" &&
+      a.type === b.type &&
+      (a.type === "TEXT" || a.type === "BOT") &&
       a.senderId === b.senderId &&
+      a.integrationId === b.integrationId &&
       isSameDay(a.createdAt, b.createdAt) &&
       Math.abs(differenceInMinutes(b.createdAt, a.createdAt)) < GROUP_WINDOW_MIN
     )
@@ -285,7 +286,7 @@ function Thread({
                   <div
                     className={cn(
                       "mx-auto max-w-5xl min-w-0 rounded-md transition-colors duration-700",
-                      first ? "pt-3" : "pt-0.5",
+                      first ? "pt-5" : "pt-0.5",
                       highlight === m.id && "bg-primary/10"
                     )}
                   >

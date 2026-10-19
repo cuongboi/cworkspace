@@ -68,6 +68,8 @@ model User {
     callsStarted            Call[]
     callParticipations      CallParticipant[]
     wikiPagesCreated        WikiPage[]
+    channelsCreated         Channel[]
+    integrationsCreated     ChannelIntegration[]
     wikiRevisions           WikiRevision[]
 
     // the company directory: every signed-in user
@@ -211,6 +213,7 @@ model Group {
     conversation   Conversation?
     wikiPages      WikiPage[]
     wikiEditPolicy WikiEditPolicy @default(MEMBERS)
+    channels       Channel[]
 
     @@deny('all', auth() == null)
     @@allow('read', privacy != SECRET || members?[userId == auth().id && status == ACTIVE])
@@ -469,6 +472,8 @@ enum MessageType {
     TEXT
     SYSTEM
     CALL
+    // posted by a channel integration (webhook / bot token), server-side only
+    BOT
 }
 
 model Conversation {
@@ -487,17 +492,21 @@ model Conversation {
     // set for a group's chat: membership mirrors the group's ACTIVE members (written server-side)
     groupId        String?              @unique
     group          Group?               @relation(fields: [groupId], references: [id], onDelete: Cascade)
+    // set for a group channel's chat (the group chat above is the group's #general channel)
+    channelId      String?              @unique
+    channel        Channel?             @relation(fields: [channelId], references: [id], onDelete: Cascade)
 
     @@deny('all', auth() == null)
-    @@allow('read', groupId == null && members?[userId == auth().id])
+    @@allow('read', groupId == null && channelId == null && members?[userId == auth().id])
+    @@allow('read', channelId != null && channel.group.members?[userId == auth().id && status == ACTIVE])
     // group chats: grounded in the group, not the mirrored rows, so a lagging mirror never grants access
     @@allow('read', groupId != null && group.members?[userId == auth().id && status == ACTIVE])
     @@allow('create', createdById == auth().id)
     @@allow('update', type == GROUP && members?[userId == auth().id])
     @@allow('delete', type == GROUP && members?[userId == auth().id && role == ADMIN])
-    @@deny('post-update', directKey != before().directKey || createdById != before().createdById || groupId != before().groupId)
-    // group chats are created and maintained by the server only; the title follows the group
-    @@deny('create,update,delete', groupId != null)
+    @@deny('post-update', directKey != before().directKey || createdById != before().createdById || groupId != before().groupId || channelId != before().channelId)
+    // group and channel chats are created and maintained by the server only; the title follows them
+    @@deny('create,update,delete', groupId != null || channelId != null)
 
     @@index([lastMessageAt])
     @@map('conversation')
@@ -521,8 +530,8 @@ model ConversationMember {
     // own read state / mute; admins manage roles
     @@allow('update', userId == auth().id || conversation.members?[userId == auth().id && role == ADMIN])
     // group chat membership follows the group (server-side sync); members only update their own read state / mute
-    @@deny('create,delete', conversation.groupId != null)
-    @@deny('update', conversation.groupId != null && userId != auth().id)
+    @@deny('create,delete', conversation.groupId != null || conversation.channelId != null)
+    @@deny('update', (conversation.groupId != null || conversation.channelId != null) && userId != auth().id)
     // leave a group conversation, or be removed by an admin
     @@allow('delete', conversation.type == GROUP && (userId == auth().id || conversation.members?[userId == auth().id && role == ADMIN]))
     @@deny('post-update', conversationId != before().conversationId || userId != before().userId)
@@ -551,11 +560,14 @@ model Message {
     createdAt      DateTime          @default(now())
     reactions      MessageReaction[]
     attachments    Attachment[]
+    // BOT messages: the integration that posted it (sender is the integration's creator)
+    integrationId  String?
+    integration    ChannelIntegration? @relation(fields: [integrationId], references: [id], onDelete: SetNull)
 
     @@allow('read', check(conversation, 'read'))
     @@allow('create', senderId == auth().id && type == TEXT && check(conversation, 'read'))
     @@allow('update', senderId == auth().id && type == TEXT)
-    @@deny('post-update', conversationId != before().conversationId || senderId != before().senderId)
+    @@deny('post-update', conversationId != before().conversationId || senderId != before().senderId || integrationId != before().integrationId)
 
     @@index([conversationId, createdAt])
     @@map('message')
@@ -822,4 +834,95 @@ model PushToken {
     @@deny('all', true)
     @@index([userId])
     @@map('push_token')
+}
+
+
+// ──────────────────────────── channels ───────────────────────────
+// Chat rooms inside a group, nested one level. Visible to every ACTIVE group member. All writes go
+// through `src/routes/channels.ts` (names, depth and the member mirror need server checks).
+
+model Channel {
+    id           String               @id @default(cuid())
+    groupId      String
+    group        Group                @relation(fields: [groupId], references: [id], onDelete: Cascade)
+    parentId     String?
+    parent       Channel?             @relation('ChannelTree', fields: [parentId], references: [id], onDelete: Cascade)
+    children     Channel[]            @relation('ChannelTree')
+    // lowercase slug: [a-z0-9_-], unique among siblings (checked by the route)
+    name         String
+    topic        String?
+    position     Int                  @default(0)
+    // #general: backed by the group chat, cannot be deleted
+    isDefault    Boolean              @default(false)
+    createdById  String
+    createdBy    User                 @relation(fields: [createdById], references: [id], onDelete: Cascade)
+    createdAt    DateTime             @default(now())
+    conversation Conversation?
+    integrations ChannelIntegration[]
+
+    @@deny('all', auth() == null)
+    @@allow('read', group.members?[userId == auth().id && status == ACTIVE] || (auth().role == 'admin' || auth().permissions?[model == currentModel() && currentOperation() in actions]))
+
+    @@index([groupId, parentId])
+    @@map('channel')
+}
+
+enum IntegrationKind {
+    INCOMING_WEBHOOK
+    OUTGOING_WEBHOOK
+    BOT_TOKEN
+}
+
+model ChannelIntegration {
+    id              String                @id @default(cuid())
+    channelId       String
+    channel         Channel               @relation(fields: [channelId], references: [id], onDelete: Cascade)
+    kind            IntegrationKind
+    name            String
+    avatarUrl       String?
+    enabled         Boolean               @default(true)
+    // AES-GCM ciphertext of the HMAC secret / bot token: never readable by clients
+    secretCipher    String                @deny('read', true)
+    // sha256 of a bot token, for lookup
+    tokenHash       String?               @unique @deny('read', true)
+    // last characters of the secret, shown in settings
+    secretHint      String
+    // CIDRs allowed to call (incoming / bot); empty = anywhere
+    allowedIps      String[]              @default([])
+    // outgoing: hosts the target URL may use; empty = any public host
+    allowedHosts    String[]              @default([])
+    targetUrl       String?
+    // outgoing: only messages starting with one of these (empty = every message)
+    triggerWords    String[]              @default([])
+    rateLimitPerMin Int                   @default(60)
+    createdById     String
+    createdBy       User                  @relation(fields: [createdById], references: [id], onDelete: Cascade)
+    lastUsedAt      DateTime?
+    createdAt       DateTime              @default(now())
+    deliveries      IntegrationDelivery[]
+    messages        Message[]
+
+    @@deny('all', auth() == null)
+    @@allow('read', channel.group.members?[userId == auth().id && status == ACTIVE && role in [ADMIN, MODERATOR]] || (auth().role == 'admin' || auth().permissions?[model == currentModel() && currentOperation() in actions]))
+
+    @@index([channelId])
+    @@map('channel_integration')
+}
+
+// last attempts of an integration (both directions), shown as a delivery log
+model IntegrationDelivery {
+    id            String             @id @default(cuid())
+    integrationId String
+    integration   ChannelIntegration @relation(fields: [integrationId], references: [id], onDelete: Cascade)
+    direction     String
+    status        Int
+    ok            Boolean
+    durationMs    Int
+    error         String?
+    createdAt     DateTime           @default(now())
+
+    @@allow('read', check(integration, 'read'))
+
+    @@index([integrationId, createdAt])
+    @@map('integration_delivery')
 }

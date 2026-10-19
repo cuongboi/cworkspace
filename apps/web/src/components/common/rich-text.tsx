@@ -1,6 +1,6 @@
 import { cn } from "cn"
 import { Link } from "react-router-dom"
-import { parseText } from "@/lib/mentions"
+import { EVERYONE_ID, parseText } from "@/lib/mentions"
 
 /** Renders user text: preserves line breaks, links URLs and `@[Name](userId)` mentions. */
 export function RichText({
@@ -14,6 +14,13 @@ export function RichText({
     <p className={cn("break-words whitespace-pre-wrap", className)}>
       {parseText(text).map((seg, i) => {
         const key = `${i}-${seg.kind}`
+        if (seg.kind === "mention" && seg.userId === EVERYONE_ID) {
+          return (
+            <span key={key} className="font-medium text-primary">
+              @{seg.name}
+            </span>
+          )
+        }
         if (seg.kind === "mention") {
           return (
             <Link

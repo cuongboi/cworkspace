@@ -11,11 +11,6 @@ import {
   EmptyMedia,
   EmptyTitle,
 } from "@/components/ui/empty"
-import {
-  ResizableHandle,
-  ResizablePanel,
-  ResizablePanelGroup,
-} from "@/components/ui/resizable"
 import { Spinner } from "@/components/ui/spinner"
 import { useIsMobile } from "@/hooks/use-mobile"
 import { ApiError, api } from "@/lib/api-client"
@@ -24,8 +19,8 @@ import { ConversationList } from "./conversation-list"
 import { NewConversationDialog } from "./new-conversation-dialog"
 
 /**
- * Two-pane Messenger layout: conversation list | thread. On mobile only one pane is shown:
- * the list at /chat, the thread at /chat/[id].
+ * Chat layout: chat sidebar | thread (| details column, owned by the thread). On mobile only
+ * one pane is shown: the list at /chat, the thread at /chat/[id].
  */
 export function ChatShell({ conversationId }: { conversationId?: string }) {
   const isMobile = useIsMobile()
@@ -50,20 +45,12 @@ export function ChatShell({ conversationId }: { conversationId?: string }) {
           <ConversationList />
         )
       ) : (
-        <ResizablePanelGroup orientation="horizontal" id="chat-panes">
-          <ResizablePanel
-            id="chat-list"
-            defaultSize="320px"
-            minSize={260}
-            maxSize="50"
-          >
+        <div className="flex h-full min-h-0">
+          <aside className="w-60 shrink-0 border-r">
             <ConversationList activeId={conversationId} />
-          </ResizablePanel>
-          <ResizableHandle />
-          <ResizablePanel id="chat-thread" minSize={360}>
-            {thread}
-          </ResizablePanel>
-        </ResizablePanelGroup>
+          </aside>
+          <div className="min-w-0 flex-1">{thread}</div>
+        </div>
       )}
     </div>
   )
