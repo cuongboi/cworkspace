@@ -67,7 +67,6 @@ export function useCall(callId: string, kind: CallKind | null) {
     if (p.callId === callId) session.markEnded()
   })
   useSocketEvent("call:caption", (p) => session.receiveCaption(p))
-  useSocketEvent("call:caption-mark", (p) => session.receiveMark(p))
   useSocketEvent("call:glossary", (p) => session.receiveGlossary(p))
 
   return {

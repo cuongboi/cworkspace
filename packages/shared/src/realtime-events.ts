@@ -65,17 +65,18 @@ export type GroupCallState = {
 export type MediaState = { audio: boolean; video: boolean; screen: boolean };
 
 /** Languages offered for live captions (BCP-47); also the speaker's spoken language. */
+/**
+ * The one language pair captions support (exactly two entries; change it here). Live Translate
+ * takes no source language: within a pair, speech that isn't the reader's is the other one.
+ */
 export const CAPTION_LANGUAGES = {
-  en: "English",
-  ja: "日本語",
   vi: "Tiếng Việt",
-  zh: "中文",
-  ko: "한국어",
-  fr: "Français",
-  de: "Deutsch",
-  es: "Español",
+  ja: "日本語",
 } as const;
 export type CaptionLang = keyof typeof CAPTION_LANGUAGES;
+export const CAPTION_PAIR = Object.keys(CAPTION_LANGUAGES) as [CaptionLang, CaptionLang];
+export const otherCaptionLang = (lang: CaptionLang): CaptionLang =>
+  lang === CAPTION_PAIR[0] ? CAPTION_PAIR[1] : CAPTION_PAIR[0];
 export const isCaptionLang = (v: unknown): v is CaptionLang =>
   typeof v === "string" && Object.hasOwn(CAPTION_LANGUAGES, v);
 
@@ -98,8 +99,8 @@ export type CaptionSegment = {
 };
 
 /**
- * Utterance boundaries from the speaker's voice detection. Readers open their translation of
- * that speaker on `start` and file what it produces under the same `utteranceId`.
+ * Utterance boundaries from the speaker's voice detection (speaker → server only): the start
+ * time orders the transcript.
  */
 export type CaptionMark = {
   utteranceId: string;
@@ -223,7 +224,6 @@ export interface ServerToClientEvents {
     },
   ) => void;
   /** to the other readers of the call */
-  "call:caption-mark": (p: CaptionMark & { callId: string; from: string }) => void;
   "call:glossary": (p: { callId: string; terms: string[] }) => void;
   "rtc:signal": (p: { callId: string; from: string; data: RtcSignal }) => void;
 }

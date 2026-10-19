@@ -162,7 +162,7 @@ function TextMessage({
   firstInGroup,
   status,
   actions,
-}: Omit<Props, "conversationId" | "isGroup" | "lastInGroup">) {
+}: Omit<Props, "conversationId">) {
   const { me } = useApp()
   const [active, setActive] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)

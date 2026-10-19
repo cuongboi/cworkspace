@@ -51,7 +51,7 @@ export const env = {
   // Live call captions (Gemini Live). Captions are disabled without a key.
   GEMINI_API_KEY: read("GEMINI_API_KEY", ""),
   GEMINI_TRANSCRIBE_MODEL: read("GEMINI_TRANSCRIBE_MODEL", "gemini-3.5-transcribe-live"),
-  GEMINI_TRANSLATE_MODEL: read("GEMINI_TRANSLATE_MODEL", "gemini-3.5-live-translate-preview"),
+  GEMINI_TRANSLATE_MODEL: read("GEMINI_TRANSLATE_MODEL", "gemini-3.8-live"),
 } as const;
 
 export type Env = typeof env;

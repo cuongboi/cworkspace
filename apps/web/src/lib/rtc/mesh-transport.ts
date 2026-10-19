@@ -1,10 +1,11 @@
 import type { RealtimeClient } from "@/lib/realtime"
-import type {
-  CallPeer,
-  CaptionPrefs,
-  MediaState,
-  RtcSignal,
-  UserSummary,
+import {
+  CAPTION_PAIR,
+  type CallPeer,
+  type CaptionPrefs,
+  type MediaState,
+  type RtcSignal,
+  type UserSummary,
 } from "@/lib/realtime-events"
 import {
   type CallTransport,
@@ -70,7 +71,7 @@ export class MeshTransport
   private cameraTrack: MediaStreamTrack | null = null
   private screenTrack: MediaStreamTrack | null = null
   private media: MediaState = { audio: false, video: false, screen: false }
-  private captions: CaptionPrefs = { enabled: false, lang: "en" }
+  private captions: CaptionPrefs = { enabled: false, lang: CAPTION_PAIR[0] }
   private selfId: string | null = null
   private joined = false
   private closed = false

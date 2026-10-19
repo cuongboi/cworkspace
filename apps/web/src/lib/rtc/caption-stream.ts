@@ -4,15 +4,15 @@ import {
   type LiveServerMessage,
   type Session,
 } from "@google/genai"
+import { LRUCache } from "lru-cache"
 import { ApiError, api } from "@/lib/api-client"
-import type { CaptionLang } from "@/lib/realtime-events"
+import { CAPTION_PAIR, type CaptionLang } from "@/lib/realtime-events"
 
 /**
  * Building blocks of live captions (Gemini Live, straight from the browser):
  *   - `CaptionTokens`: the pair of ephemeral tokens from `/api/calls/:id/caption-tokens`,
  *   - `PcmTap`: a MediaStreamTrack as 16 kHz PCM16 chunks of 100 ms (+ their loudness),
- *   - `UtteranceLog`: utterances of one speaker, as marked by their voice detection,
- *   - `CaptionStream`: one Gemini Live session (Transcribe Live or Live Translate).
+ *   - `CaptionStream`: one Gemini Live session (transcribe our mic, or translate caption text).
  */
 
 export type CaptionMode = "transcribe" | "translate"
@@ -43,65 +43,78 @@ const PARTIAL_INTERVAL_MS = 200
 const ROTATE_AFTER_MS = 8 * 60_000
 /** an ended utterance whose final transcript never came is finalized after this long */
 const COMMIT_FALLBACK_MS = 4_000
-/** translation of the last utterance is final when nothing new arrived this long */
-const TRANSLATE_IDLE_MS = 2_000
-/**
- * Verb-final languages (ja, ko, de…) finish a sentence after the next one started: output keeps
- * going to the previous utterance until its sentence ends, at most this long.
- */
-const CARRY_MS = 2_500
-/** an ended utterance whose echo stopped short (dropped words) is left behind after this long */
-const ALIGN_TIMEOUT_MS = 6_000
+/** a translation whose turn never completed is finalized with what arrived by then */
+const TRANSLATE_TIMEOUT_MS = 12_000
 /** a token must open its session within a minute of being issued (with some margin) */
 const TOKEN_FRESH_MS = 50_000
 
-const SENTENCE_END = /[.!?。！？…][\s"'」』）)]*$/u
 // Transcribe Live puts spaces between Japanese/Chinese words ("に ついて 話します")
 const CJK_SPACE =
   /(?<=[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}、。])\s+(?=[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}、。])/gu
 const tidy = (text: string) => text.replace(CJK_SPACE, "")
-const alignLength = (text: string) =>
-  text.toLowerCase().replace(/[^\p{L}\p{N}]/gu, "").length
 
 // --- tokens ----------------------------------------------------------------------------------
 
 type Bundle = {
-  lang: CaptionLang
   transcribe: Grant | null
   translate: Grant
   translateLeft: number
-  freshUntil: number
 }
 
 /**
  * The server hands out tokens in pairs (transcribe our mic + translate the others into our
- * language). Fetched when we join; a new pair is fetched whenever a session needs one that is
- * used up or too old to open a session.
+ * language). A pair is fetched when we join and whenever our language changes, and cached until
+ * it is too old to open a session; an expired pair of the current language is renewed at once,
+ * so sessions never wait for a round trip. A pair that is used up is fetched again on demand.
  */
 export class CaptionTokens {
   private readonly callId: string
-  private bundle: Bundle | null = null
-  private inflight: Promise<Bundle> | null = null
-  lang: CaptionLang = "en"
+  private readonly cache: LRUCache<CaptionLang, Bundle>
+  private current: CaptionLang = CAPTION_PAIR[0]
+  private stopped = false
 
   constructor(callId: string) {
     this.callId = callId
+    this.cache = new LRUCache<CaptionLang, Bundle>({
+      max: 2,
+      ttl: TOKEN_FRESH_MS,
+      ttlAutopurge: true,
+      fetchMethod: (lang) => this.request(lang),
+      dispose: (_, lang, reason) => {
+        if (reason === "expire" && lang === this.current) this.renew()
+      },
+    })
+  }
+
+  get lang() {
+    return this.current
+  }
+
+  set lang(lang: CaptionLang) {
+    if (lang === this.current) return
+    this.cache.delete(this.current)
+    this.current = lang
+    this.renew()
   }
 
   /** at join: the first sessions open without waiting for a round trip */
   prefetch() {
-    void this.fetch().catch(() => undefined)
+    this.stopped = false
+    this.renew()
   }
 
+  /** on leave: drops the cached pair and stops renewing */
   clear() {
-    this.bundle = null
+    this.stopped = true
+    this.cache.clear()
   }
 
   async take(mode: CaptionMode): Promise<Grant> {
     for (let attempt = 0; attempt < 2; attempt++) {
-      const b = this.usable() ?? (await this.fetch())
-      // fetched for a language we no longer use (an in-flight request when it changed)
-      if (b.lang !== this.lang) continue
+      const lang = this.current
+      const b = await this.cache.fetch(lang)
+      // fetched for a language we no longer use (it changed during the request)
+      if (!b || lang !== this.current) continue
       if (mode === "transcribe" && b.transcribe) {
         const grant = b.transcribe
         b.transcribe = null
@@ -111,41 +124,27 @@ export class CaptionTokens {
         b.translateLeft--
         return b.translate
       }
-      if (this.bundle === b) this.bundle = null
+      // used up: the next attempt fetches a new pair
+      if (this.cache.peek(lang) === b) this.cache.delete(lang)
     }
     throw new Error("no caption token left")
   }
 
-  private usable() {
-    const b = this.bundle
-    return b && b.lang === this.lang && Date.now() < b.freshUntil ? b : null
+  private renew() {
+    if (this.stopped) return
+    void this.cache.fetch(this.current).catch(() => undefined)
   }
 
-  private fetch(): Promise<Bundle> {
-    const lang = this.lang
-    if (this.inflight) return this.inflight
-    const issued = Date.now()
-    const request = api
-      .post<{ transcribe: Grant; translate: Grant }>(
-        `/api/calls/${encodeURIComponent(this.callId)}/caption-tokens`,
-        { lang }
-      )
-      .then((res) => {
-        const bundle: Bundle = {
-          lang,
-          transcribe: res.transcribe,
-          translate: res.translate,
-          translateLeft: res.translate.uses,
-          freshUntil: issued + TOKEN_FRESH_MS,
-        }
-        if (lang === this.lang) this.bundle = bundle
-        return bundle
-      })
-      .finally(() => {
-        if (this.inflight === request) this.inflight = null
-      })
-    this.inflight = request
-    return request
+  private async request(lang: CaptionLang): Promise<Bundle> {
+    const res = await api.post<{ transcribe: Grant; translate: Grant }>(
+      `/api/calls/${encodeURIComponent(this.callId)}/caption-tokens`,
+      { lang }
+    )
+    return {
+      transcribe: res.transcribe,
+      translate: res.translate,
+      translateLeft: res.translate.uses,
+    }
   }
 }
 
@@ -269,54 +268,12 @@ export class PcmTap {
   }
 }
 
-// --- utterances ------------------------------------------------------------------------------
-
-/** An utterance of one speaker, as decided by their voice detection. */
-export type Utterance = {
-  id: string
-  startAt: number
-  endAt: number | null
-  /** latest original text (Transcribe Live, in the speaker's browser) */
-  source: string
-}
-
-export class UtteranceLog {
-  private list: Utterance[] = []
-
-  start(id: string) {
-    if (this.get(id)) return
-    this.list.push({ id, startAt: Date.now(), endAt: null, source: "" })
-    if (this.list.length > 50) this.list.shift()
-  }
-
-  end(id: string) {
-    const u = this.get(id)
-    if (u && u.endAt === null) u.endAt = Date.now()
-  }
-
-  setSource(id: string, text: string) {
-    const u = this.get(id)
-    if (u) u.source = text
-  }
-
-  get(id: string) {
-    return this.list.find((u) => u.id === id) ?? null
-  }
-
-  /** the utterance after `id`, once it has started */
-  next(id: string) {
-    const i = this.list.findIndex((u) => u.id === id)
-    return i >= 0 ? (this.list[i + 1] ?? null) : null
-  }
-}
-
 // --- one Gemini Live session -----------------------------------------------------------------
 
 export type StreamSegment = { utteranceId: string; text: string; final: boolean }
 
 export interface StreamOwner {
   readonly tokens: CaptionTokens
-  readonly log: UtteranceLog
   emit(stream: CaptionStream, segment: StreamSegment): void
   /** the session gave up after repeated failures */
   failed(stream: CaptionStream, reason: string): void
@@ -326,15 +283,15 @@ export interface StreamOwner {
 }
 
 type Pending = { id: string; text: string; interim: string; ended: boolean }
+type Job = { id: string; text: string; out: string }
 
 /**
  * One Gemini Live session. Measured behavior of the two models (manual activity detection):
  *   Transcribe Live: interimInputTranscription = the whole utterance so far (replaces), then
  *     after activityEnd the final inputTranscription and generationComplete.
- *   Live Translate:  inputTranscription / outputTranscription chunks (append), each output just
- *     after the input it translates; no turnComplete, and turn boundaries don't cut its output.
- *     So its chunks are placed by text: the words it echoes (inputTranscription) are lined up
- *     against the speaker's transcript of each utterance by character position.
+ *   Translate (a general Live model told to translate): each caption text is sent as one turn;
+ *     the translation arrives as outputTranscription chunks (append) of the spoken answer, then
+ *     turnComplete. One turn at a time, so every answer belongs to the text that was sent.
  */
 export class CaptionStream {
   readonly mode: CaptionMode
@@ -355,17 +312,10 @@ export class CaptionStream {
   private queue: Pending[] = []
   private active = false
 
-  // translate: one long activity while the speaker talks (+ tail), chunks placed by text
-  private windowOpen = false
-  /** utterance the translator's echoed input is currently in, and how far (aligned chars) */
-  private inputId: string | null = null
-  private inputPos = 0
-  /** translation text per utterance not final yet */
-  private texts = new Map<string, string>()
-  /** previous utterance still finishing its sentence */
-  private carry: { id: string; at: number } | null = null
-  private dirty = new Set<string>()
-  private idleTimer: number | undefined
+  // translate: texts waiting for their turn, and the one being answered
+  private jobs: Job[] = []
+  private inflight: Job | null = null
+  private jobTimer: number | undefined
 
   constructor(owner: StreamOwner, mode: CaptionMode) {
     this.owner = owner
@@ -385,30 +335,13 @@ export class CaptionStream {
   /** has audio or text in flight: a successor must wait before taking over */
   get busy() {
     return this.mode === "translate"
-      ? this.windowOpen || this.texts.size > 0
+      ? this.inflight !== null || this.jobs.length > 0
       : this.active || this.queue.length > 0
-  }
-
-  /** translate: still receiving audio (the utterance or its tail) */
-  get listening() {
-    return this.windowOpen
   }
 
   /** Starts an utterance. A session that wasn't ready joins at the next one. */
   begin(id: string) {
-    if (!this.session) return false
-    if (this.mode === "translate") {
-      window.clearTimeout(this.idleTimer)
-      if (this.windowOpen) return false
-      this.windowOpen = true
-      if (!this.inputId) {
-        this.inputId = id
-        this.inputPos = 0
-      }
-      this.session.sendRealtimeInput({ activityStart: {} })
-      return true
-    }
-    if (this.active) return false
+    if (!this.session || this.active) return false
     this.active = true
     this.queue.push({ id, text: "", interim: "", ended: false })
     this.session.sendRealtimeInput({ activityStart: {} })
@@ -417,7 +350,7 @@ export class CaptionStream {
 
   /** transcribe: the utterance ended, its turn ends */
   end() {
-    if (this.mode === "translate" || !this.active) return
+    if (!this.active) return
     this.active = false
     this.session?.sendRealtimeInput({ activityEnd: {} })
     const last = this.queue.at(-1)
@@ -425,16 +358,14 @@ export class CaptionStream {
     this.armFallback()
   }
 
-  /** translate: the speaker has been quiet for the tail; the translation can settle */
-  closeWindow() {
-    if (!this.windowOpen) return
-    this.windowOpen = false
-    this.session?.sendRealtimeInput({ activityEnd: {} })
-    this.armIdle()
+  /** translate: queues `text`; its translation is emitted under `id` */
+  translate(id: string, text: string) {
+    this.jobs.push({ id, text, out: "" })
+    this.pump()
   }
 
   send(base64: string) {
-    if (this.mode === "translate" ? !this.windowOpen : !this.active) return
+    if (!this.active) return
     this.session?.sendRealtimeInput({
       audio: { data: base64, mimeType: `audio/pcm;rate=${SAMPLE_RATE}` },
     })
@@ -527,6 +458,7 @@ export class CaptionStream {
     }
     if (this.closed || attempt !== this.attempt) return session.close()
     this.session = session
+    this.pump()
   }
 
   private fail(reason: string) {
@@ -551,11 +483,13 @@ export class CaptionStream {
     const c = m.serverContent
     if (!c) return
     if (this.mode === "translate") {
-      if (c.inputTranscription?.text) this.onEcho(c.inputTranscription.text)
+      const job = this.inflight
+      if (!job) return
       if (c.outputTranscription?.text) {
-        this.onTranslation(c.outputTranscription.text)
-        if (!this.windowOpen) this.armIdle()
+        job.out += c.outputTranscription.text
+        this.schedulePartial()
       }
+      if (c.turnComplete) this.finishJob()
       return
     }
     const head = this.queue[0]
@@ -602,77 +536,25 @@ export class CaptionStream {
     this.armFallback()
   }
 
-  // --- translate: place chunks by text -------------------------------------------------------
+  // --- translate ---------------------------------------------------------------------------
 
-  /** The translator heard `text`: move on to the next utterance once its transcript is covered. */
-  private onEcho(text: string) {
-    const now = Date.now()
-    const log = this.owner.log
-    for (; ;) {
-      const current = this.inputId ? log.get(this.inputId) : null
-      const next = this.inputId ? log.next(this.inputId) : null
-      if (!current || !next) break
-      const length = alignLength(current.source)
-      const covered =
-        length > 0 && this.inputPos >= length - Math.max(2, length * 0.15)
-      const stale =
-        current.endAt !== null && now - current.endAt > ALIGN_TIMEOUT_MS
-      if (!covered && !stale) break
-      this.startCarry(current.id)
-      this.inputId = next.id
-      this.inputPos = 0
-    }
-    this.inputPos += alignLength(text)
+  /** sends the next text once the previous answer is complete */
+  private pump() {
+    if (!this.session || this.inflight || !this.jobs.length) return
+    const job = this.jobs.shift()!
+    this.inflight = job
+    this.session.sendRealtimeInput({ text: job.text })
+    window.clearTimeout(this.jobTimer)
+    this.jobTimer = window.setTimeout(() => this.finishJob(), TRANSLATE_TIMEOUT_MS)
   }
 
-  private onTranslation(text: string) {
-    const carry = this.carry
-    if (carry && Date.now() - carry.at < CARRY_MS) {
-      this.append(carry.id, text)
-      if (SENTENCE_END.test(this.texts.get(carry.id) ?? "")) {
-        this.carry = null
-        this.commitTranslation(carry.id)
-      }
-      return
-    }
-    if (carry) {
-      this.carry = null
-      this.commitTranslation(carry.id)
-    }
-    if (this.inputId) this.append(this.inputId, text)
-  }
-
-  private startCarry(id: string) {
-    if (this.carry) this.commitTranslation(this.carry.id)
-    this.carry = null
-    if (SENTENCE_END.test(this.texts.get(id) ?? "")) this.commitTranslation(id)
-    else this.carry = { id, at: Date.now() }
-  }
-
-  private append(id: string, text: string) {
-    this.texts.set(id, (this.texts.get(id) ?? "") + text)
-    this.dirty.add(id)
-    this.schedulePartial()
-  }
-
-  private commitTranslation(id: string) {
-    const text = this.texts.get(id)?.trim()
-    this.texts.delete(id)
-    this.dirty.delete(id)
-    if (text) this.owner.emit(this, { utteranceId: id, text, final: true })
-  }
-
-  /** quiet after the tail: everything translated so far is final */
-  private armIdle() {
-    window.clearTimeout(this.idleTimer)
-    this.idleTimer = window.setTimeout(() => {
-      if (this.windowOpen) return
-      this.carry = null
-      for (const id of [...this.texts.keys()]) this.commitTranslation(id)
-      // the next window starts at the next utterance
-      this.inputId = null
-      this.inputPos = 0
-    }, TRANSLATE_IDLE_MS)
+  private finishJob() {
+    window.clearTimeout(this.jobTimer)
+    const job = this.inflight
+    this.inflight = null
+    const text = job?.out.trim()
+    if (job && text) this.owner.emit(this, { utteranceId: job.id, text, final: true })
+    this.pump()
   }
 
   // --- both ----------------------------------------------------------------------------------
@@ -682,11 +564,10 @@ export class CaptionStream {
     this.flushTimer = window.setTimeout(() => {
       this.flushTimer = undefined
       if (this.mode === "translate") {
-        for (const id of this.dirty) {
-          const text = this.texts.get(id)?.trim()
-          if (text) this.owner.emit(this, { utteranceId: id, text, final: false })
-        }
-        this.dirty.clear()
+        const job = this.inflight
+        const text = job?.out.trim()
+        if (job && text)
+          this.owner.emit(this, { utteranceId: job.id, text, final: false })
         return
       }
       const head = this.queue[0]
@@ -701,17 +582,16 @@ export class CaptionStream {
     window.clearTimeout(this.flushTimer)
     this.flushTimer = undefined
     window.clearTimeout(this.fallbackTimer)
-    window.clearTimeout(this.idleTimer)
+    window.clearTimeout(this.jobTimer)
     this.active = false
-    this.windowOpen = false
     for (const p of this.queue.splice(0)) {
       const text = this.textOf(p)
       if (text) this.owner.emit(this, { utteranceId: p.id, text, final: true })
     }
-    this.carry = null
-    for (const id of [...this.texts.keys()]) this.commitTranslation(id)
-    this.inputId = null
-    this.inputPos = 0
+    // an unanswered text is asked again on the next connection
+    if (this.inflight) this.jobs.unshift({ ...this.inflight, out: "" })
+    this.inflight = null
+    if (this.closed) this.jobs = []
   }
 }
 

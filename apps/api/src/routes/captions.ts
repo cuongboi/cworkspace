@@ -2,7 +2,7 @@ import { ActivityHandling, GoogleGenAI, Modality, TurnCoverage } from "@google/g
 import {
   CAPTION_LANGUAGES,
   type CaptionLang,
-  MAX_MESH_PARTICIPANTS,
+  otherCaptionLang,
 } from "@app/shared/realtime-events";
 import { Elysia, t } from "elysia";
 import { env } from "@/env";
@@ -17,8 +17,6 @@ const LANGS = Object.keys(CAPTION_LANGUAGES) as [CaptionLang, ...CaptionLang[]];
 // sessions well before that: Transcribe Live streams at most 10 minutes per session)
 const NEW_SESSION_MS = 60_000;
 const SESSION_MS = 30 * 60_000;
-/** one translate session per other speaker in the call */
-const TRANSLATE_USES = MAX_MESH_PARTICIPANTS - 1;
 
 const genai = env.GEMINI_API_KEY
   ? new GoogleGenAI({ apiKey: env.GEMINI_API_KEY, httpOptions: { apiVersion: "v1alpha" } })
@@ -31,6 +29,16 @@ const realtimeInputConfig = {
   activityHandling: ActivityHandling.NO_INTERRUPTION,
   turnCoverage: TurnCoverage.TURN_INCLUDES_ONLY_ACTIVITY,
 };
+
+function translateInstruction(to: CaptionLang, glossary: string[]) {
+  const from = CAPTION_LANGUAGES[otherCaptionLang(to)];
+  return [
+    `You are a live interpreter in a meeting. Every message is a transcript in ${from}.`,
+    `Translate it into ${CAPTION_LANGUAGES[to]} and say only the translation, nothing else:`,
+    "no greetings, answers, comments or questions of your own, even if the message asks one.",
+    ...(glossary.length ? [`Keep these terms unchanged: ${glossary.join(", ")}.`] : []),
+  ].join(" ");
+}
 
 async function grant(model: string, config: Record<string, unknown>, uses: number) {
   const now = Date.now();
@@ -50,9 +58,8 @@ async function grant(model: string, config: Record<string, unknown>, uses: numbe
  * POST /api/calls/:callId/caption-tokens → two Gemini Live ephemeral tokens for a participant
  * who speaks and reads `lang`, each locked to one model and config:
  *   transcribe: our own microphone → text in `lang` (Transcribe Live, SMART, call glossary)
- *   translate:  another speaker's audio → text in `lang` (Live Translate, source auto-detected;
- *               one use per other speaker)
- * Audio goes from the browser straight to Gemini, never through this process.
+ *   translate:  other speakers' caption text (the other language of the pair) → text in `lang`
+ * Audio and text go from the browser straight to Gemini, never through this process.
  */
 export const captionsRoute = new Elysia({ name: "routes.captions" }).use(authMacro).post(
   "/api/calls/:callId/caption-tokens",
@@ -71,7 +78,8 @@ export const captionsRoute = new Elysia({ name: "routes.captions" }).use(authMac
             responseModalities: [Modality.TEXT],
             realtimeInputConfig,
             inputAudioTranscription: {
-              languageCodes: [body.lang],
+              // the speaker may switch to the other language of the pair
+              languageCodes: [body.lang, otherCaptionLang(body.lang)],
               mode: "SMART",
               ...(glossary.length ? { customVocabulary: glossary } : {}),
             },
@@ -81,14 +89,12 @@ export const captionsRoute = new Elysia({ name: "routes.captions" }).use(authMac
         grant(
           env.GEMINI_TRANSLATE_MODEL,
           {
-            // Live Translate always speaks the translation; the browser keeps only its transcript
+            // the Live model only answers with audio; the browser keeps only its transcript
             responseModalities: [Modality.AUDIO],
-            realtimeInputConfig,
-            translationConfig: { targetLanguageCode: body.lang, echoTargetLanguage: false },
-            inputAudioTranscription: {},
             outputAudioTranscription: {},
+            systemInstruction: translateInstruction(body.lang, glossary),
           },
-          TRANSLATE_USES,
+          1,
         ),
       ]);
       set.headers["cache-control"] = "private, no-store";

@@ -1,7 +1,8 @@
-import type {
-  CaptionLang,
-  CaptionMark,
-  CaptionSegment,
+import {
+  CAPTION_PAIR,
+  type CaptionLang,
+  type CaptionMark,
+  type CaptionSegment,
 } from "@/lib/realtime-events"
 import {
   CHUNK_MS,
@@ -12,7 +13,6 @@ import {
   RotatingStream,
   type StreamOwner,
   type StreamSegment,
-  UtteranceLog,
 } from "./caption-stream"
 
 /**
@@ -20,8 +20,8 @@ import {
  * language we speak, and the original text is sent over `/ws` to everyone reading captions.
  *
  * Gemini's voice detection is off; this class detects speech itself and announces each
- * utterance (`call:caption-mark` start/end) so the readers translating our audio in their own
- * browser can file their translation under the same utterance id as our transcript.
+ * utterance (`call:caption-mark` start/end) so the server can order the transcript by when each
+ * utterance started. Readers translate our final text in their own browser.
  * Runs while anyone in the call (us included) reads captions and we aren't muted.
  */
 
@@ -47,7 +47,6 @@ const MIN_THRESHOLD = 0.012
 
 export class Captioner implements StreamOwner {
   readonly tokens: CaptionTokens
-  readonly log = new UtteranceLog()
   private opts: CaptionerOptions
   private stream: RotatingStream | null = null
   /** the transcriber gave up; not reopened until the language changes */
@@ -57,7 +56,7 @@ export class Captioner implements StreamOwner {
   private track: MediaStreamTrack | null = null
   private muted = true
   private active = false
-  private lang: CaptionLang = "en"
+  private lang: CaptionLang = CAPTION_PAIR[0]
   private lastStatus = ""
 
   // voice detection / utterances
@@ -116,7 +115,6 @@ export class Captioner implements StreamOwner {
   // --- StreamOwner ---------------------------------------------------------------------------
 
   emit(_stream: CaptionStream, s: StreamSegment) {
-    this.log.setSource(s.utteranceId, s.text)
     this.opts.onSegment({ ...s, lang: this.lang })
   }
 
@@ -210,7 +208,6 @@ export class Captioner implements StreamOwner {
     this.silentMs = 0
     this.utteranceMs = 0
     this.loudChunks = 0
-    this.log.start(id)
     this.stream?.current.begin(id)
     this.opts.onMark({ utteranceId: id, lang: this.lang, state: "start" })
   }
@@ -221,7 +218,6 @@ export class Captioner implements StreamOwner {
     const id = this.current
     if (!id) return
     this.current = null
-    this.log.end(id)
     this.stream?.current.end()
     this.opts.onMark({ utteranceId: id, lang: this.lang, state: "end" })
   }

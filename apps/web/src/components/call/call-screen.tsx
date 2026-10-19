@@ -2,6 +2,7 @@ import { cn } from "cn"
 import {
   ArrowLeftIcon,
   CaptionsIcon,
+  EllipsisIcon,
   MessageSquareIcon,
   PhoneIcon,
   PhoneOffIcon,
@@ -13,7 +14,7 @@ import {
 } from "lucide-react"
 import { parseAsBoolean, useQueryState } from "nuqs"
 import { useNavigate } from "react-router-dom"
-import { useEffect, useState } from "react"
+import { type ReactNode, useEffect, useState } from "react"
 import { ChatThread } from "@/components/chat/chat-thread"
 import { UserAvatar } from "@/components/common/user-avatar"
 import { Badge } from "@/components/ui/badge"
@@ -32,6 +33,13 @@ import {
   SheetDescription,
   SheetTitle,
 } from "@/components/ui/sheet"
+import {
+  SpeedDial,
+  SpeedDialContent,
+  SpeedDialItem,
+  SpeedDialLabel,
+  SpeedDialTrigger,
+} from "@/components/ui/speed-dial"
 import { Spinner } from "@/components/ui/spinner"
 import { useIsMobile } from "@/hooks/use-mobile"
 import { useApp } from "@/hooks/use-app"
@@ -285,6 +293,7 @@ function InCall({
   conversationId: string | null
 }) {
   const goBack = useGoBack()
+  const isMobile = useIsMobile()
   const chat = useCallChat(conversationId, self.id)
   const transcript = useTranscriptPanel()
   const [glossaryOpen, setGlossaryOpen] = useQueryState(
@@ -331,6 +340,87 @@ function InCall({
     call.leave()
     goBack()
   }
+
+  // Secondary controls overflow the bar on phones, so there they fold into a speed dial.
+  const secondary: SecondaryControl[] = [
+    ...(canShare
+      ? [
+        {
+          key: "screen",
+          label: call.screen ? "Stop presenting" : "Share screen",
+          control: (
+            <ScreenButton
+              key="screen"
+              on={call.screen}
+              onToggle={call.toggleScreen}
+            />
+          ),
+        },
+      ]
+      : []),
+    {
+      key: "devices",
+      label: "Audio and video",
+      control: (
+        <DeviceMenu
+          key="devices"
+          devices={call.devices}
+          audioDeviceId={call.audioDeviceId}
+          videoDeviceId={call.videoDeviceId}
+          onSelect={call.selectDevice}
+        />
+      ),
+    },
+    {
+      key: "captions",
+      label: "Captions",
+      control: (
+        <CaptionsButton
+          key="captions"
+          captions={call.captions}
+          available={call.captionsAvailable}
+          status={call.captionStatus}
+          error={call.captionError}
+          onChange={call.setCaptions}
+          onEditGlossary={() => void setGlossaryOpen(true)}
+        />
+      ),
+    },
+    {
+      key: "transcript",
+      label: transcript.open ? "Hide transcript" : "Transcript",
+      control: (
+        <ControlButton
+          key="transcript"
+          label={transcript.open ? "Hide transcript" : "Show transcript"}
+          aria-pressed={transcript.open}
+          onClick={transcript.toggle}
+        >
+          <ScrollTextIcon />
+        </ControlButton>
+      ),
+    },
+    ...(conversationId
+      ? [
+        {
+          key: "chat",
+          label: chat.open ? "Hide chat" : "Chat",
+          control: (
+            <ControlButton
+              key="chat"
+              label={chat.open ? "Hide chat" : "Show chat"}
+              aria-pressed={chat.open}
+              className="relative"
+              onClick={chat.toggle}
+            >
+              <MessageSquareIcon />
+              {chat.unread ? <UnreadDot /> : null}
+            </ControlButton>
+          ),
+        },
+      ]
+      : []),
+  ]
 
   return (
     <div className="flex min-h-0 flex-1">
@@ -438,43 +528,11 @@ function InCall({
         <footer className="flex shrink-0 items-center justify-center gap-3 px-4 pt-1 pb-4">
           <MicButton on={call.mic} onToggle={call.toggleMic} />
           <CameraButton on={call.camera} onToggle={call.toggleCamera} />
-          {canShare ? (
-            <ScreenButton on={call.screen} onToggle={call.toggleScreen} />
-          ) : null}
-          <DeviceMenu
-            devices={call.devices}
-            audioDeviceId={call.audioDeviceId}
-            videoDeviceId={call.videoDeviceId}
-            onSelect={call.selectDevice}
-          />
-          <CaptionsButton
-            captions={call.captions}
-            available={call.captionsAvailable}
-            status={call.captionStatus}
-            error={call.captionError}
-            onChange={call.setCaptions}
-            onEditGlossary={() => void setGlossaryOpen(true)}
-          />
-          <ControlButton
-            label={transcript.open ? "Hide transcript" : "Show transcript"}
-            aria-pressed={transcript.open}
-            onClick={transcript.toggle}
-          >
-            <ScrollTextIcon />
-          </ControlButton>
-          {conversationId ? (
-            <ControlButton
-              label={chat.open ? "Hide chat" : "Show chat"}
-              aria-pressed={chat.open}
-              className="relative"
-              onClick={chat.toggle}
-            >
-              <MessageSquareIcon />
-              {chat.unread ? (
-                <span className="absolute top-1 right-1 size-2.5 rounded-full bg-red-500 ring-2 ring-background" />
-              ) : null}
-            </ControlButton>
-          ) : null}
+          {isMobile ? (
+            <MoreControls unread={chat.unread} items={secondary} />
+          ) : (
+            secondary.map((item) => item.control)
+          )}
           <LeaveButton onLeave={leave} />
         </footer>
       </div>
@@ -499,6 +557,51 @@ function InCall({
         />
       ) : null}
     </div>
+  )
+}
+
+type SecondaryControl = { key: string; label: string; control: ReactNode }
+
+function UnreadDot() {
+  return (
+    <span className="absolute top-1 right-1 size-2.5 rounded-full bg-red-500 ring-2 ring-background" />
+  )
+}
+
+/**
+ * Phone layout: the secondary controls behind a "…" speed dial. Content stays mounted
+ * (`forceMount`) because the device and caption buttons are dropdown triggers: the dial closes on
+ * the tap that opens their menu, and unmounting the trigger would close the menu with it.
+ */
+function MoreControls({
+  items,
+  unread,
+}: {
+  items: SecondaryControl[]
+  unread: boolean
+}) {
+  const [open, setOpen] = useState(false)
+  return (
+    <SpeedDial open={open} onOpenChange={setOpen}>
+      <SpeedDialTrigger
+        variant="secondary"
+        aria-label={open ? "Close more controls" : "More controls"}
+        className="relative size-12 [&_svg:not([class*='size-'])]:size-5"
+      >
+        {open ? <XIcon /> : <EllipsisIcon />}
+        {unread && !open ? <UnreadDot /> : null}
+      </SpeedDialTrigger>
+      <SpeedDialContent forceMount inert={!open}>
+        {items.map((item) => (
+          <SpeedDialItem key={item.key}>
+            <SpeedDialLabel className="border shadow-none">
+              {item.label}
+            </SpeedDialLabel>
+            {item.control}
+          </SpeedDialItem>
+        ))}
+      </SpeedDialContent>
+    </SpeedDial>
   )
 }
 

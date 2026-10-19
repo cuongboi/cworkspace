@@ -10,11 +10,12 @@ import {
   type ServerPayload,
   type TranscriptEntry,
   type UserSummary,
+  CAPTION_PAIR,
   isCaptionLang,
 } from "@/lib/realtime-events"
 import { CaptionTokens, type CaptionStatus } from "./caption-stream"
 import { Captioner } from "./captioner"
-import { Translators } from "./translator"
+import { Translator } from "./translator"
 import { MeshTransport } from "./mesh-transport"
 import { SpeakerDetector } from "./speaker-detector"
 import type {
@@ -140,7 +141,7 @@ function loadCaptionPrefs(): CaptionPrefs {
   const browserLang = navigator.language?.slice(0, 2)
   const fallback: CaptionPrefs = {
     enabled: false,
-    lang: isCaptionLang(browserLang) ? browserLang : "en",
+    lang: isCaptionLang(browserLang) ? browserLang : CAPTION_PAIR[0],
   }
   try {
     const saved = JSON.parse(
@@ -178,7 +179,7 @@ const INITIAL_STATE: CallState = {
   devices: { audio: [], video: [] },
   audioDeviceId: null,
   videoDeviceId: null,
-  captions: { enabled: false, lang: "en" },
+  captions: { enabled: false, lang: CAPTION_PAIR[0] },
   captionsAvailable: true,
   captionStatus: "off",
   captionError: null,
@@ -215,7 +216,7 @@ export class CallSession {
   private socket: SignalingSocket | null = null
   private tokens: CaptionTokens
   private captioner: Captioner
-  private translators: Translators
+  private translator: Translator
   private captionTimer: number | undefined
   private outbox: ClientPayload<"call:caption">[] = []
   private speakStatus: { status: CaptionStatus; error: string | null } = {
@@ -266,7 +267,7 @@ export class CallSession {
         this.patchCaptionStatus()
       },
     })
-    this.translators = new Translators({
+    this.translator = new Translator({
       tokens: this.tokens,
       onTranslation: (speakerId, segment) =>
         this.receiveTranslation(speakerId, segment),
@@ -389,7 +390,8 @@ export class CallSession {
     this.transport?.dispose()
     this.transport = null
     this.captioner.stop()
-    this.translators.stop()
+    this.translator.stop()
+    this.tokens.clear()
     this.outbox = []
     window.clearInterval(this.captionTimer)
     this.captionTimer = undefined
@@ -539,9 +541,8 @@ export class CallSession {
       joined ? this.audioTrack : null,
       !(this.audioTrack?.enabled && this.audioTrack.readyState === "live")
     )
-    this.translators.sync(
-      joined && captionsAvailable && captions.enabled ? captions.lang : null,
-      remote.map((p) => ({ id: p.id, lang: p.captions.lang, stream: p.stream }))
+    this.translator.sync(
+      joined && captionsAvailable && captions.enabled ? captions.lang : null
     )
     if (active !== this.state.captionsActive)
       this.patch({ captionsActive: active })
@@ -575,12 +576,6 @@ export class CallSession {
     this.captioner.glossaryChanged()
   }
 
-  /** Utterance boundaries of a remote speaker: drives our translation of their audio. */
-  receiveMark(p: ServerPayload<"call:caption-mark">) {
-    if (p.callId !== this.callId) return
-    this.translators.mark(p.from, p)
-  }
-
   private sendCaption(segment: CaptionSegment) {
     const payload = { callId: this.callId, ...segment }
     if (this.socket?.connected && this.state.phase === "in-call")
@@ -604,8 +599,10 @@ export class CallSession {
       : (this.remote.get(p.from)?.user ??
         [...this.remote.values()].find((r) => r.user.id === p.userId)?.user)
     if (!user) return
-    if (!self) this.translators.source(p.from, p)
-    const translated = !self && this.translators.translates(p.from)
+    const translated =
+      !self && p.lang !== this.state.captions.lang && this.translator.enabled
+    if (translated && p.final)
+      this.translator.request(p.from, p.utteranceId, p.text)
     this.updateLine(`${p.userId}:${p.utteranceId}`, p.final, (existing) => ({
       user,
       self,
@@ -692,7 +689,7 @@ export class CallSession {
     const lines = this.state.captionLines.filter(
       (l) => l.at > now - CAPTION_VISIBLE_MS
     )
-    // a translation that never came (the speaker's audio dropped, translating failed)
+    // a translation that never came (translating failed or timed out)
     const stuck = (l: CaptionLine) =>
       !l.untranslated &&
       !l.translation &&

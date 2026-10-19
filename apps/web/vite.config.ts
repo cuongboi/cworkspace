@@ -2,6 +2,7 @@ import { resolve } from "node:path"
 import tailwindcss from "@tailwindcss/vite"
 import react from "@vitejs/plugin-react"
 import { defineConfig } from "vite"
+import * as fs from "node:fs"
 
 /** One chunk per npm package (scoped packages keep their scope); react-dom pulls in its scheduler. */
 // function vendorChunk(id: string) {
@@ -55,6 +56,12 @@ export default defineConfig({
           return path
         },
       },
+    },
+    host: '0.0.0.0',
+    port: 443,
+    https: {
+      key: fs.readFileSync('../../certs/local/localhost-key.pem'),
+      cert: fs.readFileSync('../../certs/local/localhost.pem'),
     },
   },
 })

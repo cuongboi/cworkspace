@@ -1,6 +1,7 @@
 import { env } from "@/env";
 import { db } from "@/lib/db";
 import {
+  CAPTION_PAIR,
   type CallPeer,
   type CallSummary,
   type CaptionPrefs,
@@ -521,7 +522,7 @@ export function registerCalls(socket: Conn) {
     });
   });
 
-  // Utterance boundaries of a speaker: readers translating them open/close their session.
+  // Utterance boundaries of a speaker: the start orders the transcript.
   socket.on("call:caption-mark", ({ callId, utteranceId, lang, state }) => {
     const id = String(callId);
     const peers = live.get(id);
@@ -534,11 +535,6 @@ export function registerCalls(socket: Conn) {
       const { starts } = captionsOf(id);
       starts.set(`${user.id}:${uid}`, Date.now());
       if (starts.size > MAX_OPEN_UTTERANCES) starts.delete(starts.keys().next().value!);
-    }
-    const mark = { callId: id, from: socket.id, utteranceId: uid, lang, state } as const;
-    for (const peer of peers.values()) {
-      if (peer.socketId !== socket.id && peer.captions.enabled)
-        emitToConn(peer.socketId, "call:caption-mark", mark);
     }
   });
 
@@ -642,7 +638,7 @@ function sanitizeMedia(media: MediaState | undefined): MediaState {
 function sanitizeCaptions(captions: CaptionPrefs | undefined): CaptionPrefs {
   return {
     enabled: Boolean(captions?.enabled),
-    lang: isCaptionLang(captions?.lang) ? captions.lang : "en",
+    lang: isCaptionLang(captions?.lang) ? captions.lang : CAPTION_PAIR[0],
   };
 }
 
