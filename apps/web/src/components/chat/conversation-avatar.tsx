@@ -68,7 +68,7 @@ export function ConversationAvatar({
         <UserAvatar
           user={b}
           size="sm"
-          className="absolute top-0 right-0 h-6 w-6 opacity-90"
+          className={"absolute top-0 right-0 h-6 w-6 opacity-90"}
         />
       ) : null}
       {a ? (

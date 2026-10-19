@@ -1,0 +1,33 @@
+{
+  "js/ts.tsdk.path": "node_modules/typescript/lib",
+  "js/ts.experimental.useTsgo": true,
+  "typescript.tsserver.experimental.useBundledNode": false,
+
+  "editor.tabSize": 2,
+  "[zmodel-v3]": {
+    "editor.defaultFormatter": "zenstack.zenstack-v3"
+  },
+  "files.associations": {
+    "*.zmodel": "zmodel-v3"
+  },
+
+  "[typescript]": {
+    "editor.tabSize": 2,
+    "editor.defaultFormatter": "vscode.typescript-language-features"
+  },
+
+  "editor.defaultFormatter": "oxc.oxc-vscode",
+  "editor.formatOnSave": true,
+
+  "css.customData": [".vscode/tailwind-directive.json"],
+  "search.exclude": {
+    "**/node_modules": false
+  },
+  "[typescriptreact]": {
+    "editor.defaultFormatter": "oxc.oxc-vscode",
+    "editor.formatOnSave": true
+  },
+  "[json]": {
+    "editor.defaultFormatter": "vscode.json-language-features"
+  }
+}

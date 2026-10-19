@@ -3,7 +3,6 @@ import {
   ChevronRightIcon,
   CompassIcon,
   HashIcon,
-  LayoutGridIcon,
   PlusIcon,
   SearchIcon,
 } from "lucide-react"
@@ -213,19 +212,6 @@ function ChannelList({ groupId, slug }: { groupId: string; slug: string }) {
   const tree = channelTree(data ?? [])
   return (
     <ul className="flex flex-col gap-px">
-      <li>
-        <Link
-          to={`/groups/${slug}`}
-          className={cn(
-            sidebarRowClass,
-            "pl-9 text-muted-foreground",
-            params.groupSlug === slug && !params.channelId && "text-foreground"
-          )}
-        >
-          <LayoutGridIcon className="size-3.5" />
-          <span className="truncate">Overview</span>
-        </Link>
-      </li>
       {tree.map((c) => (
         <li key={c.id}>
           <ChannelRow

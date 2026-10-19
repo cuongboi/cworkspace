@@ -30,6 +30,7 @@ export function ConversationInfoSheet({
           conversation={conversation}
           members={members}
           onLeft={() => onOpenChange(false)}
+          onPicked={() => onOpenChange(false)}
         />
       </SheetContent>
     </Sheet>

@@ -9,13 +9,15 @@ import {
 
 export type ThreadScrollHandle = {
   scrollToEnd: (options?: { behavior?: "auto" | "smooth" }) => void
+  /** scrolls to a message, loading older pages until it is found */
+  jumpTo: (messageId: string) => void
 }
 
 const ThreadScrollContext =
   createContext<RefObject<ThreadScrollHandle | null> | null>(null)
 
 /**
- * Lets siblings of the message list (the composer) drive its scroll position. The list owns the
+ * Lets siblings of the message list (the composer, message search) drive its scroll position. The list owns the
  * virtualizer and registers itself here with `useRegisterThreadScroll`.
  */
 export function ThreadScrollProvider({ children }: { children: ReactNode }) {
@@ -27,6 +29,7 @@ export function useThreadScroll(): ThreadScrollHandle {
   const handle = useContext(ThreadScrollContext)
   return {
     scrollToEnd: (options) => handle?.current?.scrollToEnd(options),
+    jumpTo: (messageId) => handle?.current?.jumpTo(messageId),
   }
 }
 

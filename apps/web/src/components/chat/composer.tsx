@@ -119,6 +119,7 @@ export function Composer({
       sender: { id: me.id, name: me.name, image: me.image ?? null },
       attachments,
       reactions: [],
+      integrationId: null,
       integration: null,
       replyTo: replyTo
         ? {

@@ -5,6 +5,7 @@ import {
   MessageCircleOffIcon,
   PanelRightIcon,
   PhoneIcon,
+  SearchIcon,
   UploadIcon,
   VideoIcon,
 } from "lucide-react"
@@ -46,7 +47,7 @@ import { useSocketEvent } from "@/hooks/use-socket"
 import { useUploads } from "@/hooks/use-uploads"
 import { ApiError, db } from "@/lib/api-client"
 import { useDbQuery } from "@/lib/query"
-import { chatInfoParser } from "@/lib/search-params"
+import { chatInfoParser, chatInfoTabParser } from "@/lib/search-params"
 import type { CallKind } from "@/lib/realtime-events"
 import type { ReactionType } from "@app/api/zenstack/models"
 import {
@@ -162,6 +163,12 @@ function ThreadView({
     variant === "page" && isWide
       ? void setInfoColumn(infoColumn ? false : null)
       : setInfoOpen(true)
+  const [, setInfoTab] = useQueryState("infoTab", chatInfoTabParser)
+  const openSearch = () => {
+    void setInfoTab("search")
+    if (variant === "page" && isWide) void setInfoColumn(null)
+    else setInfoOpen(true)
+  }
   const [toDelete, setToDelete] = useState<ChatMessage | null>(null)
   const [dragging, setDragging] = useState(false)
   const typing = useTypingUsers(conversation.id)
@@ -260,6 +267,7 @@ function ThreadView({
           crumbs={crumbs}
           infoShown={showColumn}
           onOpenInfo={toggleInfo}
+          onSearch={openSearch}
         />
         <MessageList
           conversation={conversation}
@@ -349,6 +357,7 @@ function ThreadHeader({
   crumbs,
   infoShown = false,
   onOpenInfo,
+  onSearch,
 }: {
   conversation: ThreadConversation
   members: ThreadMember[]
@@ -357,6 +366,7 @@ function ThreadHeader({
   crumbs?: ReactNode
   infoShown?: boolean
   onOpenInfo: () => void
+  onSearch: () => void
 }) {
   const { me } = useApp()
   const isMobile = useIsMobile()
@@ -407,9 +417,22 @@ function ThreadHeader({
             ) : null}
           </span>
         </button>
-        {actions ? (
-          <div className="flex shrink-0 items-center gap-1">{actions}</div>
-        ) : null}
+        <div className="flex shrink-0 items-center gap-1">
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                aria-label="Search in conversation"
+                onClick={onSearch}
+              >
+                <SearchIcon />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>Search in conversation</TooltipContent>
+          </Tooltip>
+          {actions}
+        </div>
       </header>
     )
   }
@@ -461,6 +484,19 @@ function ThreadHeader({
       </nav>
       <div className="flex shrink-0 items-center gap-0.5">
         {actions}
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              aria-label="Search in conversation"
+              onClick={onSearch}
+            >
+              <SearchIcon />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>Search in conversation</TooltipContent>
+        </Tooltip>
         <Tooltip>
           <TooltipTrigger asChild>
             <Button

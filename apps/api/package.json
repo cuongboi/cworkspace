@@ -12,7 +12,7 @@
     "dev": "dotenv -e ../../.env -- bun run --watch src/index.ts",
     "zen": "dotenv -e ../../.env -- zen",
     "db:generate": "bun run zen generate",
-    "db:push": "bun run zen db push",
+    "db:push": "dotenv -e ../../.env -- zen db push && dotenv -e ../../.env -- bun ./src/server/search-indexes.ts",
     "build": "bun build ./src/index.ts --compile --minify --asset ./src/public --outfile ../../run-server",
     "lint": "oxlint .",
     "lint:fix": "oxlint . --fix",

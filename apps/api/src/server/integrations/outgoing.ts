@@ -123,7 +123,7 @@ async function deliver(
     const body = JSON.stringify(payload);
     const secret = decryptSecret(integration.secretCipher);
     for (let attempt = 0; attempt <= RETRIES; attempt++) {
-      if (attempt) await Bun.sleep(500 * 2 ** attempt);
+      if (attempt) await new Promise((r) => setTimeout(r, 500 * 2 ** attempt));
       const ts = String(Math.floor(Date.now() / 1000));
       try {
         const res = await fetch(url, {

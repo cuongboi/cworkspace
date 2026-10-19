@@ -182,6 +182,48 @@ export function fetchMessages(
   })
 }
 
+export const messageSearchKey = (conversationId: string, q: string) =>
+  ["message", "search", conversationId, q] as const
+
+/** Full-text match on whole words, plus a substring match for partial words. */
+/** Full-text match (index-backed) plus a substring fallback for partial words. */
+export function messageSearchWhere(q: string) {
+  return {
+    deletedAt: null,
+    type: { in: ["TEXT", "BOT"] as ("TEXT" | "BOT")[] },
+    OR: [
+      { content: { fts: { search: q, config: "simple" as const } } },
+      { content: { contains: q, mode: "insensitive" as const } },
+    ],
+  }
+}
+
+export function searchMessages(
+  conversationId: string,
+  q: string,
+  cursor: string | undefined
+) {
+  return db.message.findMany({
+    where: {
+      conversationId,
+      ...messageSearchWhere(q),
+    },
+    orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+    take: MESSAGE_PAGE_SIZE,
+    ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
+    select: {
+      id: true,
+      content: true,
+      createdAt: true,
+      sender: { select: { id: true, name: true, image: true } },
+    },
+  })
+}
+
+export type MessageSearchHit = Awaited<
+  ReturnType<typeof searchMessages>
+>[number]
+
 export function fetchMessage(id: string) {
   return db.message.findUnique({ where: { id }, include: messageInclude })
 }

@@ -1736,7 +1736,8 @@ export class SchemaType implements SchemaDef {
                 content: {
                     name: "content",
                     type: "String",
-                    attributes: [{ name: "@default", args: [{ name: "value", value: ExpressionUtils.literal("") }] }] as readonly AttributeApplication[],
+                    fullText: true,
+                    attributes: [{ name: "@default", args: [{ name: "value", value: ExpressionUtils.literal("") }] }, { name: "@fullText" }] as readonly AttributeApplication[],
                     default: "" as FieldDefault
                 },
                 type: {

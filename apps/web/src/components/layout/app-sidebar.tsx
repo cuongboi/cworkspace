@@ -13,6 +13,7 @@ import { useApp } from "@/hooks/use-app"
 import { db } from "@/lib/api-client"
 import { useDbQuery } from "@/lib/query"
 import { cn } from "@/lib/utils"
+import { UserMenu } from "./user-menu"
 
 /** Unread conversations: last message newer than my read marker. */
 function useUnreadChats() {
@@ -81,6 +82,9 @@ export function AppSidebar({ className }: { className?: string }) {
       {nav.map((item) => (
         <NavButton key={item.path} item={item} active={isActive(item.path)} />
       ))}
+      <div className="mt-auto flex justify-center pt-2">
+        <UserMenu side="right" align="end" />
+      </div>
     </nav>
   )
 }

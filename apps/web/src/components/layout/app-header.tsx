@@ -1,44 +1,20 @@
-import {
-  ChevronLeftIcon,
-  ChevronRightIcon,
-  LogOutIcon,
-  MenuIcon,
-  MonitorIcon,
-  MoonIcon,
-  SearchIcon,
-  SunIcon,
-  UserIcon,
-} from "lucide-react"
-import { Link, useNavigate, useSearchParams } from "react-router-dom"
-import { useEffect, useRef, useState } from "react"
-import { UserAvatar } from "@/components/common/user-avatar"
+import { ChevronLeftIcon, ChevronRightIcon, MenuIcon } from "lucide-react"
+import { Link, useNavigate } from "react-router-dom"
 import { NotificationBell } from "@/components/notifications/notification-bell"
-import { useTheme } from "@/components/theme-provider"
 import { Button } from "@/components/ui/button"
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuRadioGroup,
-  DropdownMenuRadioItem,
-  DropdownMenuSeparator,
-  DropdownMenuSub,
-  DropdownMenuSubContent,
-  DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { Input } from "@/components/ui/input"
-import { useApp } from "@/hooks/use-app"
-import { authClient } from "@/lib/auth-client"
-import { disablePush } from "@/lib/push"
 import { COMPANY_NAME } from "@/lib/company"
 import { useIsNavActive, useNavItems } from "./app-sidebar"
+import { GlobalSearch } from "./global-search"
+import { UserMenu } from "./user-menu"
 
 export function AppHeader() {
   const navigate = useNavigate()
-  const [searchParams] = useSearchParams()
-  const q = searchParams.get("q") ?? ""
 
   return (
     <header className="flex h-12 shrink-0 items-center gap-2 px-2 md:px-3">
@@ -71,51 +47,13 @@ export function AppHeader() {
             <ChevronRightIcon />
           </Button>
         </div>
-        {/* re-mount when ?q= changes so the box follows the URL */}
-        <SearchForm key={q} initial={q} />
+        <GlobalSearch />
       </div>
       <div className="flex shrink-0 items-center gap-1">
         <NotificationBell />
-        <UserMenu />
+        <UserMenu className="md:hidden" />
       </div>
     </header>
-  )
-}
-
-function SearchForm({ initial }: { initial: string }) {
-  const navigate = useNavigate()
-  const [q, setQ] = useState(initial)
-  const inputRef = useRef<HTMLInputElement>(null)
-
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "e") {
-        e.preventDefault()
-        inputRef.current?.focus()
-      }
-    }
-    window.addEventListener("keydown", onKey)
-    return () => window.removeEventListener("keydown", onKey)
-  }, [])
-
-  return (
-    <form
-      className="relative w-full max-w-xl"
-      onSubmit={(e) => {
-        e.preventDefault()
-        if (q.trim()) void navigate(`/search?q=${encodeURIComponent(q.trim())}`)
-      }}
-    >
-      <SearchIcon className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
-      <Input
-        ref={inputRef}
-        value={q}
-        onChange={(e) => setQ(e.target.value)}
-        placeholder="Search (Ctrl+E)"
-        className="h-8 bg-card pl-8 shadow-none"
-        aria-label="Search"
-      />
-    </form>
   )
 }
 
@@ -152,68 +90,6 @@ function MobileNav() {
             ) : null}
           </DropdownMenuItem>
         ))}
-      </DropdownMenuContent>
-    </DropdownMenu>
-  )
-}
-
-function UserMenu() {
-  const { me } = useApp()
-  const navigate = useNavigate()
-  const { theme, setTheme } = useTheme()
-  return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <button type="button" className="rounded-full" aria-label="Account">
-          <UserAvatar
-            user={{ id: me.id, name: me.name, image: me.image ?? null }}
-            size="sm"
-            presence
-          />
-        </button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent className="min-w-56" align="end">
-        <DropdownMenuLabel className="grid leading-tight">
-          <span className="truncate font-medium">{me.name}</span>
-          <span className="truncate text-xs font-normal text-muted-foreground">
-            {me.email}
-          </span>
-        </DropdownMenuLabel>
-        <DropdownMenuSeparator />
-        <DropdownMenuItem onSelect={() => navigate(`/people/${me.id}`)}>
-          <UserIcon />
-          Profile
-        </DropdownMenuItem>
-        <DropdownMenuSub>
-          <DropdownMenuSubTrigger>
-            <SunIcon />
-            Theme
-          </DropdownMenuSubTrigger>
-          <DropdownMenuSubContent>
-            <DropdownMenuRadioGroup value={theme} onValueChange={setTheme}>
-              <DropdownMenuRadioItem value="light">
-                <SunIcon /> Light
-              </DropdownMenuRadioItem>
-              <DropdownMenuRadioItem value="dark">
-                <MoonIcon /> Dark
-              </DropdownMenuRadioItem>
-              <DropdownMenuRadioItem value="system">
-                <MonitorIcon /> System
-              </DropdownMenuRadioItem>
-            </DropdownMenuRadioGroup>
-          </DropdownMenuSubContent>
-        </DropdownMenuSub>
-        <DropdownMenuSeparator />
-        <DropdownMenuItem
-          onSelect={async () => {
-            await disablePush().catch(() => {})
-            await authClient.signOut()
-            window.location.href = "/sign-in"
-          }}
-        >
-          <LogOutIcon />
-          Sign out
-        </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
   )

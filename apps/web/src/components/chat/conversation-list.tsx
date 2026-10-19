@@ -92,20 +92,20 @@ export function ConversationList({ activeId }: { activeId?: string }) {
     icon: ReactNode
     count?: number
   }[] = [
-    { value: "all", label: "All chats", icon: <MessagesSquareIcon /> },
-    {
-      value: "unread",
-      label: "Unread",
-      icon: <InboxIcon />,
-      count: unreadCount,
-    },
-    {
-      value: "muted",
-      label: "Muted",
-      icon: <BellOffIcon />,
-      count: mutedCount,
-    },
-  ]
+      { value: "all", label: "All chats", icon: <MessagesSquareIcon /> },
+      {
+        value: "unread",
+        label: "Unread",
+        icon: <InboxIcon />,
+        count: unreadCount,
+      },
+      {
+        value: "muted",
+        label: "Muted",
+        icon: <BellOffIcon />,
+        count: mutedCount,
+      },
+    ]
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-muted/40">

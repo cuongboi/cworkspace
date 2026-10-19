@@ -14,14 +14,16 @@ export type ErrorCode =
   | "INTERNAL";
 
 export class HttpError extends Error {
-  constructor(
-    readonly status: number,
-    readonly code: ErrorCode,
-    message: string,
-    readonly details?: unknown,
-  ) {
+  readonly status: number;
+  readonly code: ErrorCode;
+  readonly details?: unknown;
+
+  constructor(status: number, code: ErrorCode, message: string, details?: unknown) {
     super(message);
     this.name = "HttpError";
+    this.status = status;
+    this.code = code;
+    this.details = details;
   }
 }
 

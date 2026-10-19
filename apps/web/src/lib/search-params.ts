@@ -15,10 +15,12 @@ export const chatFilterParser =
 
 /** Chat details column (desktop) / sheet (mobile) and its active tab. */
 export const chatInfoParser = parseAsBoolean.withDefault(true)
-export const chatInfoTabs = ["info", "files", "members"] as const
+export const chatInfoTabs = ["info", "files", "members", "search"] as const
 export type ChatInfoTab = (typeof chatInfoTabs)[number]
 export const chatInfoTabParser =
   parseAsStringLiteral(chatInfoTabs).withDefault("info")
+/** Search query inside the open conversation (the details "search" tab). */
+export const chatSearchParser = parseAsString.withDefault("")
 
 /** Channel settings dialog (open on a tab) in a group channel. */
 export const channelSettingsParser = parseAsStringLiteral([

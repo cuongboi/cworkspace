@@ -1,0 +1,53 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "type": "node",
+      "request": "launch",
+      "name": "Debug API (Bun)",
+      "runtimeExecutable": "bun",
+      "runtimeArgs": ["run", "--watch", "--inspect-wait", "src/index.ts"],
+      "cwd": "${workspaceFolder}/apps/api",
+      "envFile": "${workspaceFolder}/.env",
+      "console": "integratedTerminal",
+      "skipFiles": ["<node_internals>/**"]
+    },
+    {
+      "type": "node",
+      "request": "attach",
+      "name": "Attach to API (Bun Port 6499)",
+      "port": 6499,
+      "restart": true,
+      "cwd": "${workspaceFolder}/apps/api",
+      "skipFiles": ["<node_internals>/**"]
+    },
+    {
+      "type": "chrome",
+      "request": "launch",
+      "name": "Debug Web (Chrome)",
+      "url": "https://localhost",
+      "webRoot": "${workspaceFolder}/apps/web",
+      "sourceMaps": true,
+      "sourceMapPathOverrides": {
+        "/@fs/*": "/*",
+        "src/*": "${workspaceFolder}/apps/web/src/*"
+      }
+    },
+    {
+      "type": "chrome",
+      "request": "attach",
+      "name": "Attach to Web (Chrome Port 9222)",
+      "port": 9222,
+      "url": "https://localhost",
+      "webRoot": "${workspaceFolder}/apps/web",
+      "sourceMaps": true
+    }
+  ],
+  "compounds": [
+    {
+      "name": "Debug Full Stack (API + Web)",
+      "configurations": ["Debug API (Bun)", "Debug Web (Chrome)"],
+      "stopAll": true
+    }
+  ]
+}

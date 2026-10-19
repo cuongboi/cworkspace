@@ -75,22 +75,22 @@ Setup: `bun install` → `cp .env.example .env` → `docker compose up -d` (Mini
 
 Read env **only** through `env` from `@/env`. When adding a key, add it to `src/env.ts` and `.env.example`.
 
-| Variable                                                                            | Required              | Default                                       |
-| ----------------------------------------------------------------------------------- | --------------------- | --------------------------------------------- |
-| `DATABASE_URL`                                                                      | yes                   | —                                             |
-| `BETTER_AUTH_SECRET`                                                                | yes                   | —                                             |
-| `BETTER_AUTH_URL`                                                                   | no                    | `http://localhost:3000`                       |
-| `BETTER_AUTH_BASE_PATH`                                                             | no                    | `/api/auth`                                   |
-| `WEB_ORIGIN`                                                                        | no                    | `http://localhost:5173` (comma-separated)     |
-| `APP_URL`                                                                           | no                    | first `WEB_ORIGIN` (links in emails)          |
-| `RESEND_API_KEY`, `MAIL_FROM`                                                       | no                    | unset → emails are printed to the API console |
-| `S3_ENDPOINT`, `S3_REGION`, `S3_BUCKET`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY` | for uploads           | unset → uploads answer 502 `UPSTREAM_ERROR`   |
-| `STUN_URLS`, `TURN_URLS`, `TURN_SECRET`                                             | for calls across NATs | Google STUN, no TURN                          |
-| `GEMINI_API_KEY`, `GEMINI_TRANSCRIBE_MODEL`, `GEMINI_TRANSLATE_MODEL`              | for live captions     | unset → captions off                          |
-| `FIREBASE_PROJECT_ID`, `FIREBASE_CLIENT_EMAIL`, `FIREBASE_PRIVATE_KEY`, `FIREBASE_API_KEY`, `FIREBASE_APP_ID`, `FIREBASE_MESSAGING_SENDER_ID`, `FIREBASE_VAPID_KEY` | for background push | unset → push off |
-| `TRUST_PROXY`, `ALLOW_PRIVATE_WEBHOOKS`                                             | no                    | `false` (channel integrations: trust `X-Forwarded-For`; let outgoing webhooks reach private hosts in dev) |
-| `VITE_BETTER_AUTH_URL`                                                              | no                    | —                                             |
-| `DB_LOG_QUERIES`                                                                    | no                    | `false`                                       |
+| Variable                                                                                                                                                            | Required              | Default                                                                                                   |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------- | --------------------------------------------------------------------------------------------------------- |
+| `DATABASE_URL`                                                                                                                                                      | yes                   | —                                                                                                         |
+| `BETTER_AUTH_SECRET`                                                                                                                                                | yes                   | —                                                                                                         |
+| `BETTER_AUTH_URL`                                                                                                                                                   | no                    | `http://localhost:3000`                                                                                   |
+| `BETTER_AUTH_BASE_PATH`                                                                                                                                             | no                    | `/api/auth`                                                                                               |
+| `WEB_ORIGIN`                                                                                                                                                        | no                    | `http://localhost:5173` (comma-separated)                                                                 |
+| `APP_URL`                                                                                                                                                           | no                    | first `WEB_ORIGIN` (links in emails)                                                                      |
+| `RESEND_API_KEY`, `MAIL_FROM`                                                                                                                                       | no                    | unset → emails are printed to the API console                                                             |
+| `S3_ENDPOINT`, `S3_REGION`, `S3_BUCKET`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`                                                                                 | for uploads           | unset → uploads answer 502 `UPSTREAM_ERROR`                                                               |
+| `STUN_URLS`, `TURN_URLS`, `TURN_SECRET`                                                                                                                             | for calls across NATs | Google STUN, no TURN                                                                                      |
+| `GEMINI_API_KEY`, `GEMINI_TRANSCRIBE_MODEL`, `GEMINI_TRANSLATE_MODEL`                                                                                               | for live captions     | unset → captions off                                                                                      |
+| `FIREBASE_PROJECT_ID`, `FIREBASE_CLIENT_EMAIL`, `FIREBASE_PRIVATE_KEY`, `FIREBASE_API_KEY`, `FIREBASE_APP_ID`, `FIREBASE_MESSAGING_SENDER_ID`, `FIREBASE_VAPID_KEY` | for background push   | unset → push off                                                                                          |
+| `TRUST_PROXY`, `ALLOW_PRIVATE_WEBHOOKS`                                                                                                                             | no                    | `false` (channel integrations: trust `X-Forwarded-For`; let outgoing webhooks reach private hosts in dev) |
+| `VITE_BETTER_AUTH_URL`                                                                                                                                              | no                    | —                                                                                                         |
+| `DB_LOG_QUERIES`                                                                                                                                                    | no                    | `false`                                                                                                   |
 
 ## Data model & access control
 
@@ -227,3 +227,5 @@ The binary serves API, auth, WebSocket, and SPA (with deep-link fallback) from o
 - Register routes after `staticPlugin`.
 - Call `fetch` directly from web components.
 - Run analyze code base or test, ask me for permission.
+
+## Important: Do not use claude-flow

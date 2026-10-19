@@ -67,6 +67,7 @@ import {
   type ThreadMember,
 } from "./chat-data"
 import { ConversationAvatar } from "./conversation-avatar"
+import { MessageSearch } from "./message-search"
 import { PeoplePicker, type PickedUser } from "./people-picker"
 
 const FOREVER = new Date("9999-12-31T00:00:00.000Z")
@@ -87,6 +88,8 @@ type Props = {
   members: ThreadMember[]
   /** called after leaving, so a sheet host can close itself */
   onLeft?: () => void
+  /** called after jumping to a search hit, so a sheet host can close itself */
+  onPicked?: () => void
 }
 
 /** Conversation details: Info · Files · Members. Rendered as a column (desktop) or in a sheet. */
@@ -94,6 +97,7 @@ export function ConversationInfoPanel({
   conversation,
   members,
   onLeft,
+  onPicked,
 }: Props) {
   const { me } = useApp()
   const [tab, setTab] = useQueryState("infoTab", chatInfoTabParser)
@@ -137,8 +141,11 @@ export function ConversationInfoPanel({
           <TabsTrigger value="files" className="text-[11px]">
             Files
           </TabsTrigger>
-          <TabsTrigger value="members" className="text-[11px]">
+          <TabsTrigger value="members" className="text-[11px]" disabled={!isGroup}>
             Members
+          </TabsTrigger>
+          <TabsTrigger value="search" className="text-[11px]">
+            Search
           </TabsTrigger>
         </TabsList>
       </div>
@@ -156,6 +163,9 @@ export function ConversationInfoPanel({
           </TabsContent>
           <TabsContent value="members">
             <MembersTab conversation={conversation} members={members} />
+          </TabsContent>
+          <TabsContent value="search">
+            <MessageSearch conversationId={conversation.id} onPick={onPicked} />
           </TabsContent>
         </div>
       </ScrollArea>

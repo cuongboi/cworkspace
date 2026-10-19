@@ -8,7 +8,14 @@ import {
   isYesterday,
 } from "date-fns"
 import { ArrowDownIcon } from "lucide-react"
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react"
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import { Marker, MarkerContent } from "@/components/ui/marker"
@@ -35,6 +42,8 @@ const GROUP_WINDOW_MIN = 5
 const TIME_GAP_MIN = 60
 /** the "beginning of the conversation" / loading strip above the first message */
 const STATUS_ROW_HEIGHT = 48
+// pages loaded backwards looking for a jump target before giving up
+const MAX_JUMP_PAGES = 20
 
 function dayLabel(d: Date) {
   if (isToday(d)) return "Today"
@@ -139,12 +148,6 @@ function Thread({
   const atEnd = virtualizer.isAtEnd(200)
   const visibleEnd = virtualizer.range?.endIndex ?? -1
 
-  const scrollHandle = useMemo<ThreadScrollHandle>(
-    () => ({ scrollToEnd: (options) => virtualizer.scrollToEnd(options) }),
-    [virtualizer]
-  )
-  useRegisterThreadScroll(scrollHandle)
-
   // open at the newest message; hidden for a frame so the jump from the top isn't visible
   useLayoutEffect(() => {
     if (!viewport) return
@@ -165,17 +168,41 @@ function Thread({
     return () => clearTimeout(t)
   }, [highlight])
 
-  const jumpTo = (id: string) => {
-    const index = messages.findIndex((m) => m.id === id)
-    if (index === -1) {
+  // a jump to a message not loaded yet: page back until it appears (or history ends)
+  const [pendingJump, setPendingJump] = useState<string | null>(null)
+  const jumpPages = useRef(0)
+  useEffect(() => {
+    if (!pendingJump) return
+    const index = messages.findIndex((m) => m.id === pendingJump)
+    if (index !== -1) {
+      virtualizer.scrollToIndex(index, { align: "center", behavior: "smooth" })
+      setHighlight(pendingJump)
+      setPendingJump(null)
+    } else if (hasOlder && jumpPages.current < MAX_JUMP_PAGES) {
+      if (loadingOlder) return
+      jumpPages.current += 1
+      loadOlder()
+    } else {
       toast("That message is further back in the conversation", {
         description: "Scroll up to load older messages.",
       })
-      return
+      setPendingJump(null)
     }
-    virtualizer.scrollToIndex(index, { align: "center", behavior: "smooth" })
-    setHighlight(id)
-  }
+  }, [pendingJump, messages, hasOlder, loadingOlder, loadOlder, virtualizer])
+
+  const jumpTo = useCallback((id: string) => {
+    jumpPages.current = 0
+    setPendingJump(id)
+  }, [])
+
+  const scrollHandle = useMemo<ThreadScrollHandle>(
+    () => ({
+      scrollToEnd: (options) => virtualizer.scrollToEnd(options),
+      jumpTo,
+    }),
+    [virtualizer, jumpTo]
+  )
+  useRegisterThreadScroll(scrollHandle)
 
   useMarkRead(conversation.id, messages, myLastReadAt, visibleEnd)
 
@@ -230,9 +257,12 @@ function Thread({
         role="log"
         aria-label="Messages"
         className={cn(
-          "flex size-full min-h-0 min-w-0 scrollbar-thin scrollbar-gutter-stable flex-col overflow-y-auto overscroll-contain [overflow-anchor:none]",
+          "flex scrollbar-thin size-full min-h-0 min-w-0 scrollbar-gutter-stable flex-col overflow-y-auto overscroll-contain [overflow-anchor:none]",
           !ready && "invisible"
         )}
+        style={{
+          scrollbarWidth: "unset",
+        }}
         onScroll={(e) => {
           if (
             ready &&
