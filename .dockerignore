@@ -1,0 +1,12 @@
+node_modules
+**/node_modules
+.git
+.github
+.env*
+!.env.example
+run-server*
+apps/api/src/public
+apps/web/dist
+**/.turbo
+certs
+apps/api/certs
