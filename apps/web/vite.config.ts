@@ -13,7 +13,7 @@ import * as fs from "node:fs"
 // }
 
 // https://vite.dev/config/
-export default defineConfig({
+export default defineConfig(({ command }) => ({
   plugins: [react(), tailwindcss()],
   resolve: {
     alias: {
@@ -57,11 +57,18 @@ export default defineConfig({
         },
       },
     },
-    host: '0.0.0.0',
-    port: 443,
-    https: {
-      key: fs.readFileSync('../../certs/local/localhost-key.pem'),
-      cert: fs.readFileSync('../../certs/local/localhost.pem'),
-    },
+    ...devHttps(command),
   },
-})
+}))
+
+/** Local HTTPS on :443 for `vite dev` only, and only when the dev certs exist; builds and other machines skip it. */
+function devHttps(command: "build" | "serve") {
+  const key = resolve(import.meta.dirname, "../../certs/local/localhost-key.pem")
+  const cert = resolve(import.meta.dirname, "../../certs/local/localhost.pem")
+  if (command !== "serve" || !fs.existsSync(key) || !fs.existsSync(cert)) return {}
+  return {
+    host: "0.0.0.0",
+    port: 443,
+    https: { key: fs.readFileSync(key), cert: fs.readFileSync(cert) },
+  }
+}

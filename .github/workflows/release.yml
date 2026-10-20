@@ -1,0 +1,41 @@
+name: Release
+on:
+  push:
+    branches: [main]
+permissions:
+  contents: write
+concurrency:
+  group: release
+  cancel-in-progress: false
+jobs:
+  release:
+    # bumpp's own release commit must not re-trigger the workflow
+    if: "!startsWith(github.event.head_commit.message, 'chore: release')"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - uses: oven-sh/setup-bun@v2
+        with: { bun-version: 1.4.3 }
+      - run: bun install --frozen-lockfile
+      - name: Build SPA + Linux binary
+        run: bun run build            # web build → apps/api/src/public, then bun --compile → ./run-server
+      - name: Bump version, commit, tag, push
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          bunx bumpp apps/api/package.json --release patch --yes \
+            --commit "chore: release v%s" --tag "v%s" --push
+          echo "VERSION=$(jq -r .version apps/api/package.json)" >> "$GITHUB_ENV"
+      - name: Package
+        run: |
+          mv run-server run-server-linux-x64
+          tar -czf run-server-linux-x64.tar.gz run-server-linux-x64
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ env.VERSION }}
+          name: v${{ env.VERSION }}
+          generate_release_notes: true
+          files: |
+            run-server-linux-x64
+            run-server-linux-x64.tar.gz

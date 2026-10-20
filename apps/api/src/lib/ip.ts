@@ -1,4 +1,4 @@
-import { env } from "@/env";
+import { env } from "../env";
 import { isIP } from "node:net";
 
 /** IPv4 and IPv6 addresses as bigints, for CIDR checks (IPv4-mapped IPv6 is treated as IPv4). */
