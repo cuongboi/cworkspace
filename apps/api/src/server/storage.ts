@@ -27,8 +27,17 @@ const s3 = new S3Client({
   },
 });
 
-export function presignUpload(key: string, mimeType: string, size: number) {
-  return createPresignedPost(s3, {
+// Signatures cover the internal host and path; the proxy restores both before MinIO checks them.
+function toPublic(url: string) {
+  if (!env.S3_PUBLIC_URL || !env.S3_ENDPOINT) return url;
+  const internal = env.S3_ENDPOINT.replace(/\/$/, "");
+  return url.startsWith(internal)
+    ? env.S3_PUBLIC_URL.replace(/\/$/, "") + url.slice(internal.length)
+    : url;
+}
+
+export async function presignUpload(key: string, mimeType: string, size: number) {
+  const post = await createPresignedPost(s3, {
     Bucket: bucket,
     Key: key,
     // the signed policy pins the exact key, type and size the API validated
@@ -39,11 +48,12 @@ export function presignUpload(key: string, mimeType: string, size: number) {
     Fields: { "Content-Type": mimeType },
     Expires: 300,
   });
+  return { ...post, url: toPublic(post.url) };
 }
 
-export function presignDownload(key: string, fileName: string, inline: boolean) {
+export async function presignDownload(key: string, fileName: string, inline: boolean) {
   const disposition = `${inline ? "inline" : "attachment"}; filename*=UTF-8''${encodeURIComponent(fileName)}`;
-  return getSignedUrl(
+  const url = await getSignedUrl(
     s3,
     new GetObjectCommand({
       Bucket: bucket,
@@ -52,4 +62,5 @@ export function presignDownload(key: string, fileName: string, inline: boolean) 
     }),
     { expiresIn: 300 },
   );
+  return toPublic(url);
 }

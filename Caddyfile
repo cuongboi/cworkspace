@@ -1,0 +1,22 @@
+{
+	servers {
+		# HTTP/3 rides on QUIC (443/udp); browsers find it via the Alt-Svc header sent over h1/h2.
+		protocols h1 h2 h3
+	}
+}
+
+# DOMAIN=chat.example.com → automatic Let's Encrypt cert; DOMAIN=localhost → Caddy's internal CA.
+{$DOMAIN} {
+	encode zstd gzip
+
+	# MinIO (presigned uploads/downloads). Signatures cover host + path, so strip /s3 and
+	# restore the internal Host the API signed with.
+	handle_path /s3/* {
+		reverse_proxy 127.0.0.1:9000 {
+			header_up Host 127.0.0.1:9000
+		}
+	}
+
+	# Covers the API, /ws (WebSocket upgrades pass through) and the SPA.
+	reverse_proxy 127.0.0.1:3000
+}

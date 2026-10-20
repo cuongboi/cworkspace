@@ -38,6 +38,8 @@ export const env = {
 
   // File storage: any S3-compatible bucket (AWS S3, R2, MinIO). Uploads are disabled when unset.
   S3_ENDPOINT: read("S3_ENDPOINT", ""),
+  /** Public base that replaces S3_ENDPOINT in presigned URLs (e.g. https://host/s3 behind Caddy). */
+  S3_PUBLIC_URL: read("S3_PUBLIC_URL", ""),
   S3_REGION: read("S3_REGION", "auto"),
   S3_BUCKET: read("S3_BUCKET", ""),
   S3_ACCESS_KEY_ID: read("S3_ACCESS_KEY_ID", ""),
