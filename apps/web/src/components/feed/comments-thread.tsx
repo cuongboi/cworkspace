@@ -6,6 +6,7 @@ import {
 } from "lucide-react"
 import { Link } from "react-router-dom"
 import { type ClipboardEvent, useRef, useState } from "react"
+import { useTranslation } from "react-i18next"
 import { toast } from "sonner"
 import { AttachmentList } from "@/components/common/attachment-list"
 import { MentionTextarea } from "@/components/common/mention-textarea"
@@ -24,6 +25,7 @@ import { Spinner } from "@/components/ui/spinner"
 import { useApp } from "@/hooks/use-app"
 import { useUploads } from "@/hooks/use-uploads"
 import { db } from "@/lib/api-client"
+import { errorMessage } from "@/lib/i18n"
 import { formatMention } from "@/lib/mentions"
 import { useDbMutation, useDbQuery } from "@/lib/query"
 import type { ReactionType } from "@app/api/zenstack/models"
@@ -45,6 +47,7 @@ export function CommentsThread({
   post: FeedPost
   autoFocus?: boolean
 }) {
+  const { t } = useTranslation()
   const { me } = useApp()
   const { data: comments, isPending } = useDbQuery(
     ["comment", "findMany", "post", post.id],
@@ -103,7 +106,9 @@ export function CommentsThread({
                     parentId={c.id}
                     initial={replyTo.mention}
                     autoFocus
-                    placeholder={`Reply to ${c.author.name}…`}
+                    placeholder={t("feed.comments.replyTo", {
+                      name: c.author.name,
+                    })}
                     onDone={() => setReplyTo(null)}
                   />
                 ) : null}
@@ -115,7 +120,7 @@ export function CommentsThread({
       <CommentComposer
         postId={post.id}
         autoFocus={autoFocus}
-        placeholder="Write a comment…"
+        placeholder={t("feed.comments.placeholder")}
       />
     </div>
   )
@@ -130,6 +135,7 @@ function CommentItem({
   post: FeedPost
   onReply: () => void
 }) {
+  const { t } = useTranslation()
   const { me } = useApp()
   const canModerate = useCanModerate(post)
   const [editing, setEditing] = useState(false)
@@ -180,7 +186,7 @@ function CommentItem({
     if (!content) return
     save.mutate(content, {
       onSuccess: () => setEditing(false),
-      onError: (err) => toast.error(err.message),
+      onError: (err) => toast.error(errorMessage(err)),
     })
   }
 
@@ -201,7 +207,7 @@ function CommentItem({
               }}
               rows={2}
               autoFocus
-              aria-label="Edit comment"
+              aria-label={t("feed.comments.edit")}
             />
             <div className="flex gap-2 text-xs">
               <Button
@@ -209,14 +215,14 @@ function CommentItem({
                 onClick={submitEdit}
                 disabled={save.isPending || !draft.trim()}
               >
-                Save
+                {t("common.save")}
               </Button>
               <Button
                 size="xs"
                 variant="ghost"
                 onClick={() => setEditing(false)}
               >
-                Cancel
+                {t("common.cancel")}
               </Button>
             </div>
           </div>
@@ -247,7 +253,7 @@ function CommentItem({
                     variant="ghost"
                     size="icon-xs"
                     className="mt-1 text-muted-foreground opacity-100 group-hover/comment:opacity-100 focus-visible:opacity-100 aria-expanded:opacity-100 md:opacity-0"
-                    aria-label="Comment actions"
+                    aria-label={t("feed.comments.actions")}
                   >
                     <MoreHorizontalIcon />
                   </Button>
@@ -260,7 +266,7 @@ function CommentItem({
                         setEditing(true)
                       }}
                     >
-                      Edit
+                      {t("common.edit")}
                     </DropdownMenuItem>
                   ) : null}
                   {canDelete ? (
@@ -268,11 +274,11 @@ function CommentItem({
                       variant="destructive"
                       onSelect={() =>
                         remove.mutate(undefined, {
-                          onError: (err) => toast.error(err.message),
+                          onError: (err) => toast.error(errorMessage(err)),
                         })
                       }
                     >
-                      Delete
+                      {t("common.delete")}
                     </DropdownMenuItem>
                   ) : null}
                 </DropdownMenuContent>
@@ -292,7 +298,7 @@ function CommentItem({
               onChange={(type) => {
                 setPendingReaction(type)
                 react.mutate(type, {
-                  onError: (err) => toast.error(err.message),
+                  onError: (err) => toast.error(errorMessage(err)),
                   onSettled: () => setPendingReaction(undefined),
                 })
               }}
@@ -302,14 +308,14 @@ function CommentItem({
               className="font-semibold text-muted-foreground hover:underline"
               onClick={onReply}
             >
-              Reply
+              {t("feed.comments.reply")}
             </button>
             <TimeAgo
               date={comment.createdAt}
               className="text-muted-foreground"
             />
             {comment.editedAt ? (
-              <span className="text-muted-foreground">Edited</span>
+              <span className="text-muted-foreground">{t("feed.edited")}</span>
             ) : null}
           </div>
         ) : null}
@@ -333,6 +339,7 @@ export function CommentComposer({
   placeholder?: string
   onDone?: () => void
 }) {
+  const { t } = useTranslation()
   const { me } = useApp()
   const [content, setContent] = useState(initial)
   const uploads = useUploads()
@@ -363,7 +370,7 @@ export function CommentComposer({
           uploads.reset()
           onDone?.()
         },
-        onError: (err) => toast.error(err.message),
+        onError: (err) => toast.error(errorMessage(err)),
       }
     )
   }
@@ -390,7 +397,7 @@ export function CommentComposer({
             rows={1}
             autoFocus={autoFocus}
             placeholder={placeholder}
-            aria-label={placeholder ?? "Write a comment"}
+            aria-label={placeholder ?? t("feed.comments.placeholder")}
             className="min-h-8 border-0 bg-transparent px-1 py-1.5 shadow-none focus-visible:ring-0 dark:bg-transparent"
           />
           <input
@@ -407,7 +414,7 @@ export function CommentComposer({
             variant="ghost"
             size="icon-sm"
             className="shrink-0 text-muted-foreground"
-            aria-label="Attach files"
+            aria-label={t("feed.attachFiles")}
             onClick={() => fileRef.current?.click()}
           >
             <PaperclipIcon />
@@ -419,7 +426,7 @@ export function CommentComposer({
               "shrink-0",
               canSend ? "text-primary" : "text-muted-foreground"
             )}
-            aria-label="Send comment"
+            aria-label={t("feed.comments.send")}
             disabled={!canSend || create.isPending}
             onClick={submit}
           >

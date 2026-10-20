@@ -1,4 +1,5 @@
 import { ArrowLeftIcon, FileQuestionIcon } from "lucide-react"
+import { useTranslation } from "react-i18next"
 import { Link, useNavigate, useParams } from "react-router-dom"
 import { FeedShell } from "@/components/feed/feed-shell"
 import { PostCard, PostSkeleton } from "@/components/feed/post-card"
@@ -20,6 +21,7 @@ import { useDbQuery } from "@/lib/query"
 const PostPage = () => {
   const params = useParams()
   const navigate = useNavigate()
+  const { t } = useTranslation()
   const { me } = useApp()
   const postId = params.postId ?? ""
 
@@ -43,7 +45,7 @@ const PostPage = () => {
         }
       >
         <ArrowLeftIcon />
-        Back
+        {t("common.back")}
       </Button>
       {isPending ? (
         <PostSkeleton />
@@ -61,14 +63,14 @@ const PostPage = () => {
             <EmptyMedia variant="icon">
               <FileQuestionIcon />
             </EmptyMedia>
-            <EmptyTitle>Post not available</EmptyTitle>
+            <EmptyTitle>{t("feed.postPage.notFoundTitle")}</EmptyTitle>
             <EmptyDescription>
-              It may have been deleted, or it's in a group you can't see.
+              {t("feed.postPage.notFoundBody")}
             </EmptyDescription>
           </EmptyHeader>
           <EmptyContent>
             <Button asChild variant="outline">
-              <Link to={"/"}>Back to feed</Link>
+              <Link to={"/"}>{t("feed.postPage.backToFeed")}</Link>
             </Button>
           </EmptyContent>
         </Empty>

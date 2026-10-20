@@ -1,6 +1,7 @@
 import { useQueryClient } from "@tanstack/react-query"
 import { useNavigate } from "react-router-dom"
 import { type ReactNode, useState } from "react"
+import { useTranslation } from "react-i18next"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import {
@@ -22,6 +23,7 @@ import { PeoplePicker, type PickedUser } from "./people-picker"
 
 /** Pick one person → open the DM; pick several → create a group conversation. */
 export function NewConversationDialog({ children }: { children: ReactNode }) {
+  const { t } = useTranslation()
   const { me } = useApp()
   const navigate = useNavigate()
   const qc = useQueryClient()
@@ -68,9 +70,7 @@ export function NewConversationDialog({ children }: { children: ReactNode }) {
       await navigate(`/chat/${id}`)
     } catch (err) {
       toast.error(
-        err instanceof ApiError
-          ? err.message
-          : "Could not start the conversation"
+        err instanceof ApiError ? err.message : t("chat.newDialog.startFailed")
       )
       setBusy(false)
     }
@@ -87,9 +87,9 @@ export function NewConversationDialog({ children }: { children: ReactNode }) {
       <DialogTrigger asChild>{children}</DialogTrigger>
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle>New message</DialogTitle>
+          <DialogTitle>{t("chat.newDialog.title")}</DialogTitle>
           <DialogDescription>
-            Choose one person for a direct message, or several to start a group.
+            {t("chat.newDialog.description")}
           </DialogDescription>
         </DialogHeader>
         <form
@@ -102,12 +102,14 @@ export function NewConversationDialog({ children }: { children: ReactNode }) {
           <PeoplePicker value={people} onChange={setPeople} autoFocus />
           {isGroup ? (
             <div className="flex flex-col gap-2">
-              <Label htmlFor="new-chat-title">Group name (optional)</Label>
+              <Label htmlFor="new-chat-title">
+                {t("chat.newDialog.groupName")}
+              </Label>
               <Input
                 id="new-chat-title"
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
-                placeholder="e.g. Launch squad"
+                placeholder={t("chat.newDialog.groupNamePlaceholder")}
                 maxLength={100}
               />
             </div>
@@ -115,7 +117,9 @@ export function NewConversationDialog({ children }: { children: ReactNode }) {
           <DialogFooter>
             <Button type="submit" disabled={people.length === 0 || busy}>
               {busy ? <Spinner /> : null}
-              {isGroup ? `Create group (${people.length + 1})` : "Chat"}
+              {isGroup
+                ? t("chat.newDialog.createGroup", { count: people.length + 1 })
+                : t("chat.newDialog.chat")}
             </Button>
           </DialogFooter>
         </form>

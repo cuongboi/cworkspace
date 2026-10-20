@@ -47,6 +47,8 @@ export const uploadsRoute = new Elysia({ name: "routes.uploads" }).use(authMacro
       height: t.Optional(t.Integer({ minimum: 1 })),
       // avatars and group covers; images only
       isPublic: t.Optional(t.Boolean()),
+      // a Knowledge page the file is embedded in (the policy requires edit rights on it)
+      wikiPageId: t.Optional(t.String({ minLength: 1, maxLength: 64 })),
     }),
     detail: { tags: ["Files"], summary: "Create an attachment and a presigned upload" },
   },

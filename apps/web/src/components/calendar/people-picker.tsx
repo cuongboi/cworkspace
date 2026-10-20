@@ -1,5 +1,6 @@
 import { UserPlusIcon, XIcon } from "lucide-react"
 import { useState } from "react"
+import { useTranslation } from "react-i18next"
 import { UserAvatar } from "@/components/common/user-avatar"
 import { Button } from "@/components/ui/button"
 import {
@@ -26,10 +27,18 @@ type Props = {
   onChange: (users: PickedUser[]) => void
   /** users that can't be picked or removed (e.g. the organizer) */
   excludeIds?: string[]
+  /** hide the "add people" button (e.g. everyone is already invited) */
+  hideAdd?: boolean
 }
 
 /** Multi-select over the company's members, searched by name. */
-export function PeoplePicker({ value, onChange, excludeIds = [] }: Props) {
+export function PeoplePicker({
+  value,
+  onChange,
+  excludeIds = [],
+  hideAdd = false,
+}: Props) {
+  const { t } = useTranslation()
   const [open, setOpen] = useState(false)
   const [q, setQ] = useState("")
   const query = q.trim()
@@ -61,7 +70,10 @@ export function PeoplePicker({ value, onChange, excludeIds = [] }: Props) {
   return (
     <div className="flex flex-col gap-2">
       {value.length > 0 ? (
-        <ul className="flex flex-wrap gap-1.5" aria-label="Invited people">
+        <ul
+          className="flex flex-wrap gap-1.5"
+          aria-label={t("calendar.people.invited")}
+        >
           {value.map((u) => (
             <li
               key={u.id}
@@ -79,7 +91,7 @@ export function PeoplePicker({ value, onChange, excludeIds = [] }: Props) {
                 size="icon-xs"
                 className="rounded-full"
                 onClick={() => toggle(u)}
-                aria-label={`Remove ${u.name}`}
+                aria-label={t("calendar.people.remove", { name: u.name })}
               >
                 <XIcon />
               </Button>
@@ -87,52 +99,54 @@ export function PeoplePicker({ value, onChange, excludeIds = [] }: Props) {
           ))}
         </ul>
       ) : null}
-      <Popover open={open} onOpenChange={setOpen}>
-        <PopoverTrigger asChild>
-          <Button type="button" variant="outline" className="w-fit">
-            <UserPlusIcon />
-            Add people
-          </Button>
-        </PopoverTrigger>
-        <PopoverContent className="w-72 p-0" align="start">
-          <Command shouldFilter={false}>
-            <CommandInput
-              placeholder="Search people…"
-              value={q}
-              onValueChange={setQ}
-            />
-            <CommandList>
-              {isFetching && candidates.length === 0 ? (
-                <div className="flex justify-center py-6">
-                  <Spinner />
-                </div>
-              ) : (
-                <CommandEmpty>No people found.</CommandEmpty>
-              )}
-              <CommandGroup>
-                {candidates.map((p) => (
-                  <CommandItem
-                    key={p.id}
-                    value={p.id}
-                    data-checked={selected.has(p.id)}
-                    onSelect={() => toggle(p)}
-                  >
-                    <UserAvatar user={p} size="sm" />
-                    <span className="flex min-w-0 flex-1 flex-col">
-                      <span className="truncate">{p.name}</span>
-                      {p.title ? (
-                        <span className="truncate text-xs text-muted-foreground">
-                          {p.title}
-                        </span>
-                      ) : null}
-                    </span>
-                  </CommandItem>
-                ))}
-              </CommandGroup>
-            </CommandList>
-          </Command>
-        </PopoverContent>
-      </Popover>
+      {hideAdd ? null : (
+        <Popover open={open} onOpenChange={setOpen}>
+          <PopoverTrigger asChild>
+            <Button type="button" variant="outline" className="w-fit">
+              <UserPlusIcon />
+              {t("calendar.people.add")}
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent className="w-72 p-0" align="start">
+            <Command shouldFilter={false}>
+              <CommandInput
+                placeholder={t("calendar.people.search")}
+                value={q}
+                onValueChange={setQ}
+              />
+              <CommandList>
+                {isFetching && candidates.length === 0 ? (
+                  <div className="flex justify-center py-6">
+                    <Spinner />
+                  </div>
+                ) : (
+                  <CommandEmpty>{t("calendar.people.empty")}</CommandEmpty>
+                )}
+                <CommandGroup>
+                  {candidates.map((p) => (
+                    <CommandItem
+                      key={p.id}
+                      value={p.id}
+                      data-checked={selected.has(p.id)}
+                      onSelect={() => toggle(p)}
+                    >
+                      <UserAvatar user={p} size="sm" />
+                      <span className="flex min-w-0 flex-1 flex-col">
+                        <span className="truncate">{p.name}</span>
+                        {p.title ? (
+                          <span className="truncate text-xs text-muted-foreground">
+                            {p.title}
+                          </span>
+                        ) : null}
+                      </span>
+                    </CommandItem>
+                  ))}
+                </CommandGroup>
+              </CommandList>
+            </Command>
+          </PopoverContent>
+        </Popover>
+      )}
     </div>
   )
 }

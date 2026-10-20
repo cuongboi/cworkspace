@@ -8,6 +8,8 @@ import {
   startOfDay,
 } from "date-fns"
 import { type MouseEvent, useEffect, useRef, useState } from "react"
+import { useTranslation } from "react-i18next"
+import { useDateLocale } from "@/lib/i18n"
 import {
   daysOf,
   isAllDayLike,
@@ -38,6 +40,8 @@ export function TimeGridView({
   onCreate,
   onOpenDay,
 }: Props) {
+  const { t } = useTranslation()
+  const locale = useDateLocale()
   const days = daysOf(range.start, range.end)
   const scrollRef = useRef<HTMLDivElement>(null)
   const now = useNow()
@@ -80,23 +84,23 @@ export function TimeGridView({
             >
               <span
                 className={cn(
-                  "text-[11px] font-medium uppercase",
+                  "text-2xs font-medium uppercase",
                   isToday(day) ? "text-primary" : "text-muted-foreground"
                 )}
               >
-                {format(day, "EEE")}
+                {format(day, "EEE", { locale })}
               </span>
               <button
                 type="button"
                 onClick={() => onOpenDay(day)}
-                aria-label={format(day, "PPPP")}
+                aria-label={format(day, "PPPP", { locale })}
                 className={cn(
                   "flex size-9 items-center justify-center rounded-full text-lg font-medium hover:bg-muted",
                   isToday(day) &&
                     "bg-primary text-primary-foreground hover:bg-primary/90"
                 )}
               >
-                {format(day, "d")}
+                {format(day, "d", { locale })}
               </button>
             </div>
           ))}
@@ -104,8 +108,8 @@ export function TimeGridView({
 
         {/* all-day row */}
         <div className="grid border-b" style={gridCols}>
-          <div className="flex items-start justify-end px-2 py-1 text-[10px] text-muted-foreground">
-            all-day
+          <div className="flex items-start justify-end px-2 py-1 text-2xs text-muted-foreground">
+            {t("calendar.allDayShort")}
           </div>
           {days.map((day) => {
             const items = allDay.filter((o) => occursOn(o, day))
@@ -115,7 +119,9 @@ export function TimeGridView({
                 key={day.toISOString()}
                 role="button"
                 tabIndex={-1}
-                aria-label={`Create all-day event on ${format(day, "PPPP")}`}
+                aria-label={t("calendar.createAllDayEventOn", {
+                  date: format(day, "PPPP", { locale }),
+                })}
                 onClick={() => onCreate(setHours(day, 0), true)}
                 onKeyDown={(e) => {
                   if (e.key === "Enter") onCreate(setHours(day, 0), true)
@@ -156,10 +162,10 @@ export function TimeGridView({
             h === 0 ? null : (
               <span
                 key={h}
-                className="absolute right-2 -translate-y-1/2 text-[10px] text-muted-foreground tabular-nums"
+                className="absolute right-2 -translate-y-1/2 text-2xs text-muted-foreground tabular-nums"
                 style={{ top: h * HOUR_HEIGHT }}
               >
-                {format(setHours(startOfDay(range.start), h), "h a")}
+                {shortTimeLabel(setHours(startOfDay(range.start), h))}
               </span>
             )
           )}
@@ -176,7 +182,9 @@ export function TimeGridView({
               key={day.toISOString()}
               role="button"
               tabIndex={-1}
-              aria-label={`Create event on ${format(day, "PPPP")}`}
+              aria-label={t("calendar.createEventOn", {
+                date: format(day, "PPPP", { locale }),
+              })}
               className="relative cursor-pointer border-l"
               onClick={(e) => handleSlotClick(day, e)}
               onKeyDown={(e) => {
@@ -207,7 +215,7 @@ export function TimeGridView({
                       onSelect(o)
                     }}
                     title={`${o.event.title} · ${shortTimeLabel(o.start)} – ${shortTimeLabel(o.end)}`}
-                    className="absolute overflow-hidden rounded-sm bg-background text-left text-xs shadow-xs ring-1 ring-background"
+                    className="absolute overflow-hidden rounded-sm bg-background text-left text-xs ring-1 ring-background"
                     style={{
                       top: (o.top / 60) * HOUR_HEIGHT,
                       height: Math.max(height - 1, 16),
@@ -249,8 +257,8 @@ export function TimeGridView({
                   style={{ top: (minutesNow / 60) * HOUR_HEIGHT }}
                   aria-hidden
                 >
-                  <span className="-ml-1.5 size-3 rounded-full bg-red-500" />
-                  <span className="h-0.5 flex-1 bg-red-500" />
+                  <span className="-ml-1.5 size-3 rounded-full bg-destructive" />
+                  <span className="h-0.5 flex-1 bg-destructive" />
                 </div>
               ) : null}
             </div>

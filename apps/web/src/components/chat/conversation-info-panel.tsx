@@ -17,6 +17,7 @@ import {
 import { Link, useNavigate } from "react-router-dom"
 import { type ReactNode, useState } from "react"
 import { useQueryState } from "nuqs"
+import { useTranslation } from "react-i18next"
 import { toast } from "sonner"
 import { formatBytes } from "@/components/common/attachment-list"
 import { UserAvatar } from "@/components/common/user-avatar"
@@ -55,6 +56,7 @@ import { useApp } from "@/hooks/use-app"
 import { useNow } from "@/hooks/use-now"
 import { useIsOnline } from "@/hooks/use-presence"
 import { ApiError, db } from "@/lib/api-client"
+import { useDateLocale } from "@/lib/i18n"
 import { invalidateModels, useDbQuery } from "@/lib/query"
 import { type ChatInfoTab, chatInfoTabParser } from "@/lib/search-params"
 import { fileUrl } from "@/lib/upload"
@@ -73,11 +75,11 @@ import { PeoplePicker, type PickedUser } from "./people-picker"
 const FOREVER = new Date("9999-12-31T00:00:00.000Z")
 
 const MUTE_OPTIONS = [
-  { value: "off", label: "Not muted" },
-  { value: "1", label: "For 1 hour" },
-  { value: "8", label: "For 8 hours" },
-  { value: "24", label: "For 24 hours" },
-  { value: "forever", label: "Until I turn it back on" },
+  { value: "off", label: "chat.info.mute.off" },
+  { value: "1", label: "chat.info.mute.h1" },
+  { value: "8", label: "chat.info.mute.h8" },
+  { value: "24", label: "chat.info.mute.h24" },
+  { value: "forever", label: "chat.info.mute.forever" },
 ] as const
 
 const errorMessage = (err: unknown, fallback: string) =>
@@ -99,6 +101,7 @@ export function ConversationInfoPanel({
   onLeft,
   onPicked,
 }: Props) {
+  const { t } = useTranslation()
   const { me } = useApp()
   const [tab, setTab] = useQueryState("infoTab", chatInfoTabParser)
   const isGroup = conversation.type === "GROUP"
@@ -125,27 +128,27 @@ export function ConversationInfoPanel({
         <h2 className="mt-1 max-w-full truncate text-sm font-semibold">
           {title}
         </h2>
-        <p className="text-[11px] text-muted-foreground">
+        <p className="text-2xs text-muted-foreground">
           {isGroup
-            ? `${members.length} members`
+            ? t("chat.thread.memberCount", { count: members.length })
             : otherOnline
-              ? "Active now"
-              : "Direct message"}
+              ? t("chat.thread.activeNow")
+              : t("chat.info.directMessage")}
         </p>
       </div>
       <div className="px-5">
         <TabsList className="h-8 w-full p-0.5">
-          <TabsTrigger value="info" className="text-[11px]">
-            Info
+          <TabsTrigger value="info" className="text-2xs">
+            {t("chat.info.tabs.info")}
           </TabsTrigger>
-          <TabsTrigger value="files" className="text-[11px]">
-            Files
+          <TabsTrigger value="files" className="text-2xs">
+            {t("chat.info.tabs.files")}
           </TabsTrigger>
-          <TabsTrigger value="members" className="text-[11px]" disabled={!isGroup}>
-            Members
+          <TabsTrigger value="members" className="text-2xs" disabled={!isGroup}>
+            {t("chat.info.tabs.members")}
           </TabsTrigger>
-          <TabsTrigger value="search" className="text-[11px]">
-            Search
+          <TabsTrigger value="search" className="text-2xs">
+            {t("chat.info.tabs.search")}
           </TabsTrigger>
         </TabsList>
       </div>
@@ -201,7 +204,7 @@ function Property({
     <div className="flex min-h-9 items-center gap-2.5 text-xs">
       <span className="text-muted-foreground [&_svg]:size-3.5">{icon}</span>
       <span className="flex-1 text-muted-foreground">{label}</span>
-      <span className="min-w-0 truncate text-[11px] text-foreground/80">
+      <span className="min-w-0 truncate text-2xs text-foreground/80">
         {children}
       </span>
     </div>
@@ -209,6 +212,8 @@ function Property({
 }
 
 function InfoTab({ conversation, members, onLeft }: Props) {
+  const { t } = useTranslation()
+  const locale = useDateLocale()
   const { me } = useApp()
   const now = useNow()
   const navigate = useNavigate()
@@ -233,9 +238,9 @@ function InfoTab({ conversation, members, onLeft }: Props) {
         select: { id: true },
       })
       await refresh()
-      toast.success("Conversation renamed")
+      toast.success(t("chat.info.renamed"))
     } catch (err) {
-      toast.error(errorMessage(err, "Could not rename the conversation"))
+      toast.error(errorMessage(err, t("chat.info.renameFailed")))
     } finally {
       setSavingName(false)
     }
@@ -264,9 +269,11 @@ function InfoTab({ conversation, members, onLeft }: Props) {
         select: { id: true },
       })
       await refresh()
-      toast.success(until ? "Conversation muted" : "Conversation unmuted")
+      toast.success(
+        until ? t("chat.info.mutedToast") : t("chat.info.unmutedToast")
+      )
     } catch (err) {
-      toast.error(errorMessage(err, "Could not update notifications"))
+      toast.error(errorMessage(err, t("chat.info.muteFailed")))
     }
   }
 
@@ -284,35 +291,35 @@ function InfoTab({ conversation, members, onLeft }: Props) {
       onLeft?.()
       await navigate("/chat")
       await refresh()
-      toast.success("You left the conversation")
+      toast.success(t("chat.info.left"))
     } catch (err) {
-      toast.error(errorMessage(err, "Could not leave the conversation"))
+      toast.error(errorMessage(err, t("chat.info.leaveFailed")))
     }
   }
 
   return (
     <div className="flex flex-col gap-4">
       <section className="flex flex-col">
-        <SectionTitle>Main info</SectionTitle>
-        <Property icon={<MessagesSquareIcon />} label="Type">
+        <SectionTitle>{t("chat.info.mainInfo")}</SectionTitle>
+        <Property icon={<MessagesSquareIcon />} label={t("chat.info.type")}>
           {linkedGroup
-            ? "Group chat"
+            ? t("chat.info.groupChat")
             : isGroup
-              ? "Group conversation"
-              : "Direct message"}
+              ? t("chat.info.groupConversation")
+              : t("chat.info.directMessage")}
         </Property>
         {isGroup ? (
-          <Property icon={<UserRoundIcon />} label="Creator">
+          <Property icon={<UserRoundIcon />} label={t("chat.info.creator")}>
             {conversation.createdBy.name}
           </Property>
         ) : null}
-        <Property icon={<CalendarDaysIcon />} label="Created">
-          {format(conversation.createdAt, "d MMM yyyy")}
+        <Property icon={<CalendarDaysIcon />} label={t("chat.info.created")}>
+          {format(conversation.createdAt, "PP", { locale })}
         </Property>
         <div className="flex min-h-9 items-center gap-2.5 text-xs">
           <BellOffIcon className="size-3.5 text-muted-foreground" />
           <label htmlFor="chat-mute" className="flex-1 text-muted-foreground">
-            Notifications
+            {t("chat.info.notifications")}
           </label>
           <Select
             value={mutedUntil ? "custom" : "off"}
@@ -321,20 +328,24 @@ function InfoTab({ conversation, members, onLeft }: Props) {
             <SelectTrigger
               id="chat-mute"
               size="sm"
-              className="h-7 max-w-40 border-0 bg-transparent px-1.5 text-[11px] shadow-none hover:bg-accent"
+              className="h-7 max-w-40 border-0 bg-transparent px-1.5 text-2xs shadow-none hover:bg-accent"
             >
               <SelectValue>
                 {mutedUntil
                   ? mutedUntil.getTime() === FOREVER.getTime()
-                    ? "Muted"
-                    : `Muted until ${format(mutedUntil, "HH:mm, d MMM")}`
-                  : "On"}
+                    ? t("chat.info.muted")
+                    : t("chat.info.mutedUntil", {
+                        time: format(mutedUntil, t("chat.info.shortDateTime"), {
+                          locale,
+                        }),
+                      })
+                  : t("chat.info.on")}
               </SelectValue>
             </SelectTrigger>
             <SelectContent align="end">
               {MUTE_OPTIONS.map((o) => (
                 <SelectItem key={o.value} value={o.value}>
-                  {o.label}
+                  {t(o.label)}
                 </SelectItem>
               ))}
             </SelectContent>
@@ -353,7 +364,7 @@ function InfoTab({ conversation, members, onLeft }: Props) {
             }}
           >
             <SectionTitle>
-              <label htmlFor="chat-title">Conversation name</label>
+              <label htmlFor="chat-title">{t("chat.info.name")}</label>
             </SectionTitle>
             <div className="flex gap-1.5">
               <Input
@@ -377,7 +388,7 @@ function InfoTab({ conversation, members, onLeft }: Props) {
                 }
               >
                 {savingName ? <Spinner /> : <PencilIcon />}
-                Save
+                {t("common.save")}
               </Button>
             </div>
           </form>
@@ -389,14 +400,15 @@ function InfoTab({ conversation, members, onLeft }: Props) {
         {other ? (
           <Button asChild variant="outline" size="sm" className="justify-start">
             <Link to={`/people/${other.id}`}>
-              <UserRoundIcon /> View profile
+              <UserRoundIcon /> {t("chat.info.viewProfile")}
             </Link>
           </Button>
         ) : null}
         {linkedGroup ? (
           <Button asChild variant="outline" size="sm" className="justify-start">
             <Link to={`/groups/${linkedGroup.slug}`}>
-              <UsersRoundIcon /> Open {linkedGroup.name}
+              <UsersRoundIcon />{" "}
+              {t("chat.info.openGroup", { name: linkedGroup.name })}
             </Link>
           </Button>
         ) : isGroup ? (
@@ -407,24 +419,23 @@ function InfoTab({ conversation, members, onLeft }: Props) {
                 size="sm"
                 className="justify-start text-destructive hover:text-destructive"
               >
-                <LogOutIcon /> Leave group
+                <LogOutIcon /> {t("chat.info.leaveGroup")}
               </Button>
             </AlertDialogTrigger>
             <AlertDialogContent>
               <AlertDialogHeader>
-                <AlertDialogTitle>Leave this group?</AlertDialogTitle>
+                <AlertDialogTitle>{t("chat.info.leaveTitle")}</AlertDialogTitle>
                 <AlertDialogDescription>
-                  You'll stop receiving messages from this conversation. Someone
-                  will have to add you back to rejoin.
+                  {t("chat.info.leaveBody")}
                 </AlertDialogDescription>
               </AlertDialogHeader>
               <AlertDialogFooter>
-                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                <AlertDialogCancel>{t("common.cancel")}</AlertDialogCancel>
                 <AlertDialogAction
                   variant="destructive"
                   onClick={() => void leave()}
                 >
-                  Leave group
+                  {t("chat.info.leaveGroup")}
                 </AlertDialogAction>
               </AlertDialogFooter>
             </AlertDialogContent>
@@ -436,6 +447,8 @@ function InfoTab({ conversation, members, onLeft }: Props) {
 }
 
 function FilesTab({ conversationId }: { conversationId: string }) {
+  const { t } = useTranslation()
+  const locale = useDateLocale()
   const { data, isPending, error } = useDbQuery(
     conversationFilesKey(conversationId),
     () => fetchConversationFiles(conversationId)
@@ -453,7 +466,7 @@ function FilesTab({ conversationId }: { conversationId: string }) {
   if (error) {
     return (
       <p className="py-6 text-center text-xs text-destructive">
-        Could not load files.
+        {t("chat.info.filesFailed")}
       </p>
     )
   }
@@ -461,7 +474,7 @@ function FilesTab({ conversationId }: { conversationId: string }) {
     return (
       <div className="flex flex-col items-center gap-2 py-10 text-center text-xs text-muted-foreground">
         <FolderOpenIcon className="size-5" />
-        Files shared in this chat show up here.
+        {t("chat.info.filesEmpty")}
       </div>
     )
   }
@@ -473,7 +486,7 @@ function FilesTab({ conversationId }: { conversationId: string }) {
     <div className="flex flex-col gap-4">
       {images.length ? (
         <section className="flex flex-col gap-2">
-          <SectionTitle>Photos</SectionTitle>
+          <SectionTitle>{t("chat.info.photos")}</SectionTitle>
           <ul className="grid grid-cols-3 gap-1.5">
             {images.map((f) => (
               <li key={f.id}>
@@ -498,7 +511,7 @@ function FilesTab({ conversationId }: { conversationId: string }) {
       ) : null}
       {others.length ? (
         <section className="flex flex-col gap-1">
-          <SectionTitle>Files</SectionTitle>
+          <SectionTitle>{t("chat.info.files")}</SectionTitle>
           <ul className="flex flex-col">
             {others.map((f) => (
               <li key={f.id}>
@@ -510,12 +523,14 @@ function FilesTab({ conversationId }: { conversationId: string }) {
                     <FileIcon className="size-3.5 text-muted-foreground" />
                   </span>
                   <span className="min-w-0 flex-1">
-                    <span className="block truncate text-[11px] font-semibold">
+                    <span className="block truncate text-2xs font-semibold">
                       {f.name}
                     </span>
-                    <span className="block truncate text-[10px] text-muted-foreground">
+                    <span className="block truncate text-2xs text-muted-foreground">
                       {formatBytes(f.size)} · {f.uploader.name} ·{" "}
-                      {format(f.createdAt, "d MMM")}
+                      {format(f.createdAt, t("chat.info.shortDate"), {
+                        locale,
+                      })}
                     </span>
                   </span>
                 </a>
@@ -535,6 +550,7 @@ function MembersTab({
   conversation: ThreadConversation
   members: ThreadMember[]
 }) {
+  const { t } = useTranslation()
   const { me } = useApp()
   const qc = useQueryClient()
   const myMember = members.find((m) => m.userId === me.id)
@@ -562,14 +578,12 @@ function MembersTab({
       )
       await refresh()
       toast.success(
-        toAdd.length === 1
-          ? `${toAdd[0]?.name} was added`
-          : `${toAdd.length} people were added`
+        t("chat.info.added", { count: toAdd.length, name: toAdd[0]?.name })
       )
       setToAdd([])
       setAdding(false)
     } catch (err) {
-      toast.error(errorMessage(err, "Could not add people"))
+      toast.error(errorMessage(err, t("chat.info.addFailed")))
       await refresh()
     } finally {
       setBusy(false)
@@ -583,9 +597,9 @@ function MembersTab({
         select: { id: true },
       })
       await refresh()
-      toast.success(`${member.user.name} was removed`)
+      toast.success(t("chat.info.removed", { name: member.user.name }))
     } catch (err) {
-      toast.error(errorMessage(err, "Could not remove this person"))
+      toast.error(errorMessage(err, t("chat.info.removeFailed")))
     }
   }
 
@@ -598,7 +612,7 @@ function MembersTab({
       })
       await refresh()
     } catch (err) {
-      toast.error(errorMessage(err, "Could not change the role"))
+      toast.error(errorMessage(err, t("chat.info.roleFailed")))
     }
   }
 
@@ -610,7 +624,7 @@ function MembersTab({
             <Button
               variant="ghost"
               size="icon-xs"
-              aria-label="Add people"
+              aria-label={t("chat.info.addPeople")}
               className="text-muted-foreground"
               onClick={() => setAdding(true)}
             >
@@ -620,8 +634,8 @@ function MembersTab({
         }
       >
         <span id="chat-members">
-          Members{" "}
-          <span className="text-[10px] font-normal text-muted-foreground">
+          {t("chat.info.members")}{" "}
+          <span className="text-2xs font-normal text-muted-foreground">
             {members.length}
           </span>
         </span>
@@ -644,7 +658,7 @@ function MembersTab({
                 setToAdd([])
               }}
             >
-              Cancel
+              {t("common.cancel")}
             </Button>
             <Button
               size="sm"
@@ -652,7 +666,9 @@ function MembersTab({
               onClick={() => void addMembers()}
             >
               {busy ? <Spinner /> : null}
-              Add{toAdd.length ? ` ${toAdd.length}` : ""}
+              {toAdd.length
+                ? t("chat.info.addCount", { count: toAdd.length })
+                : t("common.add")}
             </Button>
           </div>
         </div>
@@ -664,19 +680,19 @@ function MembersTab({
             <UserAvatar user={m.user} presence className="size-7.5" />
             <Link
               to={`/people/${m.userId}`}
-              className="min-w-0 flex-1 truncate text-[11px] font-semibold hover:underline"
+              className="min-w-0 flex-1 truncate text-2xs font-semibold hover:underline"
             >
               {m.user.name}
               {m.userId === me.id ? (
                 <span className="font-normal text-muted-foreground">
                   {" "}
-                  (you)
+                  {t("chat.info.youSuffix")}
                 </span>
               ) : null}
             </Link>
             {m.role === "ADMIN" ? (
-              <span className="rounded-sm bg-accent px-1.5 py-0.5 text-[9px] text-muted-foreground">
-                Admin
+              <span className="rounded-sm bg-accent px-1.5 py-0.5 text-2xs text-muted-foreground">
+                {t("chat.info.admin")}
               </span>
             ) : null}
             {iAmAdmin && m.userId !== me.id ? (
@@ -685,7 +701,7 @@ function MembersTab({
                   <Button
                     variant="ghost"
                     size="icon-xs"
-                    aria-label={`Manage ${m.user.name}`}
+                    aria-label={t("chat.info.manage", { name: m.user.name })}
                     className="text-muted-foreground"
                   >
                     <MoreHorizontalIcon />
@@ -698,13 +714,15 @@ function MembersTab({
                     }
                   >
                     <ShieldIcon />{" "}
-                    {m.role === "ADMIN" ? "Remove as admin" : "Make admin"}
+                    {m.role === "ADMIN"
+                      ? t("chat.info.removeAdmin")
+                      : t("chat.info.makeAdmin")}
                   </DropdownMenuItem>
                   <DropdownMenuItem
                     variant="destructive"
                     onSelect={() => void removeMember(m)}
                   >
-                    <LogOutIcon /> Remove from group
+                    <LogOutIcon /> {t("chat.info.removeFromGroup")}
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
@@ -712,10 +730,11 @@ function MembersTab({
           </li>
         ))}
       </ul>
-      <p className="pt-3 text-[10px] text-muted-foreground">
-        {members.length} {members.length === 1 ? "member" : "members"} in this
-        chat
-        {linkedGroup ? ` · managed in ${linkedGroup.name}` : ""}
+      <p className="pt-3 text-2xs text-muted-foreground">
+        {t("chat.info.memberFooter", { count: members.length })}
+        {linkedGroup
+          ? t("chat.info.managedIn", { name: linkedGroup.name })
+          : ""}
       </p>
     </section>
   )

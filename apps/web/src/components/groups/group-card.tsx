@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next"
 import { Link } from "react-router-dom"
 import { Card } from "@/components/ui/card"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -6,6 +7,7 @@ import { GroupCover, PrivacyLabel } from "./group-visuals"
 import { MembershipButton } from "./membership-button"
 
 export function GroupCard({ group }: { group: GroupWithMe }) {
+  const { t } = useTranslation()
   const membership = group.members[0]
   const count = group._count.members
 
@@ -24,12 +26,10 @@ export function GroupCard({ group }: { group: GroupWithMe }) {
         <p className="flex flex-wrap items-center gap-x-1.5 text-xs text-muted-foreground">
           <PrivacyLabel privacy={group.privacy} />
           <span aria-hidden>·</span>
-          <span>
-            {count} member{count === 1 ? "" : "s"}
-          </span>
+          <span>{t("groups.memberCount", { count })}</span>
         </p>
         <p className="line-clamp-2 min-h-10 text-sm text-muted-foreground">
-          {group.description || "No description yet."}
+          {group.description || t("groups.noDescription")}
         </p>
       </div>
       <div className="px-4 pb-4">

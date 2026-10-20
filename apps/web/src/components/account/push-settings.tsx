@@ -1,10 +1,12 @@
 import { BellIcon, ShareIcon } from "lucide-react"
 import { useEffect, useState } from "react"
+import { Trans, useTranslation } from "react-i18next"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Switch } from "@/components/ui/switch"
 import { api } from "@/lib/api-client"
+import { errorMessage } from "@/lib/i18n"
 import {
   type PushSupport,
   disablePush,
@@ -16,8 +18,9 @@ import {
 
 type State = PushSupport | "loading" | "not-configured"
 
-/** Per-device push opt-in, shown on your own profile. */
+/** Per-device push opt-in (account settings → Notifications). */
 export function PushSettings() {
+  const { t } = useTranslation()
   const [state, setState] = useState<State>("loading")
   const [enabled, setEnabled] = useState(isPushEnabledHere)
   const [busy, setBusy] = useState(false)
@@ -43,16 +46,20 @@ export function PushSettings() {
         const permission = await enablePush()
         if (permission === "granted") {
           setEnabled(true)
-          toast.success("Push notifications enabled on this device")
+          toast.success(t("people.push.enabled"))
         } else {
-          toast.error("Notifications were not allowed")
+          toast.error(t("people.push.notAllowed"))
         }
       } else {
         await disablePush()
         setEnabled(false)
       }
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Could not update push")
+      toast.error(
+        err instanceof Error && err.message
+          ? err.message
+          : t("people.push.updateFailed")
+      )
     } finally {
       setBusy(false)
     }
@@ -61,10 +68,10 @@ export function PushSettings() {
   const sendTest = () =>
     api
       .post("/api/push/test")
-      .then(() => toast.success("Test sent. Lock your device or switch apps."))
-      .catch((err: Error) => toast.error(err.message))
+      .then(() => toast.success(t("people.push.testSent")))
+      .catch((err: unknown) => toast.error(errorMessage(err)))
 
-  if (state === "loading" || state === "not-configured") return null
+  if (state === "loading") return null
 
   return (
     <Card>
@@ -72,12 +79,9 @@ export function PushSettings() {
         <div className="flex items-start gap-3">
           <BellIcon className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
           <div className="flex-1">
-            <p className="text-sm font-medium">
-              Push notifications on this device
-            </p>
+            <p className="text-sm font-medium">{t("people.push.title")}</p>
             <p className="text-xs text-muted-foreground">
-              Messages, calls, mentions and reminders, even when the app is
-              closed.
+              {t("people.push.description")}
             </p>
           </div>
           {state === "supported" ? (
@@ -85,26 +89,34 @@ export function PushSettings() {
               checked={enabled}
               disabled={busy || denied}
               onCheckedChange={toggle}
-              aria-label="Push notifications on this device"
+              aria-label={t("people.push.title")}
             />
           ) : null}
         </div>
         {state === "ios-needs-install" ? (
           <p className="rounded-lg border bg-muted/40 p-3 text-xs text-muted-foreground">
-            On iPhone or iPad, tap <ShareIcon className="inline size-3.5" />{" "}
-            Share → <strong>Add to Home Screen</strong>, then open the app from
-            your Home Screen to turn on notifications.
+            <Trans
+              i18nKey="people.push.iosInstall"
+              components={{
+                icon: <ShareIcon className="inline size-3.5" />,
+                b: <strong />,
+              }}
+            />
+          </p>
+        ) : null}
+        {state === "not-configured" ? (
+          <p className="text-xs text-muted-foreground">
+            {t("people.push.notConfigured")}
           </p>
         ) : null}
         {state === "unsupported" ? (
           <p className="text-xs text-muted-foreground">
-            This browser does not support push notifications.
+            {t("people.push.unsupported")}
           </p>
         ) : null}
         {state === "supported" && denied ? (
           <p className="text-xs text-muted-foreground">
-            Notifications are blocked. Allow them for this site in your browser
-            or system settings, then reload.
+            {t("people.push.blocked")}
           </p>
         ) : null}
         {state === "supported" && enabled ? (
@@ -114,7 +126,7 @@ export function PushSettings() {
             className="self-start"
             onClick={sendTest}
           >
-            Send test notification
+            {t("people.push.sendTest")}
           </Button>
         ) : null}
       </CardContent>

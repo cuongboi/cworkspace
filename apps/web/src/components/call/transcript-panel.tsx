@@ -1,4 +1,5 @@
 import { format } from "date-fns"
+import i18n from "@/lib/i18n"
 import { DownloadIcon, XIcon } from "lucide-react"
 import { useEffect, useRef } from "react"
 import { Button } from "@/components/ui/button"
@@ -13,6 +14,7 @@ import { useIsMobile } from "@/hooks/use-mobile"
 import type { CaptionLang } from "@/lib/realtime-events"
 import type { CaptionLine } from "@/lib/rtc/use-call"
 import { CaptionText } from "./caption-text"
+import { useTranslation } from "react-i18next"
 
 /** Text of a line for a reader of `lang`, with the original when it was translated. */
 function lineText(line: CaptionLine, lang: CaptionLang) {
@@ -30,7 +32,7 @@ function downloadTranscript(
   lang: CaptionLang,
   title: string | null
 ) {
-  const header = `${title ?? "Call"} (${format(lines[0]?.startedAt ?? Date.now(), "yyyy-MM-dd HH:mm")})`
+  const header = `${title ?? i18n.t("call.title")} (${format(lines[0]?.startedAt ?? Date.now(), "yyyy-MM-dd HH:mm")})`
   const body = lines
     .map(
       (l) =>
@@ -61,6 +63,7 @@ export function TranscriptPanel({
   open: boolean
   onClose: () => void
 }) {
+  const { t } = useTranslation()
   const isMobile = useIsMobile()
   const body = (
     <TranscriptBody
@@ -79,9 +82,11 @@ export function TranscriptPanel({
           showCloseButton={false}
           className="dark gap-0 bg-background p-0 text-foreground data-[side=bottom]:h-[80svh]"
         >
-          <SheetTitle className="sr-only">Transcript</SheetTitle>
+          <SheetTitle className="sr-only">
+            {t("call.transcript.title")}
+          </SheetTitle>
           <SheetDescription className="sr-only">
-            Live transcript of this call in your language
+            {t("call.transcript.description")}
           </SheetDescription>
           {body}
         </SheetContent>
@@ -91,7 +96,7 @@ export function TranscriptPanel({
   if (!open) return null
   return (
     <aside
-      aria-label="Transcript"
+      aria-label={t("call.transcript.title")}
       className="flex w-80 shrink-0 flex-col border-l lg:w-96"
     >
       {body}
@@ -110,6 +115,7 @@ function TranscriptBody({
   onClose: () => void
   onDownload: () => void
 }) {
+  const { t } = useTranslation()
   const end = useRef<HTMLDivElement>(null)
   useEffect(() => {
     end.current?.scrollIntoView({ block: "end" })
@@ -118,12 +124,12 @@ function TranscriptBody({
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <header className="flex h-14 shrink-0 items-center justify-between border-b px-4">
-        <h2 className="text-sm font-medium">Transcript</h2>
+        <h2 className="text-sm font-medium">{t("call.transcript.title")}</h2>
         <div className="flex items-center gap-1">
           <Button
             variant="ghost"
             size="icon-sm"
-            aria-label="Download transcript"
+            aria-label={t("call.transcript.download")}
             disabled={!lines.length}
             onClick={onDownload}
           >
@@ -132,7 +138,7 @@ function TranscriptBody({
           <Button
             variant="ghost"
             size="icon-sm"
-            aria-label="Close transcript"
+            aria-label={t("call.transcript.close")}
             onClick={onClose}
           >
             <XIcon />
@@ -163,7 +169,7 @@ function TranscriptBody({
           </ol>
         ) : (
           <p className="p-4 text-sm text-muted-foreground">
-            Turn on captions to see what people say, in your language.
+            {t("call.transcript.empty")}
           </p>
         )}
       </ScrollArea>

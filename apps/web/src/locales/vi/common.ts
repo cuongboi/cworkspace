@@ -1,0 +1,31 @@
+import type { DeepStrings } from "../ja/types"
+import type { common as en } from "../en/common"
+
+export const common: DeepStrings<typeof en> = {
+  cancel: "Hủy",
+  copyLink: "Sao chép liên kết",
+  linkCopied: "Đã sao chép liên kết",
+  copyFailed: "Không thể sao chép liên kết",
+  more: "Thêm",
+  back: "Quay lại",
+  seeAll: "Xem tất cả",
+  save: "Lưu",
+  saving: "Đang lưu…",
+  saved: "Đã lưu",
+  delete: "Xóa",
+  edit: "Chỉnh sửa",
+  close: "Đóng",
+  confirm: "Xác nhận",
+  create: "Tạo",
+  send: "Gửi",
+  search: "Tìm kiếm",
+  loading: "Đang tải…",
+  loadMore: "Tải thêm",
+  retry: "Thử lại",
+  remove: "Gỡ",
+  add: "Thêm",
+  done: "Xong",
+  you: "Bạn",
+  justNow: "vừa xong",
+  noResults: "Không có kết quả",
+}

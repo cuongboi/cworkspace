@@ -2,6 +2,7 @@ import { addDays, addHours, setHours, startOfDay, startOfHour } from "date-fns"
 import { ChevronLeftIcon, ChevronRightIcon, PlusIcon } from "lucide-react"
 import { useQueryState } from "nuqs"
 import { useState } from "react"
+import { useTranslation } from "react-i18next"
 import { AgendaView } from "@/components/calendar/agenda-view"
 import { CalendarSidebar } from "@/components/calendar/calendar-sidebar"
 import {
@@ -47,6 +48,7 @@ type DialogState = {
 } | null
 
 const CalendarPage = () => {
+  const { t } = useTranslation()
   const { me } = useApp()
   const [view, setView] = useState<CalendarView>("week")
   const [date, setDate] = useState(() => new Date())
@@ -130,7 +132,7 @@ const CalendarPage = () => {
 
   return (
     <>
-      <PageTitle title="Calendar" />
+      <PageTitle title={t("calendar.title")} />
       <div className="flex h-full min-h-0 flex-1">
         <CalendarSidebar
           className="hidden lg:flex"
@@ -144,10 +146,13 @@ const CalendarPage = () => {
             openCreate(view === "month" ? setHours(date, 9) : undefined)
           }
         />
-        <section className="flex min-w-0 flex-1 flex-col" aria-label="Calendar">
+        <section
+          className="flex min-w-0 flex-1 flex-col"
+          aria-label={t("calendar.title")}
+        >
           <div className="flex flex-wrap items-center gap-2 border-b px-3 py-2">
             <Button variant="outline" onClick={() => setDate(new Date())}>
-              Today
+              {t("calendar.today")}
             </Button>
             <div className="flex items-center">
               <Tooltip>
@@ -156,13 +161,13 @@ const CalendarPage = () => {
                     variant="ghost"
                     size="icon"
                     onClick={() => setDate(stepDate(view, date, -1))}
-                    aria-label="Previous"
+                    aria-label={t("calendar.previous")}
                   >
                     <ChevronLeftIcon />
                   </Button>
                 </TooltipTrigger>
                 <TooltipContent>
-                  Previous {view === "agenda" ? "period" : view}
+                  {t(`calendar.previousPeriod.${view}`)}
                 </TooltipContent>
               </Tooltip>
               <Tooltip>
@@ -171,13 +176,13 @@ const CalendarPage = () => {
                     variant="ghost"
                     size="icon"
                     onClick={() => setDate(stepDate(view, date, 1))}
-                    aria-label="Next"
+                    aria-label={t("calendar.next")}
                   >
                     <ChevronRightIcon />
                   </Button>
                 </TooltipTrigger>
                 <TooltipContent>
-                  Next {view === "agenda" ? "period" : view}
+                  {t(`calendar.nextPeriod.${view}`)}
                 </TooltipContent>
               </Tooltip>
             </div>
@@ -198,15 +203,11 @@ const CalendarPage = () => {
                 value={view}
                 onValueChange={(v) => v && setView(v as CalendarView)}
                 className="hidden md:flex"
-                aria-label="View"
+                aria-label={t("calendar.view")}
               >
                 {CALENDAR_VIEWS.map((v) => (
-                  <ToggleGroupItem
-                    key={v.value}
-                    value={v.value}
-                    className="px-3"
-                  >
-                    {v.label}
+                  <ToggleGroupItem key={v} value={v} className="px-3">
+                    {t(`calendar.views.${v}`)}
                   </ToggleGroupItem>
                 ))}
               </ToggleGroup>
@@ -215,21 +216,23 @@ const CalendarPage = () => {
                 value={view}
                 onChange={(e) => setView(e.target.value as CalendarView)}
                 className="md:hidden"
-                aria-label="View"
+                aria-label={t("calendar.view")}
               >
                 {CALENDAR_VIEWS.map((v) => (
-                  <NativeSelectOption key={v.value} value={v.value}>
-                    {v.label}
+                  <NativeSelectOption key={v} value={v}>
+                    {t(`calendar.views.${v}`)}
                   </NativeSelectOption>
                 ))}
               </NativeSelect>
               <Button
                 onClick={() => openCreate()}
                 className="lg:hidden"
-                aria-label="New event"
+                aria-label={t("calendar.newEvent")}
               >
                 <PlusIcon />
-                <span className="hidden sm:inline">New event</span>
+                <span className="hidden sm:inline">
+                  {t("calendar.newEvent")}
+                </span>
               </Button>
             </div>
           </div>

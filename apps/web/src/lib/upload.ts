@@ -57,8 +57,11 @@ async function prepare(
 
 export async function uploadFile(
   file: File,
-  /** `isPublic`: avatars and group covers, readable by every signed-in user (images only) */
-  opts?: { isPublic?: boolean }
+  /**
+   * `isPublic`: avatars and group covers, readable by every signed-in user (images only).
+   * `wikiPageId`: embedded in a Knowledge page, readable by whoever can read the page.
+   */
+  opts?: { isPublic?: boolean; wikiPageId?: string }
 ): Promise<UploadedAttachment> {
   const { blob, width, height } = await prepare(file)
   if (blob.size > MAX_UPLOAD_BYTES)

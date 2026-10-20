@@ -3,7 +3,7 @@ import { env } from "@/env";
 import { decryptSecret, safeEqual, sha256, verifySignature } from "@/lib/crypto";
 import { db } from "@/lib/db";
 import { badRequest, forbidden, notFound, tooManyRequests, unauthorized } from "@/lib/errors";
-import { ipAllowed } from "@/lib/ip";
+import { clientIp, ipAllowed } from "@/lib/ip";
 import { rateLimit } from "@/server/rate-limit";
 import { MAX_BOT_TEXT, postBotMessage, recordDelivery } from "@/server/integrations/outgoing";
 
@@ -12,19 +12,6 @@ import { MAX_BOT_TEXT, postBotMessage, recordDelivery } from "@/server/integrati
  * integration's secret, and a bot API authenticated by a channel-scoped bearer token. Every
  * failure answers the same way for unknown and disabled integrations (no existence leak).
  */
-
-type Ctx = {
-  request: Request;
-  server: { requestIP(r: Request): { address: string } | null } | null;
-};
-
-function clientIp({ request, server }: Ctx) {
-  if (env.TRUST_PROXY) {
-    const forwarded = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim();
-    if (forwarded) return forwarded;
-  }
-  return server?.requestIP(request)?.address ?? null;
-}
 
 const integrationFields = {
   id: true,

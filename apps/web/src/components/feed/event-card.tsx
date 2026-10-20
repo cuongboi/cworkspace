@@ -1,5 +1,6 @@
 import { cn } from "cn"
-import { format, isSameDay } from "date-fns"
+import { format, isSameDay, type Locale } from "date-fns"
+import type { TFunction } from "i18next"
 import {
   CalendarIcon,
   CheckIcon,
@@ -9,6 +10,7 @@ import {
   VideoIcon,
   XIcon,
 } from "lucide-react"
+import { useTranslation } from "react-i18next"
 import { Link } from "react-router-dom"
 import { useState } from "react"
 import { toast } from "sonner"
@@ -16,6 +18,7 @@ import { Button } from "@/components/ui/button"
 import { useNow } from "@/hooks/use-now"
 import { useApp } from "@/hooks/use-app"
 import { db } from "@/lib/api-client"
+import { errorMessage, useDateLocale } from "@/lib/i18n"
 import { useDbMutation } from "@/lib/query"
 import { Rsvp } from "@app/api/zenstack/models"
 import type { FeedPost } from "./post-query"
@@ -23,24 +26,28 @@ import type { FeedPost } from "./post-query"
 type EventData = NonNullable<FeedPost["event"]>
 
 const RSVP_OPTIONS = [
-  { value: Rsvp.GOING, label: "Going", icon: CheckIcon },
-  { value: Rsvp.MAYBE, label: "Maybe", icon: HelpCircleIcon },
-  { value: Rsvp.DECLINED, label: "Can't go", icon: XIcon },
+  { value: Rsvp.GOING, label: "feed.event.going", icon: CheckIcon },
+  { value: Rsvp.MAYBE, label: "feed.event.maybe", icon: HelpCircleIcon },
+  { value: Rsvp.DECLINED, label: "feed.event.declined", icon: XIcon },
 ] as const
 
-function timeRange(e: EventData) {
+function timeRange(e: EventData, t: TFunction, locale: Locale) {
+  const day = t("feed.dateFormat.monthDay")
+  const f = (d: Date, pattern: string) => format(d, pattern, { locale })
   if (e.allDay) {
     return isSameDay(e.startAt, e.endAt)
-      ? "All day"
-      : `${format(e.startAt, "MMM d")} – ${format(e.endAt, "MMM d")}`
+      ? t("feed.event.allDay")
+      : `${f(e.startAt, day)} – ${f(e.endAt, day)}`
   }
   return isSameDay(e.startAt, e.endAt)
-    ? `${format(e.startAt, "EEE, MMM d · HH:mm")} – ${format(e.endAt, "HH:mm")}`
-    : `${format(e.startAt, "MMM d, HH:mm")} – ${format(e.endAt, "MMM d, HH:mm")}`
+    ? `${f(e.startAt, t("feed.dateFormat.weekdayMonthDay"))} · ${f(e.startAt, "HH:mm")} – ${f(e.endAt, "HH:mm")}`
+    : `${f(e.startAt, day)} ${f(e.startAt, "HH:mm")} – ${f(e.endAt, day)} ${f(e.endAt, "HH:mm")}`
 }
 
 /** Event announcement (Post type EVENT): date block, details and my RSVP. */
 export function EventCard({ event }: { event: EventData }) {
+  const { t } = useTranslation()
+  const locale = useDateLocale()
   const { me } = useApp()
   const serverRsvp =
     event.attendees.find((a) => a.userId === me.id)?.rsvp ?? null
@@ -67,19 +74,19 @@ export function EventCard({ event }: { event: EventData }) {
   return (
     <div className="overflow-hidden rounded-lg border">
       <div className="flex gap-4 bg-muted/40 p-4">
-        <div className="flex w-14 shrink-0 flex-col items-center overflow-hidden rounded-lg border bg-background text-center shadow-xs">
-          <span className="w-full bg-primary py-0.5 text-[11px] font-semibold text-primary-foreground uppercase">
-            {format(event.startAt, "MMM")}
+        <div className="flex w-14 shrink-0 flex-col items-center overflow-hidden rounded-lg border bg-background text-center">
+          <span className="w-full bg-primary py-0.5 text-2xs font-semibold text-primary-foreground uppercase">
+            {format(event.startAt, "MMM", { locale })}
           </span>
           <span className="py-1 text-2xl leading-none font-bold">
-            {format(event.startAt, "d")}
+            {format(event.startAt, "d", { locale })}
           </span>
         </div>
         <div className="flex min-w-0 flex-1 flex-col gap-1">
           <p className="text-base leading-tight font-semibold">{event.title}</p>
           <p className="flex items-center gap-1.5 text-sm text-muted-foreground">
             <ClockIcon className="size-3.5 shrink-0" />
-            {timeRange(event)}
+            {timeRange(event, t, locale)}
           </p>
           {event.location ? (
             <p className="flex items-center gap-1.5 text-sm text-muted-foreground">
@@ -90,23 +97,26 @@ export function EventCard({ event }: { event: EventData }) {
           {event.hasVideoCall ? (
             <p className="flex items-center gap-1.5 text-sm text-muted-foreground">
               <VideoIcon className="size-3.5 shrink-0" />
-              Video call
+              {t("feed.event.videoCall")}
             </p>
           ) : null}
           <p className="text-xs text-muted-foreground">
-            {goingCount} going{maybeCount ? ` · ${maybeCount} maybe` : ""}
+            {t("feed.event.goingCount", { count: goingCount })}
+            {maybeCount
+              ? ` · ${t("feed.event.maybeCount", { count: maybeCount })}`
+              : ""}
           </p>
         </div>
       </div>
       <div className="flex flex-wrap items-center gap-2 border-t p-3">
         {past ? (
           <span className="text-sm text-muted-foreground">
-            This event has ended
+            {t("feed.event.ended")}
           </span>
         ) : (
           <div
             role="radiogroup"
-            aria-label="Your RSVP"
+            aria-label={t("feed.event.yourRsvp")}
             className="flex flex-wrap gap-2"
           >
             {RSVP_OPTIONS.map((o) => {
@@ -123,13 +133,13 @@ export function EventCard({ event }: { event: EventData }) {
                   onClick={() => {
                     setPending(o.value)
                     respond.mutate(o.value, {
-                      onError: (err) => toast.error(err.message),
+                      onError: (err) => toast.error(errorMessage(err)),
                       onSettled: () => setPending(null),
                     })
                   }}
                 >
                   <o.icon />
-                  {o.label}
+                  {t(o.label)}
                 </Button>
               )
             })}
@@ -138,7 +148,7 @@ export function EventCard({ event }: { event: EventData }) {
         <Button asChild size="sm" variant="ghost" className="ml-auto">
           <Link to={`/calendar?event=${event.id}`}>
             <CalendarIcon />
-            View in calendar
+            {t("feed.event.viewInCalendar")}
           </Link>
         </Button>
       </div>

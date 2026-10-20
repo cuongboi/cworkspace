@@ -705,6 +705,30 @@ export class SchemaType implements SchemaDef {
                     type: "Channel",
                     array: true,
                     relation: { opposite: "group" }
+                },
+                wikiEnabled: {
+                    name: "wikiEnabled",
+                    type: "Boolean",
+                    attributes: [{ name: "@default", args: [{ name: "value", value: ExpressionUtils.literal(true) }] }] as readonly AttributeApplication[],
+                    default: true as FieldDefault
+                },
+                channelsEnabled: {
+                    name: "channelsEnabled",
+                    type: "Boolean",
+                    attributes: [{ name: "@default", args: [{ name: "value", value: ExpressionUtils.literal(true) }] }] as readonly AttributeApplication[],
+                    default: true as FieldDefault
+                },
+                calendarEnabled: {
+                    name: "calendarEnabled",
+                    type: "Boolean",
+                    attributes: [{ name: "@default", args: [{ name: "value", value: ExpressionUtils.literal(true) }] }] as readonly AttributeApplication[],
+                    default: true as FieldDefault
+                },
+                postPolicy: {
+                    name: "postPolicy",
+                    type: "GroupPostPolicy",
+                    attributes: [{ name: "@default", args: [{ name: "value", value: ExpressionUtils.literal("MEMBERS") }] }] as readonly AttributeApplication[],
+                    default: "MEMBERS" as FieldDefault
                 }
             },
             attributes: [
@@ -910,6 +934,7 @@ export class SchemaType implements SchemaDef {
                 { name: "@@allow", args: [{ name: "operation", value: ExpressionUtils.literal("update") }, { name: "condition", value: ExpressionUtils.binary(ExpressionUtils.field("authorId"), "==", ExpressionUtils.member(ExpressionUtils.call("auth"), ["id"])) }] },
                 { name: "@@allow", args: [{ name: "operation", value: ExpressionUtils.literal("update,delete") }, { name: "condition", value: ExpressionUtils.binary(ExpressionUtils.binary(ExpressionUtils.member(ExpressionUtils.field("group"), ["members"]), "?", ExpressionUtils.binary(ExpressionUtils.binary(ExpressionUtils.binary(ExpressionUtils.field("userId"), "==", ExpressionUtils.member(ExpressionUtils.call("auth"), ["id"])), "&&", ExpressionUtils.binary(ExpressionUtils.field("status"), "==", ExpressionUtils.literal("ACTIVE"))), "&&", ExpressionUtils.binary(ExpressionUtils.field("role"), "in", ExpressionUtils.array("GroupRole", [ExpressionUtils.literal("ADMIN"), ExpressionUtils.literal("MODERATOR")])))), "||", ExpressionUtils.binary(ExpressionUtils.binary(ExpressionUtils.member(ExpressionUtils.call("auth"), ["role"]), "==", ExpressionUtils.literal("admin")), "||", ExpressionUtils.binary(ExpressionUtils.member(ExpressionUtils.call("auth"), ["permissions"]), "?", ExpressionUtils.binary(ExpressionUtils.binary(ExpressionUtils.field("model"), "==", ExpressionUtils.call("currentModel")), "&&", ExpressionUtils.binary(ExpressionUtils.call("currentOperation"), "in", ExpressionUtils.field("actions")))))) }] },
                 { name: "@@allow", args: [{ name: "operation", value: ExpressionUtils.literal("delete") }, { name: "condition", value: ExpressionUtils.binary(ExpressionUtils.field("authorId"), "==", ExpressionUtils.member(ExpressionUtils.call("auth"), ["id"])) }] },
+                { name: "@@deny", args: [{ name: "operation", value: ExpressionUtils.literal("create") }, { name: "condition", value: ExpressionUtils.binary(ExpressionUtils.binary(ExpressionUtils.binary(ExpressionUtils.member(ExpressionUtils.field("group"), ["postPolicy"]), "==", ExpressionUtils.literal("ADMINS")), "&&", ExpressionUtils.unary("!", ExpressionUtils.binary(ExpressionUtils.member(ExpressionUtils.field("group"), ["members"]), "?", ExpressionUtils.binary(ExpressionUtils.binary(ExpressionUtils.binary(ExpressionUtils.field("userId"), "==", ExpressionUtils.member(ExpressionUtils.call("auth"), ["id"])), "&&", ExpressionUtils.binary(ExpressionUtils.field("status"), "==", ExpressionUtils.literal("ACTIVE"))), "&&", ExpressionUtils.binary(ExpressionUtils.field("role"), "in", ExpressionUtils.array("GroupRole", [ExpressionUtils.literal("ADMIN"), ExpressionUtils.literal("MODERATOR")])))))), "&&", ExpressionUtils.unary("!", ExpressionUtils.binary(ExpressionUtils.member(ExpressionUtils.call("auth"), ["role"]), "==", ExpressionUtils.literal("admin")))) }] },
                 { name: "@@deny", args: [{ name: "operation", value: ExpressionUtils.literal("post-update") }, { name: "condition", value: ExpressionUtils.binary(ExpressionUtils.binary(ExpressionUtils.field("groupId"), "!=", ExpressionUtils.member(ExpressionUtils.call("before"), ["groupId"])), "||", ExpressionUtils.binary(ExpressionUtils.field("authorId"), "!=", ExpressionUtils.member(ExpressionUtils.call("before"), ["authorId"]))) }] },
                 { name: "@@index", args: [{ name: "fields", value: ExpressionUtils.array("String", [ExpressionUtils.field("groupId"), ExpressionUtils.field("createdAt")]) }] },
                 { name: "@@index", args: [{ name: "fields", value: ExpressionUtils.array("String", [ExpressionUtils.field("authorId")]) }] },
@@ -1464,6 +1489,21 @@ export class SchemaType implements SchemaDef {
                     attributes: [{ name: "@relation", args: [{ name: "fields", value: ExpressionUtils.array("String", [ExpressionUtils.field("messageId")]) }, { name: "references", value: ExpressionUtils.array("String", [ExpressionUtils.field("id")]) }, { name: "onDelete", value: ExpressionUtils.literal("Cascade") }] }] as readonly AttributeApplication[],
                     relation: { opposite: "attachments", fields: ["messageId"], references: ["id"], onDelete: "Cascade" }
                 },
+                wikiPageId: {
+                    name: "wikiPageId",
+                    type: "String",
+                    optional: true,
+                    foreignKeyFor: [
+                        "wikiPage"
+                    ] as readonly string[]
+                },
+                wikiPage: {
+                    name: "wikiPage",
+                    type: "WikiPage",
+                    optional: true,
+                    attributes: [{ name: "@relation", args: [{ name: "fields", value: ExpressionUtils.array("String", [ExpressionUtils.field("wikiPageId")]) }, { name: "references", value: ExpressionUtils.array("String", [ExpressionUtils.field("id")]) }, { name: "onDelete", value: ExpressionUtils.literal("SetNull") }] }] as readonly AttributeApplication[],
+                    relation: { opposite: "attachments", fields: ["wikiPageId"], references: ["id"], onDelete: "SetNull" }
+                },
                 createdAt: {
                     name: "createdAt",
                     type: "DateTime",
@@ -1473,12 +1513,14 @@ export class SchemaType implements SchemaDef {
             },
             attributes: [
                 { name: "@@deny", args: [{ name: "operation", value: ExpressionUtils.literal("all") }, { name: "condition", value: ExpressionUtils.binary(ExpressionUtils.call("auth"), "==", ExpressionUtils._null()) }] },
-                { name: "@@allow", args: [{ name: "operation", value: ExpressionUtils.literal("read") }, { name: "condition", value: ExpressionUtils.binary(ExpressionUtils.binary(ExpressionUtils.binary(ExpressionUtils.binary(ExpressionUtils.binary(ExpressionUtils.field("uploaderId"), "==", ExpressionUtils.member(ExpressionUtils.call("auth"), ["id"])), "||", ExpressionUtils.field("isPublic")), "||", ExpressionUtils.call("check", [ExpressionUtils.field("post"), ExpressionUtils.literal("read")])), "||", ExpressionUtils.call("check", [ExpressionUtils.field("comment"), ExpressionUtils.literal("read")])), "||", ExpressionUtils.call("check", [ExpressionUtils.field("message"), ExpressionUtils.literal("read")])) }] },
+                { name: "@@allow", args: [{ name: "operation", value: ExpressionUtils.literal("read") }, { name: "condition", value: ExpressionUtils.binary(ExpressionUtils.binary(ExpressionUtils.binary(ExpressionUtils.binary(ExpressionUtils.binary(ExpressionUtils.binary(ExpressionUtils.field("uploaderId"), "==", ExpressionUtils.member(ExpressionUtils.call("auth"), ["id"])), "||", ExpressionUtils.field("isPublic")), "||", ExpressionUtils.call("check", [ExpressionUtils.field("post"), ExpressionUtils.literal("read")])), "||", ExpressionUtils.call("check", [ExpressionUtils.field("comment"), ExpressionUtils.literal("read")])), "||", ExpressionUtils.call("check", [ExpressionUtils.field("message"), ExpressionUtils.literal("read")])), "||", ExpressionUtils.call("check", [ExpressionUtils.field("wikiPage"), ExpressionUtils.literal("read")])) }] },
                 { name: "@@allow", args: [{ name: "operation", value: ExpressionUtils.literal("create,update,delete") }, { name: "condition", value: ExpressionUtils.binary(ExpressionUtils.field("uploaderId"), "==", ExpressionUtils.member(ExpressionUtils.call("auth"), ["id"])) }] },
                 { name: "@@deny", args: [{ name: "operation", value: ExpressionUtils.literal("post-update") }, { name: "condition", value: ExpressionUtils.binary(ExpressionUtils.binary(ExpressionUtils.binary(ExpressionUtils.field("uploaderId"), "!=", ExpressionUtils.member(ExpressionUtils.call("before"), ["uploaderId"])), "||", ExpressionUtils.binary(ExpressionUtils.field("key"), "!=", ExpressionUtils.member(ExpressionUtils.call("before"), ["key"]))), "||", ExpressionUtils.binary(ExpressionUtils.field("mimeType"), "!=", ExpressionUtils.member(ExpressionUtils.call("before"), ["mimeType"]))) }] },
+                { name: "@@deny", args: [{ name: "operation", value: ExpressionUtils.literal("create,post-update") }, { name: "condition", value: ExpressionUtils.binary(ExpressionUtils.binary(ExpressionUtils.field("wikiPageId"), "!=", ExpressionUtils._null()), "&&", ExpressionUtils.unary("!", ExpressionUtils.call("check", [ExpressionUtils.field("wikiPage"), ExpressionUtils.literal("update")]))) }] },
                 { name: "@@index", args: [{ name: "fields", value: ExpressionUtils.array("String", [ExpressionUtils.field("postId")]) }] },
                 { name: "@@index", args: [{ name: "fields", value: ExpressionUtils.array("String", [ExpressionUtils.field("commentId")]) }] },
                 { name: "@@index", args: [{ name: "fields", value: ExpressionUtils.array("String", [ExpressionUtils.field("messageId")]) }] },
+                { name: "@@index", args: [{ name: "fields", value: ExpressionUtils.array("String", [ExpressionUtils.field("wikiPageId")]) }] },
                 { name: "@@map", args: [{ name: "name", value: ExpressionUtils.literal("attachment") }] }
             ] as readonly AttributeApplication[],
             idFields: ["id"],
@@ -2185,6 +2227,7 @@ export class SchemaType implements SchemaDef {
                 { name: "@@deny", args: [{ name: "operation", value: ExpressionUtils.literal("post-update") }, { name: "condition", value: ExpressionUtils.binary(ExpressionUtils.field("creatorId"), "!=", ExpressionUtils.member(ExpressionUtils.call("before"), ["creatorId"])) }] },
                 { name: "@@deny", args: [{ name: "operation", value: ExpressionUtils.literal("post-update") }, { name: "condition", value: ExpressionUtils.binary(ExpressionUtils.field("endAt"), "<", ExpressionUtils.field("startAt")) }] },
                 { name: "@@deny", args: [{ name: "operation", value: ExpressionUtils.literal("create") }, { name: "condition", value: ExpressionUtils.binary(ExpressionUtils.field("endAt"), "<", ExpressionUtils.field("startAt")) }] },
+                { name: "@@deny", args: [{ name: "operation", value: ExpressionUtils.literal("create") }, { name: "condition", value: ExpressionUtils.binary(ExpressionUtils.binary(ExpressionUtils.field("groupId"), "!=", ExpressionUtils._null()), "&&", ExpressionUtils.unary("!", ExpressionUtils.member(ExpressionUtils.field("group"), ["calendarEnabled"]))) }] },
                 { name: "@@index", args: [{ name: "fields", value: ExpressionUtils.array("DateTime", [ExpressionUtils.field("startAt")]) }] },
                 { name: "@@index", args: [{ name: "fields", value: ExpressionUtils.array("String", [ExpressionUtils.field("groupId")]) }] },
                 { name: "@@map", args: [{ name: "name", value: ExpressionUtils.literal("event") }] }
@@ -2514,6 +2557,12 @@ export class SchemaType implements SchemaDef {
                     type: "WikiRevision",
                     array: true,
                     relation: { opposite: "page" }
+                },
+                attachments: {
+                    name: "attachments",
+                    type: "Attachment",
+                    array: true,
+                    relation: { opposite: "wikiPage" }
                 }
             },
             attributes: [
@@ -2522,6 +2571,7 @@ export class SchemaType implements SchemaDef {
                 { name: "@@allow", args: [{ name: "operation", value: ExpressionUtils.literal("delete") }, { name: "condition", value: ExpressionUtils.binary(ExpressionUtils.binary(ExpressionUtils.member(ExpressionUtils.field("group"), ["members"]), "?", ExpressionUtils.binary(ExpressionUtils.binary(ExpressionUtils.binary(ExpressionUtils.field("userId"), "==", ExpressionUtils.member(ExpressionUtils.call("auth"), ["id"])), "&&", ExpressionUtils.binary(ExpressionUtils.field("status"), "==", ExpressionUtils.literal("ACTIVE"))), "&&", ExpressionUtils.binary(ExpressionUtils.field("role"), "in", ExpressionUtils.array("GroupRole", [ExpressionUtils.literal("ADMIN"), ExpressionUtils.literal("MODERATOR")])))), "||", ExpressionUtils.binary(ExpressionUtils.binary(ExpressionUtils.member(ExpressionUtils.call("auth"), ["role"]), "==", ExpressionUtils.literal("admin")), "||", ExpressionUtils.binary(ExpressionUtils.member(ExpressionUtils.call("auth"), ["permissions"]), "?", ExpressionUtils.binary(ExpressionUtils.binary(ExpressionUtils.field("model"), "==", ExpressionUtils.call("currentModel")), "&&", ExpressionUtils.binary(ExpressionUtils.call("currentOperation"), "in", ExpressionUtils.field("actions")))))) }] },
                 { name: "@@allow", args: [{ name: "operation", value: ExpressionUtils.literal("delete") }, { name: "condition", value: ExpressionUtils.binary(ExpressionUtils.binary(ExpressionUtils.field("createdById"), "==", ExpressionUtils.member(ExpressionUtils.call("auth"), ["id"])), "&&", ExpressionUtils.binary(ExpressionUtils.member(ExpressionUtils.field("group"), ["members"]), "?", ExpressionUtils.binary(ExpressionUtils.binary(ExpressionUtils.binary(ExpressionUtils.field("userId"), "==", ExpressionUtils.member(ExpressionUtils.call("auth"), ["id"])), "&&", ExpressionUtils.binary(ExpressionUtils.field("status"), "==", ExpressionUtils.literal("ACTIVE"))), "&&", ExpressionUtils.binary(ExpressionUtils.member(ExpressionUtils.field("group"), ["wikiEditPolicy"]), "==", ExpressionUtils.literal("MEMBERS"))))) }] },
                 { name: "@@deny", args: [{ name: "operation", value: ExpressionUtils.literal("create") }, { name: "condition", value: ExpressionUtils.binary(ExpressionUtils.field("createdById"), "!=", ExpressionUtils.member(ExpressionUtils.call("auth"), ["id"])) }] },
+                { name: "@@deny", args: [{ name: "operation", value: ExpressionUtils.literal("create,update") }, { name: "condition", value: ExpressionUtils.unary("!", ExpressionUtils.member(ExpressionUtils.field("group"), ["wikiEnabled"])) }] },
                 { name: "@@deny", args: [{ name: "operation", value: ExpressionUtils.literal("create,post-update") }, { name: "condition", value: ExpressionUtils.binary(ExpressionUtils.binary(ExpressionUtils.field("parentId"), "!=", ExpressionUtils._null()), "&&", ExpressionUtils.binary(ExpressionUtils.member(ExpressionUtils.field("parent"), ["groupId"]), "!=", ExpressionUtils.field("groupId"))) }] },
                 { name: "@@deny", args: [{ name: "operation", value: ExpressionUtils.literal("post-update") }, { name: "condition", value: ExpressionUtils.binary(ExpressionUtils.binary(ExpressionUtils.field("groupId"), "!=", ExpressionUtils.member(ExpressionUtils.call("before"), ["groupId"])), "||", ExpressionUtils.binary(ExpressionUtils.field("createdById"), "!=", ExpressionUtils.member(ExpressionUtils.call("before"), ["createdById"]))) }] },
                 { name: "@@index", args: [{ name: "fields", value: ExpressionUtils.array("String", [ExpressionUtils.field("groupId"), ExpressionUtils.field("parentId"), ExpressionUtils.field("position")]) }] },
@@ -2994,6 +3044,13 @@ export class SchemaType implements SchemaDef {
         },
         WikiEditPolicy: {
             name: "WikiEditPolicy",
+            values: {
+                MEMBERS: "MEMBERS",
+                ADMINS: "ADMINS"
+            }
+        },
+        GroupPostPolicy: {
+            name: "GroupPostPolicy",
             values: {
                 MEMBERS: "MEMBERS",
                 ADMINS: "ADMINS"

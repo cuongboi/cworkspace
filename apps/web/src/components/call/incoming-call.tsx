@@ -4,6 +4,7 @@ import { UserAvatar } from "@/components/common/user-avatar"
 import { Button } from "@/components/ui/button"
 import type { CallSummary, UserSummary } from "@/lib/realtime-events"
 import { Ringtone } from "@/lib/rtc/ringtone"
+import { useTranslation } from "react-i18next"
 
 export type IncomingCall = {
   call: CallSummary
@@ -35,6 +36,7 @@ export function IncomingCallCard({
   onDecline: () => void
 }) {
   useRingtone()
+  const { t } = useTranslation()
   const titleId = useId()
   const descId = useId()
   const isVideo = incoming.call.type === "VIDEO"
@@ -45,7 +47,7 @@ export function IncomingCallCard({
       role="alertdialog"
       aria-labelledby={titleId}
       aria-describedby={descId}
-      className="fixed right-4 bottom-4 z-50 w-[min(22rem,calc(100vw-2rem))] animate-in rounded-2xl border bg-popover p-4 text-popover-foreground shadow-xl fade-in-0 slide-in-from-bottom-4"
+      className="fixed right-4 bottom-4 z-50 w-[min(22rem,calc(100vw-2rem))] animate-in rounded-2xl border bg-popover p-4 text-popover-foreground shadow-overlay fade-in-0 slide-in-from-bottom-4"
     >
       <div className="flex items-center gap-3">
         <span className="relative inline-flex">
@@ -69,7 +71,7 @@ export function IncomingCallCard({
               <PhoneIcon className="size-3.5 shrink-0" aria-hidden />
             )}
             <span className="truncate">
-              Incoming {isVideo ? "video" : "audio"} call
+              {isVideo ? t("call.incoming.video") : t("call.incoming.audio")}
               {showTitle ? ` · ${incoming.title}` : ""}
             </span>
           </p>
@@ -80,27 +82,31 @@ export function IncomingCallCard({
           variant="secondary"
           className="flex-1 bg-destructive text-white hover:bg-destructive/85"
           onClick={onDecline}
-          aria-label={`Decline call from ${incoming.from.name}`}
+          aria-label={t("call.incoming.declineFrom", {
+            name: incoming.from.name,
+          })}
         >
           <PhoneOffIcon data-icon="inline-start" />
-          Decline
+          {t("call.incoming.decline")}
         </Button>
         <Button
-          className="flex-1 bg-emerald-600 text-white hover:bg-emerald-600/85"
+          className="flex-1 bg-success text-success-foreground hover:bg-success/90"
           onClick={onAccept}
-          aria-label={`Accept call from ${incoming.from.name}`}
+          aria-label={t("call.incoming.acceptFrom", {
+            name: incoming.from.name,
+          })}
         >
           {isVideo ? (
             <VideoIcon data-icon="inline-start" />
           ) : (
             <PhoneIcon data-icon="inline-start" />
           )}
-          Accept
+          {t("call.incoming.accept")}
         </Button>
       </div>
       {more > 0 ? (
         <p className="mt-2 text-center text-xs text-muted-foreground">
-          +{more} more incoming call{more > 1 ? "s" : ""}
+          {t("call.incoming.more", { count: more })}
         </p>
       ) : null}
     </div>

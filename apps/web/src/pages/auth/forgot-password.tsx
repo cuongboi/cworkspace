@@ -1,4 +1,5 @@
-import { useState } from "react"
+import { useMemo, useState } from "react"
+import { useTranslation } from "react-i18next"
 import { Link } from "react-router-dom"
 import { z } from "zod"
 
@@ -16,17 +17,25 @@ import { Input } from "@/components/ui/input"
 import { authClient } from "@/lib/auth-client"
 import { FormError } from "./auth-layout"
 
-const shape = { email: z.email("Enter a valid email") }
-
-const schema: AutoFormSchema<typeof shape> = {
-  email: {
-    schema: shape.email,
-    as: Input,
-    meta: { type: "email", autoComplete: "email" },
-  },
+function useSchema() {
+  const { t } = useTranslation()
+  return useMemo(() => {
+    const shape = { email: z.email(t("auth.validation.email")) }
+    const schema: AutoFormSchema<typeof shape> = {
+      email: {
+        schema: shape.email,
+        label: t("auth.fields.email"),
+        as: Input,
+        meta: { type: "email", autoComplete: "email" },
+      },
+    }
+    return schema
+  }, [t])
 }
 
 export function ForgotPasswordPage() {
+  const { t } = useTranslation()
+  const schema = useSchema()
   const [error, setError] = useState<string | null>(null)
   const [pending, setPending] = useState(false)
   const [sent, setSent] = useState(false)
@@ -39,18 +48,16 @@ export function ForgotPasswordPage() {
       redirectTo: `${window.location.origin}/reset-password`,
     })
     setPending(false)
-    if (error) return setError(error.message ?? "Unable to send reset link")
+    if (error) return setError(error.message ?? t("auth.forgot.failed"))
     setSent(true)
   }
 
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Forgot password</CardTitle>
+        <CardTitle>{t("auth.forgot.title")}</CardTitle>
         <CardDescription>
-          {sent
-            ? "If an account exists for that email, a reset link is on its way."
-            : "Enter your email and we'll send you a reset link."}
+          {sent ? t("auth.forgot.sent") : t("auth.forgot.description")}
         </CardDescription>
       </CardHeader>
       {!sent && (
@@ -62,7 +69,7 @@ export function ForgotPasswordPage() {
           >
             <FormError message={error} />
             <Button type="submit" className="mt-2 w-full" disabled={pending}>
-              {pending ? "Sending…" : "Send reset link"}
+              {pending ? t("auth.forgot.pending") : t("auth.forgot.submit")}
             </Button>
           </AutoForm>
         </CardContent>
@@ -72,7 +79,7 @@ export function ForgotPasswordPage() {
           to="/sign-in"
           className="text-sm text-muted-foreground underline-offset-4 hover:underline"
         >
-          Back to sign in
+          {t("auth.forgot.backToSignIn")}
         </Link>
       </CardFooter>
     </Card>

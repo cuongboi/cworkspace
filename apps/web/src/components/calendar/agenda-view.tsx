@@ -1,5 +1,7 @@
 import { cn } from "cn"
 import { format, isToday } from "date-fns"
+import { useTranslation } from "react-i18next"
+import { useDateLocale } from "@/lib/i18n"
 import { CalendarXIcon, MapPinIcon, RepeatIcon, VideoIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
@@ -11,12 +13,14 @@ import {
   EmptyTitle,
 } from "@/components/ui/empty"
 import {
+  agendaDayLabel,
   daysOf,
   type Occurrence,
   occursOn,
+  shortDayLabel,
   shortTimeLabel,
 } from "./calendar-utils"
-import { EVENT_TYPE_STYLES } from "./event-colors"
+import { EVENT_TYPE_STYLES, eventTypeLabelKey } from "./event-colors"
 import { ScrollArea } from "@/components/ui/scroll-area"
 
 type Props = {
@@ -27,6 +31,8 @@ type Props = {
 }
 
 export function AgendaView({ range, occurrences, onSelect, onCreate }: Props) {
+  const { t } = useTranslation()
+  const locale = useDateLocale()
   const groups = daysOf(range.start, range.end)
     .map((day) => ({ day, items: occurrences.filter((o) => occursOn(o, day)) }))
     .filter((g) => g.items.length > 0)
@@ -38,14 +44,16 @@ export function AgendaView({ range, occurrences, onSelect, onCreate }: Props) {
           <EmptyMedia variant="icon">
             <CalendarXIcon />
           </EmptyMedia>
-          <EmptyTitle>Nothing scheduled</EmptyTitle>
+          <EmptyTitle>{t("calendar.agenda.emptyTitle")}</EmptyTitle>
           <EmptyDescription>
-            No events between {format(range.start, "MMM d")} and{" "}
-            {format(range.end, "MMM d")}.
+            {t("calendar.agenda.emptyBody", {
+              start: shortDayLabel(range.start),
+              end: shortDayLabel(range.end),
+            })}
           </EmptyDescription>
         </EmptyHeader>
         <EmptyContent>
-          <Button onClick={onCreate}>New event</Button>
+          <Button onClick={onCreate}>{t("calendar.newEvent")}</Button>
         </EmptyContent>
       </Empty>
     )
@@ -63,10 +71,10 @@ export function AgendaView({ range, occurrences, onSelect, onCreate }: Props) {
                   isToday(day) && "bg-primary text-primary-foreground"
                 )}
               >
-                {format(day, "d")}
+                {format(day, "d", { locale })}
               </span>
               <span className="text-xs text-muted-foreground uppercase sm:pt-2.5">
-                {format(day, "MMM, EEE")}
+                {agendaDayLabel(day)}
               </span>
             </div>
             <ul className="flex min-w-0 flex-1 flex-col gap-1">
@@ -89,7 +97,7 @@ export function AgendaView({ range, occurrences, onSelect, onCreate }: Props) {
                       />
                       <span className="w-28 shrink-0 text-sm text-muted-foreground tabular-nums">
                         {o.event.allDay
-                          ? "All day"
+                          ? t("calendar.allDay")
                           : `${shortTimeLabel(o.start)} – ${shortTimeLabel(o.end)}`}
                       </span>
                       <span className="flex min-w-0 flex-1 flex-col">
@@ -98,20 +106,20 @@ export function AgendaView({ range, occurrences, onSelect, onCreate }: Props) {
                           {o.event.rrule ? (
                             <RepeatIcon
                               className="size-3.5 text-muted-foreground"
-                              aria-label="Repeats"
+                              aria-label={t("calendar.repeats")}
                             />
                           ) : null}
                           {o.event.hasVideoCall ? (
                             <VideoIcon
                               className="size-3.5 text-muted-foreground"
-                              aria-label="Video call"
+                              aria-label={t("calendar.videoCall")}
                             />
                           ) : null}
                         </span>
                         <span className="flex items-center gap-2 truncate text-xs text-muted-foreground">
                           <span className="inline-flex items-center gap-1">
                             <Icon className="size-3" />
-                            {style.label}
+                            {t(eventTypeLabelKey(o.event.type))}
                           </span>
                           {o.event.location ? (
                             <span className="inline-flex min-w-0 items-center gap-1 truncate">

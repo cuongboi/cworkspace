@@ -1,5 +1,6 @@
 import { PlusIcon, SearchIcon, UsersIcon } from "lucide-react"
 import { useQueryState } from "nuqs"
+import { useTranslation } from "react-i18next"
 import { useSearchParams } from "react-router-dom"
 import { useState } from "react"
 import { CreateGroupDialog } from "@/components/groups/create-group-dialog"
@@ -25,6 +26,7 @@ import { COMPANY_NAME } from "@/lib/company"
 type Tab = "discover" | "mine"
 
 const GroupsPage = () => {
+  const { t } = useTranslation()
   const { me } = useApp()
   const [searchParams] = useSearchParams()
   const [tab, setTab] = useState<Tab>(
@@ -64,24 +66,27 @@ const GroupsPage = () => {
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div>
             <h1 className="text-2xl font-bold tracking-tight">
-              Discover groups
+              {t("groups.directory.title")}
             </h1>
             <p className="text-sm text-muted-foreground">
-              Find teams and communities across {COMPANY_NAME}.
+              {t("groups.directory.subtitle", { company: COMPANY_NAME })}
             </p>
           </div>
           <Button onClick={() => setCreateOpen(true)}>
             <PlusIcon />
-            Create group
+            {t("groups.create.submit")}
           </Button>
         </div>
 
         <div className="flex flex-col-reverse gap-3 sm:flex-row sm:items-center sm:justify-between">
           <Tabs value={tab} onValueChange={(v) => setTab(v as Tab)}>
             <TabsList>
-              <TabsTrigger value="discover">Discover</TabsTrigger>
+              <TabsTrigger value="discover">
+                {t("groups.directory.discover")}
+              </TabsTrigger>
               <TabsTrigger value="mine">
-                Your groups{groups ? ` (${myCount})` : ""}
+                {t("groups.directory.mine")}
+                {groups ? ` (${myCount})` : ""}
               </TabsTrigger>
             </TabsList>
           </Tabs>
@@ -90,8 +95,8 @@ const GroupsPage = () => {
             <Input
               value={q}
               onChange={(e) => setQ(e.target.value)}
-              placeholder="Search groups"
-              aria-label="Search groups"
+              placeholder={t("groups.directory.search")}
+              aria-label={t("groups.directory.search")}
               className="pl-8"
             />
           </div>
@@ -110,18 +115,20 @@ const GroupsPage = () => {
                 <UsersIcon />
               </EmptyMedia>
               <EmptyTitle>
-                {needle ? "No groups match your search" : "No groups yet"}
+                {needle
+                  ? t("groups.directory.noMatch")
+                  : t("groups.directory.empty")}
               </EmptyTitle>
               <EmptyDescription>
                 {tab === "mine"
-                  ? "Join a group from Discover, or start one for your team."
-                  : "Start a group to bring people together around a team, project or interest."}
+                  ? t("groups.directory.emptyMine")
+                  : t("groups.directory.emptyBody")}
               </EmptyDescription>
             </EmptyHeader>
             <EmptyContent>
               <Button onClick={() => setCreateOpen(true)}>
                 <PlusIcon />
-                Create group
+                {t("groups.create.submit")}
               </Button>
             </EmptyContent>
           </Empty>

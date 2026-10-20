@@ -1,6 +1,7 @@
 import { useQueryClient } from "@tanstack/react-query"
 import { HashIcon } from "lucide-react"
 import { type ReactNode, useState } from "react"
+import { useTranslation } from "react-i18next"
 import { useNavigate } from "react-router-dom"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
@@ -25,6 +26,7 @@ import {
 import { Spinner } from "@/components/ui/spinner"
 import { Textarea } from "@/components/ui/textarea"
 import { ApiError, api } from "@/lib/api-client"
+import { errorMessage } from "@/lib/i18n"
 import { invalidateModels, useDbQuery } from "@/lib/query"
 import {
   type ChannelItem,
@@ -53,6 +55,7 @@ export function ChannelFormDialog({
   onOpenChange?: (open: boolean) => void
   children?: ReactNode
 }) {
+  const { t } = useTranslation()
   const qc = useQueryClient()
   const navigate = useNavigate()
   const [innerOpen, setInnerOpen] = useState(false)
@@ -94,20 +97,22 @@ export function ChannelFormDialog({
       const body = { name: slug, parentId, topic: topic.trim() || null }
       if (channel) {
         await api.patch(`/api/channels/${channel.id}`, body)
-        toast.success(`Saved #${slug}`)
+        toast.success(t("groups.channelForm.saved", { name: slug }))
       } else {
         const created = await api.post<{ id: string }>(
           `/api/groups/${groupId}/channels`,
           body
         )
-        toast.success(`Created #${slug}`)
+        toast.success(t("groups.channelForm.created", { name: slug }))
         void navigate(`/groups/${groupSlug}/c/${created.id}`)
       }
       await invalidateModels(qc, ["channel"])
       setOpen(false)
     } catch (err) {
       toast.error(
-        err instanceof ApiError ? err.message : "Could not save the channel"
+        err instanceof ApiError
+          ? errorMessage(err)
+          : t("groups.channelForm.saveFailed")
       )
     } finally {
       setBusy(false)
@@ -133,22 +138,24 @@ export function ChannelFormDialog({
         >
           <DialogHeader>
             <DialogTitle>
-              {channel ? "Edit channel" : "New channel"}
+              {channel
+                ? t("groups.channelForm.editTitle")
+                : t("groups.newChannel")}
             </DialogTitle>
             <DialogDescription>
-              Channels are chat rooms everyone in the group can join.
+              {t("groups.channelForm.description")}
             </DialogDescription>
           </DialogHeader>
 
           <div className="flex flex-col gap-2">
-            <Label htmlFor="channel-name">Name</Label>
+            <Label htmlFor="channel-name">{t("groups.form.name")}</Label>
             <div className="relative">
               <HashIcon className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-muted-foreground" />
               <Input
                 id="channel-name"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                placeholder="e.g. design-review"
+                placeholder={t("groups.channelForm.namePlaceholder")}
                 maxLength={60}
                 autoFocus
                 disabled={editingGeneral}
@@ -157,13 +164,15 @@ export function ChannelFormDialog({
             </div>
             <p className="text-xs text-muted-foreground">
               {name && slug !== name.trim().replace(/^#+/, "")
-                ? `Will be created as #${slug || "…"}`
-                : "Lowercase letters, numbers, - and _."}
+                ? t("groups.channelForm.willBe", { name: slug || "…" })
+                : t("groups.channelForm.nameHint")}
             </p>
           </div>
 
           <div className="flex flex-col gap-2">
-            <Label htmlFor="channel-parent">Inside</Label>
+            <Label htmlFor="channel-parent">
+              {t("groups.channelForm.inside")}
+            </Label>
             <Select
               value={parentId ?? NO_PARENT}
               onValueChange={(v) => setParentId(v === NO_PARENT ? null : v)}
@@ -173,7 +182,9 @@ export function ChannelFormDialog({
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value={NO_PARENT}>Top level</SelectItem>
+                <SelectItem value={NO_PARENT}>
+                  {t("groups.channelForm.topLevel")}
+                </SelectItem>
                 {parents.map((p) => (
                   <SelectItem key={p.id} value={p.id}>
                     # {p.name}
@@ -183,20 +194,23 @@ export function ChannelFormDialog({
             </Select>
             {hasChildren ? (
               <p className="text-xs text-muted-foreground">
-                Channels with sub-channels stay at the top level.
+                {t("groups.channelForm.hasChildren")}
               </p>
             ) : null}
           </div>
 
           <div className="flex flex-col gap-2">
             <Label htmlFor="channel-topic">
-              Topic <span className="text-muted-foreground">(optional)</span>
+              {t("groups.channelForm.topic")}{" "}
+              <span className="text-muted-foreground">
+                {t("groups.channelForm.optional")}
+              </span>
             </Label>
             <Textarea
               id="channel-topic"
               value={topic}
               onChange={(e) => setTopic(e.target.value)}
-              placeholder="What is this channel about?"
+              placeholder={t("groups.channelForm.topicPlaceholder")}
               maxLength={250}
               rows={2}
             />
@@ -208,11 +222,11 @@ export function ChannelFormDialog({
               variant="ghost"
               onClick={() => setOpen(false)}
             >
-              Cancel
+              {t("common.cancel")}
             </Button>
             <Button type="submit" disabled={!slug || busy}>
               {busy ? <Spinner /> : null}
-              {channel ? "Save" : "Create channel"}
+              {channel ? t("common.save") : t("groups.channelForm.create")}
             </Button>
           </DialogFooter>
         </form>

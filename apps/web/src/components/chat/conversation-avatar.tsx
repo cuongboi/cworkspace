@@ -79,7 +79,7 @@ export function ConversationAvatar({
         />
       ) : null}
       {anyOnline ? (
-        <span className="absolute right-0 bottom-0 size-2.5 rounded-full bg-emerald-500 ring-2 ring-background" />
+        <span className="absolute right-0 bottom-0 size-2.5 rounded-full bg-success ring-2 ring-background" />
       ) : null}
     </span>
   )

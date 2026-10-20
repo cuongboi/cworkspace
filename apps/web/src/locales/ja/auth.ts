@@ -1,0 +1,72 @@
+import type { DeepStrings } from "./types"
+import type { auth as en } from "../en/auth"
+
+export const auth: DeepStrings<typeof en> = {
+  fields: {
+    name: "名前",
+    email: "メールアドレス",
+    password: "パスワード",
+    newPassword: "新しいパスワード",
+    confirmPassword: "パスワード（確認）",
+  },
+  validation: {
+    email: "有効なメールアドレスを入力してください",
+    name: "名前を入力してください",
+    password: "パスワードを入力してください",
+    passwordLength: "8文字以上で入力してください",
+    passwordMismatch: "パスワードが一致しません",
+  },
+  signIn: {
+    title: "ログイン",
+    description: "メールアドレスとパスワードを入力してください。",
+    forgot: "パスワードをお忘れですか？",
+    submit: "ログイン",
+    pending: "ログイン中…",
+    failed: "ログインできませんでした",
+    noAccount: "アカウントをお持ちでないですか？",
+    signUp: "新規登録",
+  },
+  signUp: {
+    title: "アカウントを作成",
+    description: "必要事項を入力して始めましょう。",
+    submit: "登録する",
+    pending: "アカウントを作成中…",
+    failed: "登録できませんでした",
+    haveAccount: "すでにアカウントをお持ちですか？",
+    signIn: "ログイン",
+  },
+  forgot: {
+    title: "パスワードをお忘れの場合",
+    description: "メールアドレスを入力すると、再設定用のリンクをお送りします。",
+    sent: "該当するアカウントがある場合、再設定用のリンクをお送りしました。",
+    submit: "再設定リンクを送信",
+    pending: "送信中…",
+    failed: "再設定リンクを送信できませんでした",
+    backToSignIn: "ログインに戻る",
+  },
+  reset: {
+    title: "パスワードの再設定",
+    description: "アカウントの新しいパスワードを設定してください。",
+    submit: "パスワードを再設定",
+    failed: "パスワードを再設定できませんでした",
+    invalidTitle: "無効なリンク",
+    invalidDescription:
+      "この再設定リンクは無効か、有効期限が切れています。もう一度リクエストしてください。",
+    requestNew: "新しいリンクをリクエスト",
+  },
+  invite: {
+    title: "招待",
+    notFound: "この招待は存在しません。",
+    used: "この招待はすでに使用されています。ログインして続けてください。",
+    invalid: "この招待は無効になりました。アカウントの作成は引き続き可能です。",
+    signIn: "ログイン",
+    createAccount: "アカウントを作成",
+    youreIn: "{{company}} に参加しています",
+    signedInAs: "{{email}} でログイン中",
+    goToFeed: "フィードへ移動",
+    join: "{{company}} に参加",
+    invited: "{{inviter}} さんが {{email}} を招待しました",
+    createYourAccount: "アカウントを作成",
+    haveAccount: "すでにアカウントをお持ちの方",
+  },
+}

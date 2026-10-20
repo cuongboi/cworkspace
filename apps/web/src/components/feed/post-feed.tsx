@@ -1,9 +1,11 @@
 import { useVirtualizer } from "@tanstack/react-virtual"
 import { type ReactNode, useEffect, useState } from "react"
+import { useTranslation } from "react-i18next"
 import { Button } from "@/components/ui/button"
 import { Spinner } from "@/components/ui/spinner"
 import { useApp } from "@/hooks/use-app"
 import { usePageScrollElement } from "@/hooks/use-page-scroll"
+import { errorMessage } from "@/lib/i18n"
 import { useDbInfinite, useDbQuery } from "@/lib/query"
 import type { PostWhereInput } from "@app/api/zenstack/input"
 import { PostCard, PostSkeleton } from "./post-card"
@@ -33,6 +35,7 @@ export function PostFeed({
   showGroup?: boolean
   empty?: ReactNode
 }) {
+  const { t } = useTranslation()
   const { me } = useApp()
   const {
     data,
@@ -109,10 +112,10 @@ export function PostFeed({
     return (
       <div className="flex flex-col items-center gap-3 rounded-xl border border-dashed p-8 text-center text-sm">
         <p className="text-muted-foreground">
-          {error.message || "Couldn't load posts."}
+          {errorMessage(error) || t("feed.loadFailed")}
         </p>
         <Button variant="outline" size="sm" onClick={() => void refetch()}>
-          Try again
+          {t("common.retry")}
         </Button>
       </div>
     )
@@ -155,11 +158,11 @@ export function PostFeed({
           className="self-center"
           onClick={() => void fetchNextPage()}
         >
-          Load more
+          {t("common.loadMore")}
         </Button>
       ) : (
         <p className="py-4 text-center text-sm text-muted-foreground">
-          You're all caught up
+          {t("feed.caughtUp")}
         </p>
       )}
     </div>

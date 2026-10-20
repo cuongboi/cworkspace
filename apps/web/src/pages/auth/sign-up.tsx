@@ -1,5 +1,6 @@
 import { useQueryState } from "nuqs"
 import { useMemo, useState } from "react"
+import { useTranslation } from "react-i18next"
 import { Link, useNavigate } from "react-router-dom"
 import type { UseFormReturn } from "react-hook-form"
 import { z } from "zod"
@@ -19,33 +20,58 @@ import { authClient } from "@/lib/auth-client"
 import { redirectParser, safeRedirect } from "@/lib/search-params"
 import { FormError } from "./auth-layout"
 
-const shape = {
-  name: z.string().trim().min(1, "Enter your name"),
-  email: z.email("Enter a valid email"),
-  password: z.string().min(8, "Use at least 8 characters"),
-  confirmPassword: z.string().min(8, "Use at least 8 characters"),
+type Values = {
+  name: string
+  email: string
+  password: string
+  confirmPassword: string
 }
-type Values = z.infer<z.ZodObject<typeof shape>>
 
 const newPassword = { type: "password", autoComplete: "new-password" }
 
-const schema: AutoFormSchema<typeof shape> = {
-  name: { schema: shape.name, as: Input, meta: { autoComplete: "name" } },
-  email: {
-    schema: shape.email,
-    as: Input,
-    meta: { type: "email", autoComplete: "email" },
-  },
-  password: { schema: shape.password, as: Input, meta: newPassword },
-  confirmPassword: {
-    schema: shape.confirmPassword,
-    label: "Confirm password",
-    as: Input,
-    meta: newPassword,
-  },
+function useSchema() {
+  const { t } = useTranslation()
+  return useMemo(() => {
+    const min = t("auth.validation.passwordLength")
+    const shape = {
+      name: z.string().trim().min(1, t("auth.validation.name")),
+      email: z.email(t("auth.validation.email")),
+      password: z.string().min(8, min),
+      confirmPassword: z.string().min(8, min),
+    }
+    const schema: AutoFormSchema<typeof shape> = {
+      name: {
+        schema: shape.name,
+        label: t("auth.fields.name"),
+        as: Input,
+        meta: { autoComplete: "name" },
+      },
+      email: {
+        schema: shape.email,
+        label: t("auth.fields.email"),
+        as: Input,
+        meta: { type: "email", autoComplete: "email" },
+      },
+      password: {
+        schema: shape.password,
+        label: t("auth.fields.password"),
+        as: Input,
+        meta: newPassword,
+      },
+      confirmPassword: {
+        schema: shape.confirmPassword,
+        label: t("auth.fields.confirmPassword"),
+        as: Input,
+        meta: newPassword,
+      },
+    }
+    return schema
+  }, [t])
 }
 
 export function SignUpPage() {
+  const { t } = useTranslation()
+  const schema = useSchema()
   const navigate = useNavigate()
   const [redirect] = useQueryState("redirect", redirectParser)
   // prefilled from an invitation link (/invite/:id)
@@ -60,7 +86,7 @@ export function SignUpPage() {
   async function onSubmit(values: Values, form: UseFormReturn<Values>) {
     if (values.password !== values.confirmPassword) {
       return form.setError("confirmPassword", {
-        message: "Passwords do not match",
+        message: t("auth.validation.passwordMismatch"),
       })
     }
     setPending(true)
@@ -71,15 +97,15 @@ export function SignUpPage() {
       password: values.password,
     })
     setPending(false)
-    if (error) return setError(error.message ?? "Unable to sign up")
+    if (error) return setError(error.message ?? t("auth.signUp.failed"))
     navigate(safeRedirect(redirect), { replace: true })
   }
 
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Create an account</CardTitle>
-        <CardDescription>Fill in your details to get started.</CardDescription>
+        <CardTitle>{t("auth.signUp.title")}</CardTitle>
+        <CardDescription>{t("auth.signUp.description")}</CardDescription>
       </CardHeader>
       <CardContent>
         <AutoForm
@@ -90,18 +116,18 @@ export function SignUpPage() {
         >
           <FormError message={error} />
           <Button type="submit" className="mt-2 w-full" disabled={pending}>
-            {pending ? "Creating account…" : "Sign up"}
+            {pending ? t("auth.signUp.pending") : t("auth.signUp.submit")}
           </Button>
         </AutoForm>
       </CardContent>
       <CardFooter className="mt-4">
         <p className="text-sm text-muted-foreground">
-          Already have an account?{" "}
+          {t("auth.signUp.haveAccount")}{" "}
           <Link
             to={{ pathname: "/sign-in", search: window.location.search }}
             className="text-foreground underline-offset-4 hover:underline"
           >
-            Sign in
+            {t("auth.signUp.signIn")}
           </Link>
         </p>
       </CardFooter>

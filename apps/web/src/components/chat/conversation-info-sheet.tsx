@@ -4,6 +4,7 @@ import {
   SheetDescription,
   SheetTitle,
 } from "@/components/ui/sheet"
+import { useTranslation } from "react-i18next"
 import type { ThreadConversation, ThreadMember } from "./chat-data"
 import { ConversationInfoPanel } from "./conversation-info-panel"
 
@@ -19,12 +20,13 @@ export function ConversationInfoSheet({
   conversation: ThreadConversation
   members: ThreadMember[]
 }) {
+  const { t } = useTranslation()
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent className="w-full gap-0 p-0 sm:max-w-sm">
-        <SheetTitle className="sr-only">Conversation details</SheetTitle>
+        <SheetTitle className="sr-only">{t("chat.thread.details")}</SheetTitle>
         <SheetDescription className="sr-only">
-          Info, files and members of this conversation
+          {t("chat.info.sheetDescription")}
         </SheetDescription>
         <ConversationInfoPanel
           conversation={conversation}

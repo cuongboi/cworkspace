@@ -1,5 +1,6 @@
 import { HashIcon, SearchXIcon, SettingsIcon } from "lucide-react"
 import { useQueryState } from "nuqs"
+import { useTranslation } from "react-i18next"
 import { Link, useParams } from "react-router-dom"
 import { useEffect } from "react"
 import { ChatThread } from "@/components/chat/chat-thread"
@@ -34,6 +35,7 @@ import { channelSettingsParser } from "@/lib/search-params"
 
 /** /groups/:groupSlug/c/:channelId — a channel's chat. */
 const ChannelPage = () => {
+  const { t } = useTranslation()
   const { me, isAdmin } = useApp()
   const params = useParams()
   const slug = params.groupSlug ?? ""
@@ -42,7 +44,8 @@ const ChannelPage = () => {
 
   const groups = useDbQuery(myGroupsKey(me.id), () => fetchMyGroups(me.id))
   const membership = groups.data?.find((m) => m.group.slug === slug)
-  const group = membership?.group
+  // a group with channels switched off has none to show
+  const group = membership?.group.channelsEnabled ? membership.group : undefined
   const channels = useDbQuery(
     channelsKey(group?.id ?? ""),
     () => fetchChannels(group?.id ?? ""),
@@ -71,15 +74,15 @@ const ChannelPage = () => {
           <EmptyMedia variant="icon">
             <SearchXIcon />
           </EmptyMedia>
-          <EmptyTitle>Channel not found</EmptyTitle>
+          <EmptyTitle>{t("groups.channel.notFound")}</EmptyTitle>
           <EmptyDescription>
-            It may have been deleted, or you're not a member of this group.
+            {t("groups.channel.notFoundBody")}
           </EmptyDescription>
         </EmptyHeader>
         <EmptyContent>
           <Button asChild variant="outline">
             <Link to={group ? `/groups/${group.slug}` : "/groups"}>
-              Back to the group
+              {t("groups.channel.backToGroup")}
             </Link>
           </Button>
         </EmptyContent>
@@ -116,7 +119,7 @@ const ChannelPage = () => {
               {channel.name}
             </h2>
             {channel.topic ? (
-              <span className="hidden min-w-0 truncate text-[11px] text-muted-foreground lg:inline">
+              <span className="hidden min-w-0 truncate text-2xs text-muted-foreground lg:inline">
                 · {channel.topic}
               </span>
             ) : null}
@@ -128,13 +131,13 @@ const ChannelPage = () => {
               <Button
                 variant="ghost"
                 size="icon-sm"
-                aria-label="Channel settings"
+                aria-label={t("groups.channel.settings")}
                 onClick={() => void setSettings("general")}
               >
                 <SettingsIcon />
               </Button>
             </TooltipTrigger>
-            <TooltipContent>Channel settings</TooltipContent>
+            <TooltipContent>{t("groups.channel.settings")}</TooltipContent>
           </Tooltip>
         }
       />

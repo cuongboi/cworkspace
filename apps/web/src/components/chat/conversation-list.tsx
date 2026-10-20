@@ -11,6 +11,7 @@ import {
 import { Link } from "react-router-dom"
 import { type ReactNode, useState } from "react"
 import { useQueryState } from "nuqs"
+import { useTranslation } from "react-i18next"
 import { Button } from "@/components/ui/button"
 import {
   SidebarCount,
@@ -50,6 +51,7 @@ type Row = { item: ConversationListItem; title: string }
 
 /** Chat-only sidebar: quick filters, then Groups and Direct messages sections. */
 export function ConversationList({ activeId }: { activeId?: string }) {
+  const { t } = useTranslation()
   const { me } = useApp()
   const now = useNow()
   const [q, setQ] = useState("")
@@ -92,34 +94,38 @@ export function ConversationList({ activeId }: { activeId?: string }) {
     icon: ReactNode
     count?: number
   }[] = [
-      { value: "all", label: "All chats", icon: <MessagesSquareIcon /> },
-      {
-        value: "unread",
-        label: "Unread",
-        icon: <InboxIcon />,
-        count: unreadCount,
-      },
-      {
-        value: "muted",
-        label: "Muted",
-        icon: <BellOffIcon />,
-        count: mutedCount,
-      },
-    ]
+    { value: "all", label: t("chat.list.all"), icon: <MessagesSquareIcon /> },
+    {
+      value: "unread",
+      label: t("chat.list.unread"),
+      icon: <InboxIcon />,
+      count: unreadCount,
+    },
+    {
+      value: "muted",
+      label: t("chat.list.muted"),
+      icon: <BellOffIcon />,
+      count: mutedCount,
+    },
+  ]
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-muted/40">
       <div className="flex h-12 shrink-0 items-center justify-between gap-2 border-b px-4">
-        <h1 className="text-sm font-semibold">Chats</h1>
+        <h1 className="text-sm font-semibold">{t("chat.chats")}</h1>
         <Tooltip>
           <NewConversationDialog>
             <TooltipTrigger asChild>
-              <Button variant="ghost" size="icon-sm" aria-label="New message">
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                aria-label={t("chat.list.newMessage")}
+              >
                 <SquarePenIcon />
               </Button>
             </TooltipTrigger>
           </NewConversationDialog>
-          <TooltipContent>New message</TooltipContent>
+          <TooltipContent>{t("chat.list.newMessage")}</TooltipContent>
         </Tooltip>
       </div>
 
@@ -132,8 +138,8 @@ export function ConversationList({ activeId }: { activeId?: string }) {
                 value={q}
                 onChange={(e) => setQ(e.target.value)}
                 onKeyDown={(e) => e.key === "Escape" && setQ("")}
-                placeholder="Search chats"
-                aria-label="Search chats"
+                placeholder={t("chat.list.search")}
+                aria-label={t("chat.list.search")}
                 className="h-8 bg-card pl-7 text-xs shadow-none md:text-xs"
               />
             </div>
@@ -162,7 +168,7 @@ export function ConversationList({ activeId }: { activeId?: string }) {
             <ListSkeleton />
           ) : error ? (
             <p className="px-3 py-6 text-center text-xs text-destructive">
-              Could not load conversations.
+              {t("chat.list.loadFailed")}
             </p>
           ) : rows.length === 0 ? (
             <Empty className="border-0 py-10">
@@ -170,24 +176,28 @@ export function ConversationList({ activeId }: { activeId?: string }) {
                 <EmptyMedia variant="icon">
                   <MessageCirclePlusIcon />
                 </EmptyMedia>
-                <EmptyTitle>No conversations yet</EmptyTitle>
-                <EmptyDescription>
-                  Message a coworker or start a group chat.
-                </EmptyDescription>
+                <EmptyTitle>{t("chat.list.emptyTitle")}</EmptyTitle>
+                <EmptyDescription>{t("chat.list.emptyBody")}</EmptyDescription>
               </EmptyHeader>
               <EmptyContent>
                 <NewConversationDialog>
-                  <Button size="sm">New message</Button>
+                  <Button size="sm">{t("chat.list.newMessage")}</Button>
                 </NewConversationDialog>
               </EmptyContent>
             </Empty>
           ) : visible.length === 0 ? (
             <p className="px-3 py-6 text-center text-xs text-muted-foreground">
-              {term ? `No chats match “${q.trim()}”` : "No chats here"}
+              {term
+                ? t("chat.list.noMatch", { q: q.trim() })
+                : t("chat.list.noChats")}
             </p>
           ) : (
             <>
-              <Section id="groups" label="Groups" addLabel="New group chat">
+              <Section
+                id="groups"
+                label={t("chat.list.groups")}
+                addLabel={t("chat.list.newGroup")}
+              >
                 {groups.map((r) => (
                   <ConversationRow
                     key={r.item.conversation.id}
@@ -199,8 +209,8 @@ export function ConversationList({ activeId }: { activeId?: string }) {
               </Section>
               <Section
                 id="direct"
-                label="Direct messages"
-                addLabel="New direct message"
+                label={t("chat.list.direct")}
+                addLabel={t("chat.list.newDirect")}
               >
                 {direct.map((r) => (
                   <ConversationRow
@@ -266,6 +276,7 @@ function ConversationRow({
   active,
   muted,
 }: Row & { active: boolean; muted: boolean }) {
+  const { t } = useTranslation()
   const { me } = useApp()
   const { conversation } = item
   const unread = isUnread(item, me.id)
@@ -284,7 +295,6 @@ function ConversationRow({
         members={conversation.members}
         meId={me.id}
         size="sm"
-        className="size-5"
       />
       <span
         className={cn(
@@ -298,12 +308,12 @@ function ConversationRow({
       {muted ? (
         <BellOffIcon
           className="size-3 shrink-0 text-muted-foreground"
-          aria-label="Muted"
+          aria-label={t("chat.list.muted")}
         />
       ) : unread ? (
         <span
           role="img"
-          aria-label="Unread"
+          aria-label={t("chat.list.unread")}
           className="size-1.5 shrink-0 rounded-full bg-primary"
         />
       ) : null}

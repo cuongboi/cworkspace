@@ -1,11 +1,14 @@
+import { cn } from "cn"
 import {
   CheckIcon,
   ChevronDownIcon,
   ClockIcon,
   LogOutIcon,
   UserPlusIcon,
+  XIcon,
 } from "lucide-react"
 import { useState } from "react"
+import { useTranslation } from "react-i18next"
 import { toast } from "sonner"
 import {
   AlertDialog,
@@ -27,6 +30,7 @@ import {
 import { Spinner } from "@/components/ui/spinner"
 import { useApp } from "@/hooks/use-app"
 import { db } from "@/lib/api-client"
+import { errorMessage } from "@/lib/i18n"
 import { useDbMutation } from "@/lib/query"
 import type { GroupPrivacy } from "@app/api/zenstack/models"
 import type { MyMembership } from "./group-query"
@@ -40,6 +44,7 @@ type GroupLike = {
 
 /** Join (PUBLIC), request (CLOSED), cancel a request, or leave. */
 export function useMembershipActions(group: GroupLike) {
+  const { t } = useTranslation()
   const { me } = useApp()
   const join = useDbMutation(
     () =>
@@ -65,15 +70,15 @@ export function useMembershipActions(group: GroupLike) {
         onSuccess: () =>
           toast.success(
             group.privacy === "CLOSED"
-              ? "Request sent to the group admins"
-              : `You joined ${group.name}`
+              ? t("groups.requestSent")
+              : t("groups.joinedToast", { name: group.name })
           ),
-        onError: (err) => toast.error(err.message),
+        onError: (err) => toast.error(errorMessage(err)),
       }),
     leave: (message: string) =>
       leave.mutate(undefined, {
         onSuccess: () => toast.success(message),
-        onError: (err) => toast.error(err.message),
+        onError: (err) => toast.error(errorMessage(err)),
       }),
     pending: join.isPending || leave.isPending,
   }
@@ -90,6 +95,7 @@ export function MembershipButton({
   size?: "sm" | "default"
   className?: string
 }) {
+  const { t } = useTranslation()
   const { join, leave, pending } = useMembershipActions(group)
   const [confirmLeave, setConfirmLeave] = useState(false)
 
@@ -98,7 +104,7 @@ export function MembershipButton({
       return (
         <Button variant="secondary" size={size} className={className} disabled>
           <CheckIcon />
-          Member
+          {t("groups.member")}
         </Button>
       )
     }
@@ -113,7 +119,7 @@ export function MembershipButton({
               disabled={pending}
             >
               <CheckIcon />
-              Joined
+              {t("groups.joined")}
               <ChevronDownIcon />
             </Button>
           </DropdownMenuTrigger>
@@ -123,32 +129,34 @@ export function MembershipButton({
               onSelect={() => setConfirmLeave(true)}
             >
               <LogOutIcon />
-              Leave group
+              {t("groups.leave")}
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
         <AlertDialog open={confirmLeave} onOpenChange={setConfirmLeave}>
           <AlertDialogContent>
             <AlertDialogHeader>
-              <AlertDialogTitle>Leave {group.name}?</AlertDialogTitle>
+              <AlertDialogTitle>
+                {t("groups.leaveTitle", { name: group.name })}
+              </AlertDialogTitle>
               <AlertDialogDescription>
                 {group.privacy === "PUBLIC"
-                  ? "You can join again at any time."
+                  ? t("groups.leavePublic")
                   : group.privacy === "CLOSED"
-                    ? "You'll need an admin's approval to join again."
-                    : "You'll need to be added by an admin to join again."}
-                {membership.role === "ADMIN"
-                  ? " Make sure another member is an admin before you leave."
-                  : ""}
+                    ? t("groups.leaveClosed")
+                    : t("groups.leaveSecret")}
+                {membership.role === "ADMIN" ? t("groups.leaveAdmin") : ""}
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
-              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogCancel>{t("common.cancel")}</AlertDialogCancel>
               <AlertDialogAction
                 variant="destructive"
-                onClick={() => leave(`You left ${group.name}`)}
+                onClick={() =>
+                  leave(t("groups.leftToast", { name: group.name }))
+                }
               >
-                Leave group
+                {t("groups.leave")}
               </AlertDialogAction>
             </AlertDialogFooter>
           </AlertDialogContent>
@@ -159,26 +167,69 @@ export function MembershipButton({
 
   if (membership?.status === "PENDING") {
     return (
-      <Button
-        variant="secondary"
-        size={size}
-        className={className}
-        disabled={pending}
-        onClick={() => leave("Request cancelled")}
-        title="Cancel request"
-      >
-        {pending ? <Spinner /> : <ClockIcon />}
-        Requested · Cancel
-      </Button>
+      <>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button
+              variant="outline"
+              size={size}
+              className={cn("text-warning", className)}
+              disabled={pending}
+            >
+              {pending ? <Spinner /> : <ClockIcon />}
+              {t("groups.requested")}
+              <ChevronDownIcon />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuItem
+              variant="destructive"
+              onSelect={() => setConfirmLeave(true)}
+            >
+              <XIcon />
+              {t("groups.cancelRequest")}
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+        <AlertDialog open={confirmLeave} onOpenChange={setConfirmLeave}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>
+                {t("groups.cancelRequestTitle")}
+              </AlertDialogTitle>
+              <AlertDialogDescription>
+                {t("groups.cancelRequestBody", { name: group.name })}
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>{t("groups.keepRequest")}</AlertDialogCancel>
+              <AlertDialogAction
+                variant="destructive"
+                onClick={() => leave(t("groups.requestCancelled"))}
+              >
+                {t("groups.cancelRequest")}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      </>
     )
   }
 
   if (group.privacy === "SECRET") return null
 
   return (
-    <Button size={size} className={className} disabled={pending} onClick={join}>
+    <Button
+      variant={group.privacy === "CLOSED" ? "soft" : "default"}
+      size={size}
+      className={className}
+      disabled={pending}
+      onClick={join}
+    >
       {pending ? <Spinner /> : <UserPlusIcon />}
-      {group.privacy === "CLOSED" ? "Request to join" : "Join group"}
+      {group.privacy === "CLOSED"
+        ? t("groups.requestToJoin")
+        : t("groups.join")}
     </Button>
   )
 }

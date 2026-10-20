@@ -11,6 +11,7 @@ import { toast } from "sonner"
 import { useSocket, useSocketEvent } from "@/hooks/use-socket"
 import type { CallKind } from "@/lib/realtime-events"
 import { type IncomingCall, IncomingCallCard } from "./incoming-call"
+import { useTranslation } from "react-i18next"
 
 /**
  * Call entry points used across features (chat header, calendar, notifications).
@@ -39,6 +40,7 @@ const RING_TIMEOUT_MS = 45_000
 const START_TIMEOUT_MS = 10_000
 
 export function CallProvider({ children }: { children: ReactNode }) {
+  const { t } = useTranslation()
   const socket = useSocket()
   const navigate = useNavigate()
   const [incoming, setIncoming] = useState<IncomingCall[]>([])
@@ -53,10 +55,12 @@ export function CallProvider({ children }: { children: ReactNode }) {
   const startCall = async (opts: StartCallOptions) => {
     if (starting.current) return
     if (!socket?.connected)
-      return void toast.error("Not connected yet, try again in a moment")
+      return void toast.error(t("call.start.notConnected"))
     starting.current = true
     const toastId = toast.loading(
-      opts.type === "VIDEO" ? "Starting video call…" : "Starting call…"
+      opts.type === "VIDEO"
+        ? t("call.start.startingVideo")
+        : t("call.start.starting")
     )
     try {
       const res = await socket
@@ -64,7 +68,7 @@ export function CallProvider({ children }: { children: ReactNode }) {
         .emitWithAck("call:start", opts)
         .catch(() => ({
           ok: false as const,
-          error: "The server didn't answer, try again",
+          error: t("call.start.noAnswer"),
         }))
       if (!res.ok) return void toast.error(res.error, { id: toastId })
       toast.dismiss(toastId)

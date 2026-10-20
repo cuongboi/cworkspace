@@ -1,7 +1,16 @@
 import { cn } from "cn"
+import { isValidElement, type ReactElement, type ReactNode } from "react"
 import ReactMarkdown, { type Components } from "react-markdown"
+import { Link } from "react-router-dom"
 import remarkGfm from "remark-gfm"
+import {
+  CodeBlock,
+  CodeBlockActions,
+  CodeBlockContent,
+  CodeBlockCopyButton,
+} from "@/components/ui/code-block"
 import { ScrollArea } from "@/components/ui/scroll-area"
+import { useHighlightedCode } from "@/hooks/use-highlighted-code"
 
 /**
  * Markdown → React with GitHub-flavored extensions. Raw HTML is never rendered (react-markdown
@@ -43,16 +52,34 @@ const components: Components = {
   p: (props) => (
     <p className="my-3 leading-7 first:mt-0" {...withoutNode(props)} />
   ),
-  a: (props) => (
-    <a
-      className="font-medium text-primary underline underline-offset-4"
-      target="_blank"
-      rel="noopener noreferrer nofollow"
+  a: ({ href, ...props }) =>
+    // `@[Name](userId)` mentions parse as a link to a bare id: show them as a profile link
+    href && MENTION_HREF.test(href) ? (
+      <Link
+        to={`/people/${href}`}
+        className="rounded bg-primary/10 px-0.5 font-medium text-primary"
+      >
+        {props.children}
+      </Link>
+    ) : (
+      <a
+        className="font-medium text-primary underline underline-offset-4"
+        target="_blank"
+        rel="noopener noreferrer nofollow"
+        href={href}
+        {...withoutNode(props)}
+      />
+    ),
+  ul: ({ className, ...props }) => (
+    <ul
+      className={cn(
+        "my-3 ml-6 list-disc [&>li]:mt-1",
+        // GFM task lists: checkboxes replace the bullets
+        className?.includes("contains-task-list") && "ml-1 list-none",
+        className
+      )}
       {...withoutNode(props)}
     />
-  ),
-  ul: (props) => (
-    <ul className="my-3 ml-6 list-disc [&>li]:mt-1" {...withoutNode(props)} />
   ),
   ol: (props) => (
     <ol
@@ -67,17 +94,15 @@ const components: Components = {
     />
   ),
   hr: () => <hr className="my-6" />,
-  pre: (props) => (
-    <ScrollArea
-      orientation="horizontal"
-      className="my-3 rounded-lg border bg-muted"
-    >
-      <pre
-        className="p-3 font-mono text-sm [&>code]:bg-transparent [&>code]:p-0"
-        {...withoutNode(props)}
+  pre: ({ children }) => {
+    const code = codeChild(children)
+    return (
+      <HighlightedBlock
+        code={String(code?.props.children ?? "")}
+        language={/language-([\w-]+)/.exec(code?.props.className ?? "")?.[1]}
       />
-    </ScrollArea>
-  ),
+    )
+  },
   code: ({ className, ...props }) => (
     <code
       className={cn(
@@ -112,6 +137,40 @@ const components: Components = {
   input: (props) => (
     <input className="mr-1.5 align-middle" disabled {...withoutNode(props)} />
   ),
+}
+
+const MENTION_HREF = /^[A-Za-z0-9_-]{1,64}$/
+
+function codeChild(children: ReactNode) {
+  const child = Array.isArray(children) ? children[0] : children
+  return isValidElement(child)
+    ? (child as ReactElement<{ className?: string; children?: ReactNode }>)
+    : null
+}
+
+/** Fenced code: shiki highlighting (loaded on demand) with a copy button. */
+function HighlightedBlock({
+  code,
+  language = "text",
+}: {
+  code: string
+  language?: string
+}) {
+  const lines = useHighlightedCode(code, language)
+  return (
+    <CodeBlock size="sm" className="my-3 bg-muted/40">
+      <CodeBlockActions>
+        <CodeBlockCopyButton value={code} />
+      </CodeBlockActions>
+      <CodeBlockContent>
+        {lines.map((line, i) => (
+          <span key={i} className="block min-h-lh">
+            {line}
+          </span>
+        ))}
+      </CodeBlockContent>
+    </CodeBlock>
+  )
 }
 
 export function Markdown({

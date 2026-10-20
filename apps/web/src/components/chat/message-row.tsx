@@ -13,6 +13,7 @@ import {
   VideoIcon,
 } from "lucide-react"
 import { useState } from "react"
+import { useTranslation } from "react-i18next"
 import { toast } from "sonner"
 import { useCalls } from "@/components/call/call-provider"
 import { AttachmentList } from "@/components/common/attachment-list"
@@ -38,6 +39,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip"
 import { useApp } from "@/hooks/use-app"
+import { useDateLocale } from "@/lib/i18n"
 import { toPlainText } from "@/lib/mentions"
 import type { ReactionType } from "@app/api/zenstack/models"
 import {
@@ -106,6 +108,8 @@ function CallMessage({
   message: ChatMessage
   conversationId: string
 }) {
+  const { t } = useTranslation()
+  const locale = useDateLocale()
   const { startCall, joinCall } = useCalls()
   const data = parseCallData(message.data)
   const missed = !data.answered && !data.groupCall
@@ -123,13 +127,13 @@ function CallMessage({
         )}
       >
         {data.live ? (
-          <span className="size-2 animate-pulse rounded-full bg-red-500" />
+          <span className="size-2 animate-pulse rounded-full bg-destructive" />
         ) : null}
         <Icon className="size-4" aria-hidden="true" />
         <span className="font-medium">{callLabel(data)}</span>
         <span
           className="text-muted-foreground"
-          title={format(message.createdAt, "PPpp")}
+          title={format(message.createdAt, "PPpp", { locale })}
         >
           {format(message.createdAt, "HH:mm")}
         </span>
@@ -143,7 +147,11 @@ function CallMessage({
               : void startCall({ conversationId, type: data.callType })
           }
         >
-          {data.live ? "Join" : data.groupCall ? "Start call" : "Call back"}
+          {data.live
+            ? t("chat.callMsg.join")
+            : data.groupCall
+              ? t("chat.callMsg.startCall")
+              : t("chat.callMsg.callBack")}
         </Button>
       </div>
     </div>
@@ -156,6 +164,8 @@ function TextMessage({
   status,
   actions,
 }: Omit<Props, "conversationId">) {
+  const { t } = useTranslation()
+  const locale = useDateLocale()
   const { me } = useApp()
   const [active, setActive] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
@@ -167,6 +177,7 @@ function TextMessage({
 
   const reactionGroups = REACTIONS.map((r) => ({
     ...r,
+    label: t(`chat.reactions.${r.type}`),
     users: message.reactions.filter((x) => x.type === r.type),
   })).filter((g) => g.users.length > 0)
   const myReaction = message.reactions.find((r) => r.userId === me.id)?.type
@@ -174,8 +185,8 @@ function TextMessage({
   const replyTo = message.replyTo
   const showActions = !message.pending && !deleted
   const meta = [
-    message.editedAt && !deleted ? "Edited" : null,
-    message.pending ? "Sending…" : status,
+    message.editedAt && !deleted ? t("chat.messages.edited") : null,
+    message.pending ? t("chat.messages.sending") : status,
   ].filter(Boolean)
 
   return (
@@ -207,7 +218,7 @@ function TextMessage({
           )
         ) : (
           <span
-            className="block pt-1 text-right text-[10px] leading-4 text-muted-foreground opacity-0 group-hover/message:opacity-100"
+            className="block pt-1 text-right text-2xs leading-4 text-muted-foreground opacity-0 group-hover/message:opacity-100"
             aria-hidden="true"
           >
             {format(message.createdAt, "HH:mm")}
@@ -218,19 +229,19 @@ function TextMessage({
         {firstInGroup ? (
           <div className="-mb-1 flex items-baseline gap-2">
             <span className="text-xs font-semibold">
-              {bot ? bot.name : mine ? "You" : message.sender.name}
+              {bot ? bot.name : mine ? t("common.you") : message.sender.name}
             </span>
             {bot ? (
-              <span className="rounded-sm bg-accent px-1 py-px text-[9px] font-medium tracking-wide text-muted-foreground">
-                APP
+              <span className="rounded-sm bg-accent px-1 py-px text-2xs font-medium tracking-wide text-muted-foreground">
+                {t("chat.messages.app")}
               </span>
             ) : null}
             <time
               dateTime={message.createdAt.toISOString()}
-              title={format(message.createdAt, "PPpp")}
-              className="text-[10px] text-muted-foreground"
+              title={format(message.createdAt, "PPpp", { locale })}
+              className="text-2xs text-muted-foreground"
             >
-              {format(message.createdAt, "p")}
+              {format(message.createdAt, "p", { locale })}
             </time>
           </div>
         ) : null}
@@ -239,15 +250,17 @@ function TextMessage({
           <button
             type="button"
             onClick={() => actions.onJumpTo(replyTo.id)}
-            className="flex max-w-xl flex-col border-l-2 pl-2 text-left text-[11px] leading-normal hover:border-foreground/40"
+            className="flex max-w-xl flex-col border-l-2 pl-2 text-left text-2xs leading-normal hover:border-foreground/40"
           >
             <span className="font-semibold">
-              {replyTo.senderId === me.id ? "You" : replyTo.sender.name}
+              {replyTo.senderId === me.id
+                ? t("common.you")
+                : replyTo.sender.name}
             </span>
             <span className="line-clamp-1 break-words text-muted-foreground">
               {replyTo.deletedAt
-                ? "Message deleted"
-                : toPlainText(replyTo.content) || "Attachment"}
+                ? t("chat.messages.deleted")
+                : toPlainText(replyTo.content) || t("chat.composer.attachment")}
             </span>
           </button>
         ) : null}
@@ -259,7 +272,11 @@ function TextMessage({
               deleted && "text-muted-foreground italic"
             )}
           >
-            {deleted ? "Message deleted" : <RichText text={message.content} />}
+            {deleted ? (
+              t("chat.messages.deleted")
+            ) : (
+              <RichText text={message.content} />
+            )}
           </div>
         ) : null}
 
@@ -275,7 +292,9 @@ function TextMessage({
             {reactionGroups.map((g) => {
               const mineHere = g.users.some((u) => u.userId === me.id)
               const names = g.users
-                .map((u) => (u.userId === me.id ? "You" : u.user.name))
+                .map((u) =>
+                  u.userId === me.id ? t("common.you") : u.user.name
+                )
                 .join(", ")
               return (
                 <Tooltip key={g.type}>
@@ -287,11 +306,11 @@ function TextMessage({
                       onClick={() => actions.onReact(message, g.type)}
                       className={cn(
                         "flex h-6 items-center gap-1 rounded-md border bg-muted/60 px-1.5 text-xs transition-colors hover:bg-accent",
-                        mineHere && "border-primary/30 bg-primary/5"
+                        mineHere && "border-brand/30 bg-brand-subtle text-brand"
                       )}
                     >
                       <span aria-hidden="true">{g.emoji}</span>
-                      <span className="text-[10px] text-muted-foreground tabular-nums">
+                      <span className="text-2xs text-muted-foreground tabular-nums">
                         {g.users.length}
                       </span>
                     </button>
@@ -304,7 +323,7 @@ function TextMessage({
         ) : null}
 
         {meta.length ? (
-          <p className="-mt-1 text-[10px] text-muted-foreground">
+          <p className="-mt-1 text-2xs text-muted-foreground">
             {meta.join(" · ")}
           </p>
         ) : null}
@@ -362,6 +381,7 @@ function Toolbar({
   actions: MessageActions
   onOpenChange: (open: boolean) => void
 }) {
+  const { t } = useTranslation()
   const [reactOpen, setReactOpen] = useState(false)
   const [moreOpen, setMoreOpen] = useState(false)
   const canEdit =
@@ -370,9 +390,9 @@ function Toolbar({
   const copy = async () => {
     try {
       await navigator.clipboard.writeText(toPlainText(message.content))
-      toast.success("Copied")
+      toast.success(t("chat.messages.copied"))
     } catch {
-      toast.error("Could not copy")
+      toast.error(t("chat.messages.copyFailed"))
     }
   }
 
@@ -390,26 +410,30 @@ function Toolbar({
         <Tooltip>
           <TooltipTrigger asChild>
             <PopoverTrigger asChild>
-              <Button variant="ghost" size="icon-xs" aria-label="React">
+              <Button
+                variant="ghost"
+                size="icon-xs"
+                aria-label={t("chat.messages.react")}
+              >
                 <SmilePlusIcon />
               </Button>
             </PopoverTrigger>
           </TooltipTrigger>
-          <TooltipContent>React</TooltipContent>
+          <TooltipContent>{t("chat.messages.react")}</TooltipContent>
         </Tooltip>
         <PopoverContent side="top" className="w-auto rounded-full p-1">
           <div
             className="flex items-center gap-0.5"
             role="toolbar"
-            aria-label="Reactions"
+            aria-label={t("chat.messages.reactions")}
           >
             {REACTIONS.map((r) => (
               <button
                 key={r.type}
                 type="button"
-                aria-label={r.label}
+                aria-label={t(`chat.reactions.${r.type}`)}
                 aria-pressed={myReaction === r.type}
-                title={r.label}
+                title={t(`chat.reactions.${r.type}`)}
                 onClick={() => {
                   actions.onReact(message, r.type)
                   setReactOpen(false)
@@ -431,13 +455,13 @@ function Toolbar({
           <Button
             variant="ghost"
             size="icon-xs"
-            aria-label="Reply"
+            aria-label={t("chat.messages.reply")}
             onClick={() => actions.onReply(message)}
           >
             <ReplyIcon />
           </Button>
         </TooltipTrigger>
-        <TooltipContent>Reply</TooltipContent>
+        <TooltipContent>{t("chat.messages.reply")}</TooltipContent>
       </Tooltip>
       <DropdownMenu
         open={moreOpen}
@@ -447,22 +471,26 @@ function Toolbar({
         }}
       >
         <DropdownMenuTrigger asChild>
-          <Button variant="ghost" size="icon-xs" aria-label="More actions">
+          <Button
+            variant="ghost"
+            size="icon-xs"
+            aria-label={t("chat.messages.moreActions")}
+          >
             <MoreHorizontalIcon />
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
           {message.content.trim() ? (
             <DropdownMenuItem onSelect={() => void copy()}>
-              <CopyIcon /> Copy text
+              <CopyIcon /> {t("chat.messages.copyText")}
             </DropdownMenuItem>
           ) : null}
           <DropdownMenuItem onSelect={() => actions.onReply(message)}>
-            <ReplyIcon /> Reply
+            <ReplyIcon /> {t("chat.messages.reply")}
           </DropdownMenuItem>
           {canEdit ? (
             <DropdownMenuItem onSelect={() => actions.onEdit(message)}>
-              <PencilIcon /> Edit
+              <PencilIcon /> {t("common.edit")}
             </DropdownMenuItem>
           ) : null}
           {mine ? (
@@ -472,7 +500,7 @@ function Toolbar({
                 variant="destructive"
                 onSelect={() => actions.onDelete(message)}
               >
-                <Trash2Icon /> Unsend
+                <Trash2Icon /> {t("chat.messages.unsend")}
               </DropdownMenuItem>
             </>
           ) : null}

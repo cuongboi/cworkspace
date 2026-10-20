@@ -97,4 +97,55 @@ export const groupsRoute = new Elysia({ name: "routes.groups" })
       }),
       detail: { tags: ["Groups"], summary: "Move a Knowledge page" },
     },
+  )
+  /**
+   * GET /api/groups/:groupId/wiki/search?q= → Knowledge pages whose title or content match, with a
+   * short excerpt around the first hit. Runs through `userDb`, so hidden groups return nothing.
+   */
+  .get(
+    "/api/groups/:groupId/wiki/search",
+    async ({ params: { groupId }, query: { q }, userDb }) => {
+      const term = q.trim();
+      if (!term) return { data: [] };
+      const pages = await userDb.wikiPage.findMany({
+        where: {
+          groupId,
+          OR: [
+            { title: { contains: term, mode: "insensitive" } },
+            { content: { contains: term, mode: "insensitive" } },
+          ],
+        },
+        orderBy: { updatedAt: "desc" },
+        take: SEARCH_LIMIT,
+        select: { id: true, title: true, content: true, parentId: true, updatedAt: true },
+      });
+      return {
+        data: pages.map(({ content, ...page }) => ({ ...page, excerpt: excerpt(content, term) })),
+      };
+    },
+    {
+      auth: true,
+      params: t.Object({ groupId: t.String({ minLength: 1 }) }),
+      query: t.Object({ q: t.String({ maxLength: 200 }) }),
+      detail: { tags: ["Groups"], summary: "Search a group's Knowledge pages" },
+    },
   );
+
+const SEARCH_LIMIT = 20;
+const EXCERPT_RADIUS = 80;
+
+/** Plain-text window around the first match (markdown markers stripped so it reads as prose). */
+function excerpt(content: string, term: string) {
+  const text = content
+    .replace(/```[\s\S]*?```/g, " ")
+    .replace(/!\[[^\]]*\]\([^)]*\)/g, " ")
+    .replace(/\[([^\]]*)\]\([^)]*\)/g, "$1")
+    .replace(/[#>*_`~|-]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  const at = text.toLowerCase().indexOf(term.toLowerCase());
+  if (at < 0) return text.slice(0, EXCERPT_RADIUS * 2);
+  const start = Math.max(0, at - EXCERPT_RADIUS);
+  const end = Math.min(text.length, at + term.length + EXCERPT_RADIUS);
+  return `${start > 0 ? "…" : ""}${text.slice(start, end)}${end < text.length ? "…" : ""}`;
+}

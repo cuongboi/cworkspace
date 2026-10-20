@@ -1,5 +1,5 @@
-import { cn } from "cn"
-import { UsersRoundIcon } from "lucide-react"
+import { cn } from "cn";
+import { UsersRoundIcon } from "lucide-react";
 import {
   type ComponentProps,
   type KeyboardEvent,
@@ -7,13 +7,15 @@ import {
   useImperativeHandle,
   useRef,
   useState,
-} from "react"
-import { Textarea } from "@/components/ui/textarea"
-import { useApp } from "@/hooks/use-app"
-import { db } from "@/lib/api-client"
-import { EVERYONE_ID, formatMention, MENTION_RE } from "@/lib/mentions"
-import { useDbQuery } from "@/lib/query"
-import { UserAvatar } from "./user-avatar"
+} from "react";
+import { useTranslation } from "react-i18next";
+import { Mention, MentionContent, MentionInput, MentionItem } from "@/components/ui/mention";
+import { Textarea } from "@/components/ui/textarea";
+import { useApp } from "@/hooks/use-app";
+import { db } from "@/lib/api-client";
+import { EVERYONE_ID, formatMention, MENTION_RE } from "@/lib/mentions";
+import { useDbQuery } from "@/lib/query";
+import { UserAvatar } from "./user-avatar";
 
 /**
  * Textarea with @mention autocomplete over the company's members. Users see "@Name"; the value
@@ -21,49 +23,46 @@ import { UserAvatar } from "./user-avatar"
  * Pass `value=""` to reset after submitting.
  */
 
-type Props = Omit<
-  ComponentProps<typeof Textarea>,
-  "value" | "onChange" | "onSubmit"
-> & {
-  value: string
-  onChange: (serialized: string) => void
+type Props = Omit<ComponentProps<typeof Textarea>, "value" | "onChange" | "onSubmit"> & {
+  value: string;
+  onChange: (serialized: string) => void;
   /** Enter submits (Shift+Enter for a newline) */
-  onSubmit?: () => void
+  onSubmit?: () => void;
   /** limit suggestions to these people (e.g. a chat's members) instead of the whole company */
-  people?: Person[]
+  people?: Person[];
   /** offer `@everyone` first (group chats) */
-  everyone?: boolean
+  everyone?: boolean;
   /** imperative handle: open the suggestions as if "@" was typed (toolbar button) */
-  controlRef?: Ref<MentionTextareaHandle>
-}
+  controlRef?: Ref<MentionTextareaHandle>;
+};
 
-type Person = { id: string; name: string; image: string | null }
+type Person = { id: string; name: string; image: string | null };
 
-export type MentionTextareaHandle = { openMention: () => void }
+export type MentionTextareaHandle = { openMention: () => void };
 
-const EVERYONE: Person = { id: EVERYONE_ID, name: "everyone", image: null }
+const EVERYONE: Person = { id: EVERYONE_ID, name: "everyone", image: null };
 
-type Mention = { name: string; userId: string }
+type Mention = { name: string; userId: string };
+
+// "[" / "]" would break the `@[Name](id)` token
+const cleanName = (name: string) => name.replace(/[[\]]/g, "");
 
 function deserialize(value: string): { display: string; mentions: Mention[] } {
-  const mentions: Mention[] = []
-  const display = value.replace(
-    MENTION_RE,
-    (_, name: string, userId: string) => {
-      mentions.push({ name, userId })
-      return `@${name}`
-    }
-  )
-  return { display, mentions }
+  const mentions: Mention[] = [];
+  const display = value.replace(MENTION_RE, (_, name: string, userId: string) => {
+    mentions.push({ name, userId });
+    return `@${name}`;
+  });
+  return { display, mentions };
 }
 
 function serialize(display: string, mentions: Mention[]) {
-  let out = display
+  let out = display;
   // longest names first so "@Ann Lee" wins over "@Ann"
   for (const m of [...mentions].sort((a, b) => b.name.length - a.name.length)) {
-    out = out.split(`@${m.name}`).join(formatMention(m.name, m.userId))
+    out = out.split(`@${m.name}`).join(formatMention(m.name, m.userId));
   }
-  return out
+  return out;
 }
 
 export function MentionTextarea({
@@ -77,178 +76,133 @@ export function MentionTextarea({
   controlRef,
   ...props
 }: Props) {
-  const { me } = useApp()
-  const ref = useRef<HTMLTextAreaElement>(null)
+  const { t } = useTranslation();
+  const { me } = useApp();
+  const ref = useRef<HTMLTextAreaElement>(null);
   const [state, setState] = useState(() => ({
     ...deserialize(value),
     serialized: value,
-  }))
-  const [query, setQuery] = useState<{ text: string; start: number } | null>(
-    null
-  )
-  const [highlight, setHighlight] = useState(0)
+  }));
+  const [open, setOpen] = useState(false);
+  const [term, setTerm] = useState("");
 
   // external reset / replace (e.g. cleared after submit, or editing another item)
-  if (value !== state.serialized)
-    setState({ ...deserialize(value), serialized: value })
+  if (value !== state.serialized) setState({ ...deserialize(value), serialized: value });
 
   const { data: companyPeople = [] } = useDbQuery(
-    ["user", "findMany", "mention", query?.text],
+    ["user", "findMany", "mention", term],
     () =>
       db.user.findMany({
         where: {
           id: { not: me.id },
-          ...(query?.text
-            ? { name: { contains: query.text, mode: "insensitive" } }
-            : {}),
+          ...(term ? { name: { contains: term, mode: "insensitive" } } : {}),
         },
         select: { id: true, name: true, image: true },
         orderBy: { name: "asc" },
         take: 6,
       }),
-    { enabled: query !== null && !people, staleTime: 60_000 }
-  )
-  const term = query?.text.toLowerCase() ?? ""
+    { enabled: open && !people, staleTime: 60_000 },
+  );
+  const lower = term.toLowerCase();
   const candidates: Person[] = people
     ? [
-        ...(everyone && "everyone".startsWith(term) ? [EVERYONE] : []),
-        ...people
-          .filter((p) => p.id !== me.id && p.name.toLowerCase().includes(term))
-          .slice(0, 8),
+        ...(everyone && "everyone".startsWith(lower) ? [EVERYONE] : []),
+        ...people.filter((p) => p.id !== me.id && p.name.toLowerCase().includes(lower)).slice(0, 8),
       ]
-    : companyPeople
+    : companyPeople;
+
+  // diceui reports the text and the picked ids back-to-back on select; keep the latest across both
+  const latest = useRef(state);
+  latest.current = state;
 
   const update = (display: string, mentions: Mention[]) => {
-    const kept = mentions.filter((m) => display.includes(`@${m.name}`))
-    const serialized = serialize(display, kept)
-    setState({ display, mentions: kept, serialized })
-    onChange(serialized)
-  }
+    const kept = mentions.filter((m) => display.includes(`@${m.name}`));
+    const next = { display, mentions: kept, serialized: serialize(display, kept) };
+    latest.current = next;
+    setState(next);
+    onChange(next.serialized);
+  };
+
+  // the search term after the last "@" before the caret; suggestions are filtered by us (or the API)
+  const detectTerm = (text: string) => {
+    const caret = ref.current?.selectionStart ?? text.length;
+    const match = /(^|\s)@([^\s@]{0,30})$/.exec(text.slice(0, caret));
+    setTerm(match?.[2] ?? "");
+  };
 
   useImperativeHandle(controlRef, () => ({
     openMention: () => {
-      const el = ref.current
-      const caret = el?.selectionStart ?? state.display.length
-      const before = state.display.slice(0, caret)
-      const prefix = before && !/\s$/.test(before) ? " @" : "@"
-      const display = `${before}${prefix}${state.display.slice(caret)}`
-      update(display, state.mentions)
-      const pos = caret + prefix.length
-      setQuery({ text: "", start: pos - 1 })
-      setHighlight(0)
-      requestAnimationFrame(() => {
-        el?.focus()
-        el?.setSelectionRange(pos, pos)
-      })
+      const el = ref.current;
+      if (!el) return;
+      el.focus();
+      const caret = el.selectionStart ?? el.value.length;
+      const before = el.value.slice(0, caret);
+      const prefix = before && !/\s$/.test(before) ? " @" : "@";
+      // insert as if typed: diceui anchors and opens the menu only from its own input handlers
+      // (setting `open` directly leaves the popover at 0,0); also keeps native undo
+      if (!document.execCommand("insertText", false, prefix)) {
+        const next = `${before}${prefix}${el.value.slice(el.selectionEnd ?? caret)}`;
+        Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")?.set?.call(el, next);
+        el.setSelectionRange(caret + prefix.length, caret + prefix.length);
+        el.dispatchEvent(new Event("input", { bubbles: true }));
+      }
     },
-  }))
-
-  const detectQuery = (text: string, caret: number) => {
-    const before = text.slice(0, caret)
-    const match = /(^|\s)@([^\s@]{0,30})$/.exec(before)
-    setQuery(
-      match
-        ? { text: match[2] ?? "", start: caret - (match[2]?.length ?? 0) - 1 }
-        : null
-    )
-    setHighlight(0)
-  }
-
-  const pick = (user: { id: string; name: string }) => {
-    if (!query) return
-    const el = ref.current
-    const caret = el?.selectionStart ?? state.display.length
-    const name = user.name.replace(/[[\]]/g, "")
-    const display = `${state.display.slice(0, query.start)}@${name} ${state.display.slice(caret)}`
-    update(display, [
-      ...state.mentions.filter((m) => m.name !== name),
-      { name, userId: user.id },
-    ])
-    setQuery(null)
-    const pos = query.start + name.length + 2
-    requestAnimationFrame(() => {
-      el?.focus()
-      el?.setSelectionRange(pos, pos)
-    })
-  }
+  }));
 
   const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
-    if (query && candidates.length) {
-      if (e.key === "ArrowDown" || e.key === "ArrowUp") {
-        e.preventDefault()
-        const delta = e.key === "ArrowDown" ? 1 : -1
-        setHighlight((h) => (h + delta + candidates.length) % candidates.length)
-        return
-      }
-      if (e.key === "Enter" || e.key === "Tab") {
-        e.preventDefault()
-        const user = candidates[highlight]
-        if (user) pick(user)
-        return
-      }
-      if (e.key === "Escape") {
-        setQuery(null)
-        return
-      }
+    // while the menu is open, Enter/arrows belong to the mention list
+    if (!open && onSubmit && e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
+      e.preventDefault();
+      onSubmit();
+      return;
     }
-    if (
-      onSubmit &&
-      e.key === "Enter" &&
-      !e.shiftKey &&
-      !e.nativeEvent.isComposing
-    ) {
-      e.preventDefault()
-      onSubmit()
-      return
-    }
-    onKeyDown?.(e)
-  }
+    onKeyDown?.(e);
+  };
 
   return (
-    <div className="relative w-full">
-      <Textarea
-        ref={ref}
-        value={state.display}
-        onChange={(e) => {
-          update(e.target.value, state.mentions)
-          detectQuery(e.target.value, e.target.selectionStart)
-        }}
-        onKeyDown={handleKeyDown}
-        onBlur={() => setTimeout(() => setQuery(null), 150)}
-        className={cn("resize-none", className)}
-        {...props}
-      />
-      {query && candidates.length > 0 ? (
-        <div
-          role="listbox"
-          className="absolute left-0 z-50 mt-1 w-64 overflow-hidden rounded-md border bg-popover p-1 text-popover-foreground shadow-md"
-        >
-          {candidates.map((user, i) => (
-            <button
-              key={user.id}
-              type="button"
-              role="option"
-              aria-selected={i === highlight}
-              onMouseDown={(e) => {
-                e.preventDefault()
-                pick(user)
-              }}
-              className={cn(
-                "flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left text-sm",
-                i === highlight
-                  ? "bg-accent text-accent-foreground"
-                  : "hover:bg-accent/60"
-              )}
-            >
+    <Mention
+      className="relative w-full"
+      trigger="@"
+      open={open}
+      onOpenChange={setOpen}
+      inputValue={state.display}
+      onInputValueChange={(display) => {
+        update(display, latest.current.mentions);
+        detectTerm(display);
+      }}
+      value={state.mentions.map((m) => m.userId)}
+      onValueChange={(ids) => {
+        const { display, mentions } = latest.current;
+        const added = ids
+          .filter((id) => !mentions.some((m) => m.userId === id))
+          .map((id) => candidates.find((p) => p.id === id))
+          .filter((p): p is Person => !!p)
+          .map((p) => ({ name: cleanName(p.name), userId: p.id }));
+        update(display, [...mentions.filter((m) => ids.includes(m.userId)), ...added]);
+      }}
+      onFilter={(options) => options}
+    >
+      <MentionInput asChild>
+        <Textarea
+          ref={ref}
+          onKeyDown={handleKeyDown}
+          className={cn("resize-none", className)}
+          {...props}
+        />
+      </MentionInput>
+      {candidates.length > 0 ? (
+        <MentionContent className="w-64">
+          {candidates.map((user) => (
+            <MentionItem key={user.id} value={user.id} label={cleanName(user.name)}>
               {user.id === EVERYONE_ID ? (
                 <>
                   <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-muted">
                     <UsersRoundIcon className="size-3.5" />
                   </span>
                   <span className="min-w-0 flex-1 truncate">
-                    Everyone
+                    {t("feed.mention.everyone")}
                     <span className="ml-1.5 text-xs text-muted-foreground">
-                      Notify all members
+                      {t("feed.mention.everyoneHint")}
                     </span>
                   </span>
                 </>
@@ -258,10 +212,10 @@ export function MentionTextarea({
                   <span className="truncate">{user.name}</span>
                 </>
               )}
-            </button>
+            </MentionItem>
           ))}
-        </div>
+        </MentionContent>
       ) : null}
-    </div>
-  )
+    </Mention>
+  );
 }

@@ -1,14 +1,12 @@
 import { toPlainText } from "@app/shared/mentions"
 import {
-  ArrowDownIcon,
-  ArrowUpIcon,
-  CornerDownLeftIcon,
   FileIcon,
   FileTextIcon,
   MessageSquareIcon,
   SearchIcon,
 } from "lucide-react"
 import { type ReactNode, useEffect, useState } from "react"
+import { useTranslation } from "react-i18next"
 import { useNavigate } from "react-router-dom"
 import { TimeAgo } from "@/components/common/time-ago"
 import { UserAvatar } from "@/components/common/user-avatar"
@@ -35,17 +33,11 @@ import { db } from "@/lib/api-client"
 import { COMPANY_NAME } from "@/lib/company"
 import { useDbQuery } from "@/lib/query"
 import { fileUrl } from "@/lib/upload"
+import { currentLanguage } from "@/lib/i18n"
 import { cn } from "@/lib/utils"
 
-const TABS = [
-  { key: "all", label: "All results" },
-  { key: "user", label: "People" },
-  { key: "group", label: "Groups" },
-  { key: "post", label: "Posts" },
-  { key: "message", label: "Messages" },
-  { key: "file", label: "Files" },
-] as const
-type Tab = (typeof TABS)[number]["key"]
+const TABS = ["all", "user", "group", "post", "message", "file"] as const
+type Tab = (typeof TABS)[number]
 
 const MIN_QUERY = 2
 
@@ -53,6 +45,7 @@ type Hit = Omit<RecentSearch, "at">
 
 /** Header trigger + ⌘K command palette searching people, groups, posts, messages and files. */
 export function GlobalSearch() {
+  const { t } = useTranslation()
   const [open, setOpen] = useState(false)
 
   useEffect(() => {
@@ -74,14 +67,14 @@ export function GlobalSearch() {
         className="hidden h-8 w-full max-w-xl items-center gap-2 rounded-lg border bg-card px-2.5 text-sm text-muted-foreground hover:bg-muted sm:flex"
       >
         <SearchIcon className="size-4" />
-        <span className="flex-1 text-left">Search</span>
+        <span className="flex-1 text-left">{t("shell.search.trigger")}</span>
         <Kbd>⌘K</Kbd>
       </button>
       <Button
         variant="ghost"
         size="icon-sm"
         className="sm:hidden"
-        aria-label="Search"
+        aria-label={t("shell.search.trigger")}
         onClick={() => setOpen(true)}
       >
         <SearchIcon />
@@ -89,8 +82,8 @@ export function GlobalSearch() {
       <CommandDialog
         open={open}
         onOpenChange={setOpen}
-        title="Search"
-        description={`Search in ${COMPANY_NAME}`}
+        title={t("shell.search.trigger")}
+        description={t("shell.search.description", { company: COMPANY_NAME })}
         className="top-[12%] sm:max-w-2xl"
       >
         {/* mounted only while open, so each opening starts fresh */}
@@ -101,6 +94,7 @@ export function GlobalSearch() {
 }
 
 function Palette({ onClose }: { onClose: () => void }) {
+  const { t } = useTranslation()
   const navigate = useNavigate()
   const recent = useRecentSearches()
   const [input, setInput] = useState("")
@@ -122,24 +116,24 @@ function Palette({ onClose }: { onClose: () => void }) {
           autoFocus
           value={input}
           onChange={(e) => setInput(e.target.value)}
-          placeholder={`Search in ${COMPANY_NAME}…`}
-          aria-label="Search"
+          placeholder={t("shell.search.placeholder", { company: COMPANY_NAME })}
+          aria-label={t("shell.search.trigger")}
           className="h-10 w-full bg-transparent text-base outline-none placeholder:text-muted-foreground"
         />
         <div role="tablist" className="-mb-px flex gap-5 overflow-x-auto">
-          {TABS.map((t) => (
+          {TABS.map((key) => (
             <button
-              key={t.key}
+              key={key}
               type="button"
               role="tab"
-              aria-selected={tab === t.key}
-              onClick={() => setTab(t.key)}
+              aria-selected={tab === key}
+              onClick={() => setTab(key)}
               className={cn(
                 "shrink-0 border-b-2 border-transparent py-2 text-sm text-muted-foreground hover:text-foreground",
-                tab === t.key && "border-foreground font-medium text-foreground"
+                tab === key && "border-foreground font-medium text-foreground"
               )}
             >
-              {t.label}
+              {t(`shell.search.tabs.${key}`)}
             </button>
           ))}
         </div>
@@ -163,13 +157,8 @@ function Palette({ onClose }: { onClose: () => void }) {
         )}
       </CommandList>
       <footer className="flex items-center gap-4 border-t bg-muted/50 px-4 py-2.5 text-xs text-muted-foreground">
-        <Hint
-          keys={[<ArrowDownIcon key="d" />, <ArrowUpIcon key="u" />]}
-          label="Move"
-        />
-        <Hint keys={[<CornerDownLeftIcon key="e" />]} label="Select" />
         <span className="ml-auto">
-          <Hint keys={["esc"]} label="Cancel" />
+          <Hint keys={["esc"]} label={t("common.cancel")} />
         </span>
       </footer>
     </Command>
@@ -196,22 +185,28 @@ function Recent({
   items: RecentSearch[]
   onSelect: (hit: Hit) => void
 }) {
+  const { t } = useTranslation()
   const now = useNow()
   if (!items.length) {
     return (
       <p className="py-8 text-center text-sm text-muted-foreground">
-        Type at least {MIN_QUERY} characters to search.
+        {t("shell.search.minChars", { count: MIN_QUERY })}
       </p>
     )
   }
   const groups = new Map<string, RecentSearch[]>()
   for (const item of items) {
-    const label = dayLabel(item.at, now)
+    const label = dayLabel(item.at, now, {
+      today: t("shell.search.today"),
+      yesterday: t("shell.search.yesterday"),
+    })
     groups.set(label, [...(groups.get(label) ?? []), item])
   }
   return (
     <>
-      <p className="px-2 pt-2 text-sm text-muted-foreground">Recent searches</p>
+      <p className="px-2 pt-2 text-sm text-muted-foreground">
+        {t("shell.search.recent")}
+      </p>
       {[...groups].map(([label, rows]) => (
         <CommandGroup key={label} heading={label}>
           {rows.map((r) => (
@@ -223,12 +218,16 @@ function Recent({
   )
 }
 
-function dayLabel(at: number, now: number) {
+function dayLabel(
+  at: number,
+  now: number,
+  words: { today: string; yesterday: string }
+) {
   const day = (t: number) => new Date(t).setHours(0, 0, 0, 0)
   const diff = Math.round((day(now) - day(at)) / 86_400_000)
-  if (diff <= 0) return "Today"
-  if (diff === 1) return "Yesterday"
-  return new Date(at).toLocaleDateString(undefined, {
+  if (diff <= 0) return words.today
+  if (diff === 1) return words.yesterday
+  return new Date(at).toLocaleDateString(currentLanguage(), {
     day: "numeric",
     month: "short",
   })
@@ -255,11 +254,11 @@ function HitItem({ hit, onSelect }: { hit: Hit; onSelect: (h: Hit) => void }) {
           <UserAvatar
             user={{ id: hit.id, name: hit.label, image: hit.image ?? null }}
             size="sm"
-            className="[&_[data-slot=avatar-fallback]]:text-[9px] [&_[data-slot=avatar]]:size-5"
+            className="[&_[data-slot=avatar-fallback]]:text-2xs [&_[data-slot=avatar]]:size-5"
           />
         ) : hit.kind === "group" ? (
           <span
-            className="flex size-5 items-center justify-center rounded-md text-[11px] font-semibold text-white"
+            className="flex size-5 items-center justify-center rounded-md text-2xs font-semibold text-white"
             style={{ backgroundColor: accentFor(hit.id) }}
           >
             {hit.label.charAt(0).toUpperCase()}
@@ -293,18 +292,15 @@ function Results({
   onSelect: (hit: Hit) => void
   onSearchAll: () => void
 }) {
+  const { t } = useTranslation()
   const take = tab === "all" ? 5 : 20
   const on = (kind: Tab) => tab === "all" || tab === kind
   const sections = [
-    { kind: "user", title: "People", query: usePeople(q, take, on("user")) },
-    { kind: "group", title: "Groups", query: useGroups(q, take, on("group")) },
-    { kind: "post", title: "Posts", query: usePosts(q, take, on("post")) },
-    {
-      kind: "message",
-      title: "Messages",
-      query: useMessages(q, take, on("message")),
-    },
-    { kind: "file", title: "Files", query: useFiles(q, take, on("file")) },
+    { kind: "user", query: usePeople(q, take, on("user")) },
+    { kind: "group", query: useGroups(q, take, on("group")) },
+    { kind: "post", query: usePosts(q, take, on("post")) },
+    { kind: "message", query: useMessages(q, take, on("message")) },
+    { kind: "file", query: useFiles(q, take, on("file")) },
   ] as const
   const visible = sections.filter((s) => on(s.kind))
   const pending = visible.some((s) => s.query.isLoading)
@@ -313,7 +309,7 @@ function Results({
     <>
       {visible.map((s) =>
         s.query.data?.length ? (
-          <CommandGroup key={s.kind} heading={s.title}>
+          <CommandGroup key={s.kind} heading={t(`shell.search.tabs.${s.kind}`)}>
             {s.query.data.map((hit) => (
               <HitItem key={hit.id} hit={hit} onSelect={onSelect} />
             ))}
@@ -325,7 +321,7 @@ function Results({
           <Spinner />
         </div>
       ) : (
-        <CommandEmpty>No results for “{q}”.</CommandEmpty>
+        <CommandEmpty>{t("shell.search.noResultsFor", { q })}</CommandEmpty>
       )}
       <CommandGroup>
         <CommandItem
@@ -334,7 +330,7 @@ function Results({
           className="h-9 gap-2.5"
         >
           <SearchIcon />
-          Search everything for “{q}”
+          {t("shell.search.searchAll", { q })}
         </CommandItem>
       </CommandGroup>
     </>
@@ -369,8 +365,9 @@ function usePeople(q: string, take: number, enabled: boolean) {
 }
 
 function useGroups(q: string, take: number, enabled: boolean) {
+  const { t, i18n } = useTranslation()
   return useDbQuery(
-    ["group", "findMany", "palette", q, take],
+    ["group", "findMany", "palette", q, take, i18n.resolvedLanguage],
     async (): Promise<Hit[]> => {
       const rows = await db.group.findMany({
         where: { OR: [{ name: ci(q) }, { description: ci(q) }] },
@@ -382,7 +379,7 @@ function useGroups(q: string, take: number, enabled: boolean) {
         kind: "group",
         id: g.id,
         label: g.name,
-        subtitle: g.privacy.charAt(0) + g.privacy.slice(1).toLowerCase(),
+        subtitle: t(`groups.privacy.${g.privacy}`),
         href: `/groups/${g.slug}`,
       }))
     },

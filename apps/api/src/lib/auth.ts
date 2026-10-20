@@ -5,6 +5,9 @@ import { acceptPendingInvitation, joinDefaultGroup } from "@/server/company";
 import { db, dbAdapter } from "./db";
 import { sendMail } from "./mail";
 
+/** Set by the auth route from the socket / trusted proxy (`plugins/auth.ts`); never client-controlled. */
+export const CLIENT_IP_HEADER = "x-client-ip";
+
 export const auth = betterAuth({
   database: dbAdapter,
   baseURL: env.BETTER_AUTH_URL,
@@ -12,17 +15,20 @@ export const auth = betterAuth({
   plugins: [
     jwt({
       jwks: { jwksPath: "/.well-known/jwks.json" },
-      jwt: { expirationTime: "15m" },
+      jwt: { expirationTime: "30d" },
     }),
     admin(),
     bearer(),
     openAPI(),
   ],
   trustedOrigins: env.WEB_ORIGIN.split(","),
+  // Session rows record this IP; the account page lists it next to the user agent.
+  advanced: { ipAddress: { ipAddressHeaders: [CLIENT_IP_HEADER] } },
   session: {
     // Sliding idle timeout: each request within updateAge extends the session by expiresIn.
     expiresIn: 60 * 60,
     updateAge: 60,
+    // A revoked session keeps working on its device until this cache expires (≤ 60s).
     cookieCache: { enabled: true, strategy: "jwt", maxAge: 60 },
   },
   user: {

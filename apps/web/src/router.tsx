@@ -69,6 +69,10 @@ export const router = createBrowserRouter([
                     lazy: page(() => import("@/pages/app/groups/group")),
                   },
                   {
+                    path: ":groupSlug/wiki/:pageId?",
+                    lazy: page(() => import("@/pages/app/groups/wiki")),
+                  },
+                  {
                     path: ":groupSlug/c/:channelId",
                     lazy: page(() => import("@/pages/app/groups/channel")),
                   },
@@ -120,6 +124,10 @@ export const router = createBrowserRouter([
               {
                 path: "settings",
                 lazy: page(() => import("@/pages/app/settings/index")),
+              },
+              {
+                path: "account",
+                lazy: page(() => import("@/pages/app/account/index")),
               },
             ],
           },

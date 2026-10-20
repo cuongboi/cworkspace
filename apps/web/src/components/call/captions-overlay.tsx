@@ -1,6 +1,7 @@
 import type { CaptionLang } from "@/lib/realtime-events"
 import type { CaptionLine } from "@/lib/rtc/use-call"
 import { CaptionText } from "./caption-text"
+import { useTranslation } from "react-i18next"
 
 /** The latest utterances over the call, in the reader's language (original underneath). */
 export function CaptionsOverlay({
@@ -10,6 +11,7 @@ export function CaptionsOverlay({
   lines: CaptionLine[]
   lang: CaptionLang
 }) {
+  const { t } = useTranslation()
   if (!lines.length) return null
   return (
     <div
@@ -19,7 +21,7 @@ export function CaptionsOverlay({
       {lines.map((line) => (
         <p key={line.id} className="text-base leading-snug md:text-lg">
           <span className="mr-2 font-medium text-white/60">
-            {line.self ? "You" : line.user.name}
+            {line.self ? t("call.captions.you") : line.user.name}
           </span>
           <CaptionText line={line} lang={lang} />
         </p>

@@ -473,6 +473,52 @@ describe("calls", () => {
   });
 });
 
+describe("group features", () => {
+  let groupId: string;
+  beforeAll(async () => {
+    // the creator adds people while creating the group
+    groupId = (
+      await as("alice").group.create({
+        data: {
+          name: "Announcements",
+          slug: `announcements-${run}`,
+          postPolicy: "ADMINS",
+          wikiEnabled: false,
+          calendarEnabled: false,
+          members: {
+            create: [{ userId: users.alice.id, role: "ADMIN" }, { userId: users.bob.id }],
+          },
+        },
+      })
+    ).id;
+  });
+
+  it("admins-only posting rejects members and allows group admins", async () => {
+    await rejected(as("bob").post.create({ data: { groupId, content: "hi" } }));
+    await as("alice").post.create({ data: { groupId, content: "news" } });
+  });
+
+  it("a disabled wiki is read-only, even for admins", async () => {
+    await rejected(as("alice").wikiPage.create({ data: { groupId, title: "Nope" } }));
+    await rejected(as("dave").wikiPage.create({ data: { groupId, title: "Nope" } }));
+  });
+
+  it("a disabled calendar rejects group events", async () => {
+    const start = new Date();
+    await rejected(
+      as("alice").event.create({
+        data: { groupId, title: "x", startAt: start, endAt: new Date(start.getTime() + 1000) },
+      }),
+    );
+  });
+
+  it("only group admins switch features", async () => {
+    await rejected(as("bob").group.update({ where: { id: groupId }, data: { wikiEnabled: true } }));
+    await as("alice").group.update({ where: { id: groupId }, data: { wikiEnabled: true } });
+    await as("bob").wikiPage.create({ data: { groupId, title: "Now allowed" } });
+  });
+});
+
 describe("instance admins and RBAC", () => {
   it("plain users cannot moderate groups they don't run", async () => {
     await rejected(as("bob").group.update({ where: { id: publicGroup }, data: { name: "mine" } }));

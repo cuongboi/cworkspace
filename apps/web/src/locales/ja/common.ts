@@ -1,0 +1,31 @@
+import type { DeepStrings } from "./types"
+import type { common as en } from "../en/common"
+
+export const common: DeepStrings<typeof en> = {
+  cancel: "キャンセル",
+  copyLink: "リンクをコピー",
+  linkCopied: "リンクをコピーしました",
+  copyFailed: "リンクをコピーできませんでした",
+  more: "その他",
+  back: "戻る",
+  seeAll: "すべて見る",
+  save: "保存",
+  saving: "保存中…",
+  saved: "保存しました",
+  delete: "削除",
+  edit: "編集",
+  close: "閉じる",
+  confirm: "確認",
+  create: "作成",
+  send: "送信",
+  search: "検索",
+  loading: "読み込み中…",
+  loadMore: "さらに読み込む",
+  retry: "再試行",
+  remove: "削除",
+  add: "追加",
+  done: "完了",
+  you: "あなた",
+  justNow: "たった今",
+  noResults: "結果がありません",
+}

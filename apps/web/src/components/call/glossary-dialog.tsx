@@ -13,6 +13,7 @@ import {
   MAX_GLOSSARY_TERM_CHARS,
   MAX_GLOSSARY_TERMS,
 } from "@/lib/realtime-events"
+import { useTranslation } from "react-i18next"
 
 function parseTerms(text: string) {
   return [
@@ -65,6 +66,7 @@ function GlossaryForm({
   onCancel: () => void
   onSave: (terms: string[]) => void
 }) {
+  const { t } = useTranslation()
   const [draft, setDraft] = useState(terms.join("\n"))
   const count = parseTerms(draft).length
   return (
@@ -76,27 +78,24 @@ function GlossaryForm({
       }}
     >
       <DialogHeader>
-        <DialogTitle>Caption glossary</DialogTitle>
-        <DialogDescription>
-          Names and terms said in this call, one per line. Everyone's live
-          captions use them; the list is gone when the call ends.
-        </DialogDescription>
+        <DialogTitle>{t("call.glossary.title")}</DialogTitle>
+        <DialogDescription>{t("call.glossary.description")}</DialogDescription>
       </DialogHeader>
       <Textarea
         value={draft}
         onChange={(e) => setDraft(e.target.value)}
         rows={8}
         placeholder={"Nguyễn Văn An\n田中さん\nKubernetes"}
-        aria-label="Glossary terms"
+        aria-label={t("call.glossary.terms")}
       />
       <p className="text-xs text-muted-foreground">
-        {count} / {MAX_GLOSSARY_TERMS} terms
+        {t("call.glossary.count", { count, max: MAX_GLOSSARY_TERMS })}
       </p>
       <DialogFooter>
         <Button type="button" variant="ghost" onClick={onCancel}>
-          Cancel
+          {t("common.cancel")}
         </Button>
-        <Button type="submit">Save</Button>
+        <Button type="submit">{t("common.save")}</Button>
       </DialogFooter>
     </form>
   )

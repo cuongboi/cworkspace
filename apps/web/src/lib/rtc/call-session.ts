@@ -23,6 +23,7 @@ import type {
   JoinResult,
   PeerConnectionState,
 } from "./transport"
+import i18n from "@/lib/i18n"
 
 /**
  * Framework-free state machine of one call screen: local media (mic, camera, screen), the
@@ -194,15 +195,17 @@ function describeMediaError(err: unknown) {
   switch (name) {
     case "NotAllowedError":
     case "SecurityError":
-      return "permission denied"
+      return i18n.t("call.session.mediaError.denied")
     case "NotFoundError":
     case "OverconstrainedError":
-      return "no device found"
+      return i18n.t("call.session.mediaError.notFound")
     case "NotReadableError":
     case "AbortError":
-      return "the device is in use by another app"
+      return i18n.t("call.session.mediaError.inUse")
     default:
-      return err instanceof Error ? err.message : "unavailable"
+      return err instanceof Error
+        ? err.message
+        : i18n.t("call.session.mediaError.unavailable")
   }
 }
 
@@ -259,7 +262,10 @@ export class CallSession {
       onSegment: (segment) => this.sendCaption(segment),
       onMark: (mark) => {
         if (this.socket?.connected && this.state.phase === "in-call")
-          this.socket.emit("call:caption-mark", { callId: this.callId, ...mark })
+          this.socket.emit("call:caption-mark", {
+            callId: this.callId,
+            ...mark,
+          })
       },
       onUnavailable,
       onStatus: (status, error) => {
@@ -324,12 +330,12 @@ export class CallSession {
       this.stopLocalMedia()
       this.patch({ mediaReady: false })
     } else {
-      this.end("You left the call")
+      this.end(i18n.t("call.session.youLeft"))
     }
   }
 
   /** The call ended before we joined (ring timeout, caller hung up). */
-  markEnded(reason = "The call has ended") {
+  markEnded(reason = i18n.t("call.ended.default")) {
     if (this.state.phase === "ended") return
     this.end(reason)
   }
@@ -367,7 +373,11 @@ export class CallSession {
       )
     } catch (err) {
       if (this.transport === transport)
-        this.end(err instanceof Error ? err.message : "Could not join the call")
+        this.end(
+          err instanceof Error
+            ? err.message
+            : i18n.t("call.session.couldNotJoin")
+        )
       return
     }
     if (this.transport !== transport) return
@@ -381,7 +391,7 @@ export class CallSession {
 
   leave() {
     if (this.state.phase === "ended") return
-    this.end("You left the call")
+    this.end(i18n.t("call.session.youLeft"))
   }
 
   private end(reason: string) {
@@ -560,7 +570,7 @@ export class CallSession {
         ? this.readStatus
         : this.speakStatus
     if (worst.error && worst.error !== this.state.captionError)
-      this.notice(`Live captions failed: ${worst.error}`)
+      this.notice(i18n.t("call.captions.failed", { error: worst.error }))
     this.patch({ captionStatus: worst.status, captionError: worst.error })
   }
 
@@ -581,7 +591,8 @@ export class CallSession {
     if (this.socket?.connected && this.state.phase === "in-call")
       return this.socket.emit("call:caption", payload)
     // partials are stale by the time we're back; finals are resent (the server dedupes them)
-    if (segment.final) this.outbox = [...this.outbox, payload].slice(-MAX_OUTBOX)
+    if (segment.final)
+      this.outbox = [...this.outbox, payload].slice(-MAX_OUTBOX)
   }
 
   private flushOutbox() {
@@ -610,7 +621,9 @@ export class CallSession {
       source: { text: p.text, final: p.final },
       translation: existing?.translation ?? null,
       untranslated:
-        p.lang !== this.state.captions.lang && !existing?.translation && !translated,
+        p.lang !== this.state.captions.lang &&
+        !existing?.translation &&
+        !translated,
       startedAt: p.ts,
     }))
   }
@@ -622,15 +635,19 @@ export class CallSession {
   ) {
     const peer = this.remote.get(speakerId)
     if (!peer || this.state.phase === "ended") return
-    this.updateLine(`${peer.user.id}:${s.utteranceId}`, s.final, (existing) => ({
-      user: peer.user,
-      self: false,
-      sourceLang: peer.captions.lang,
-      source: existing?.source ?? null,
-      translation: { text: s.text, final: s.final },
-      untranslated: false,
-      startedAt: existing?.startedAt ?? Date.now(),
-    }))
+    this.updateLine(
+      `${peer.user.id}:${s.utteranceId}`,
+      s.final,
+      (existing) => ({
+        user: peer.user,
+        self: false,
+        sourceLang: peer.captions.lang,
+        source: existing?.source ?? null,
+        translation: { text: s.text, final: s.final },
+        untranslated: false,
+        startedAt: existing?.startedAt ?? Date.now(),
+      })
+    )
   }
 
   private updateLine(
@@ -642,7 +659,8 @@ export class CallSession {
       this.state.captionLines.find((l) => l.id === id) ??
       this.state.transcript.find((l) => l.id === id)
     const line: CaptionLine = { ...make(existing), id, at: Date.now() }
-    const byStart = (a: CaptionLine, b: CaptionLine) => a.startedAt - b.startedAt
+    const byStart = (a: CaptionLine, b: CaptionLine) =>
+      a.startedAt - b.startedAt
     const lines = [...this.state.captionLines.filter((l) => l.id !== id), line]
       .sort(byStart)
       .slice(-MAX_CAPTION_LINES)
@@ -651,8 +669,8 @@ export class CallSession {
     const transcript =
       final || inTranscript
         ? [...this.state.transcript.filter((l) => l.id !== id), line]
-          .sort(byStart)
-          .slice(-MAX_TRANSCRIPT)
+            .sort(byStart)
+            .slice(-MAX_TRANSCRIPT)
         : this.state.transcript
     this.patch({ captionLines: lines, transcript })
     this.captionTimer ??= window.setInterval(this.pruneCaptions, 1_000)
@@ -696,7 +714,8 @@ export class CallSession {
       l.source?.final === true &&
       l.sourceLang !== this.state.captions.lang &&
       now - l.at > TRANSLATION_WAIT_MS
-    const settle = (l: CaptionLine) => (stuck(l) ? { ...l, untranslated: true } : l)
+    const settle = (l: CaptionLine) =>
+      stuck(l) ? { ...l, untranslated: true } : l
     if (
       lines.length !== this.state.captionLines.length ||
       this.state.transcript.some(stuck)
@@ -706,7 +725,10 @@ export class CallSession {
         transcript: this.state.transcript.map(settle),
       })
     const waiting = this.state.transcript.some(
-      (l) => !l.untranslated && !l.translation && l.sourceLang !== this.state.captions.lang
+      (l) =>
+        !l.untranslated &&
+        !l.translation &&
+        l.sourceLang !== this.state.captions.lang
     )
     if (!lines.length && !waiting) {
       window.clearInterval(this.captionTimer)
@@ -737,9 +759,7 @@ export class CallSession {
     const md =
       typeof navigator !== "undefined" ? navigator.mediaDevices : undefined
     if (!md?.getUserMedia) {
-      this.notice(
-        "Your browser can't access a camera or microphone here (HTTPS is required). You'll join listen-only."
-      )
+      this.notice(i18n.t("call.session.insecureListenOnly"))
       this.patch({ mediaReady: true })
       return
     }
@@ -758,15 +778,23 @@ export class CallSession {
 
         try {
           stream = await md.getUserMedia({ audio: AUDIO_CONSTRAINTS })
-          this.notice(`Camera unavailable: ${describeMediaError(err)}`)
+          this.notice(
+            i18n.t("call.session.cameraUnavailable", {
+              reason: describeMediaError(err),
+            })
+          )
         } catch (err2) {
           this.notice(
-            `Microphone unavailable (${describeMediaError(err2)}). You'll join listen-only.`
+            i18n.t("call.session.micUnavailable", {
+              reason: describeMediaError(err2),
+            })
           )
         }
       } else {
         this.notice(
-          `Microphone unavailable (${describeMediaError(err)}). You'll join listen-only.`
+          i18n.t("call.session.micUnavailable", {
+            reason: describeMediaError(err),
+          })
         )
       }
     }
@@ -800,9 +828,7 @@ export class CallSession {
   ): Promise<MediaStreamTrack | null> {
     const md = navigator.mediaDevices
     if (!md?.getUserMedia) {
-      this.notice(
-        "Your browser can't access media devices here (HTTPS is required)"
-      )
+      this.notice(i18n.t("call.session.insecure"))
       return null
     }
     const base = kind === "audio" ? AUDIO_CONSTRAINTS : VIDEO_CONSTRAINTS
@@ -921,7 +947,7 @@ export class CallSession {
       if (!this.transport) return
       const md = navigator.mediaDevices
       if (!md?.getDisplayMedia)
-        return this.notice("Screen sharing isn't supported in this browser")
+        return this.notice(i18n.t("call.session.screenUnsupported"))
       let stream: MediaStream
       try {
         stream = await md.getDisplayMedia({ video: true, audio: false })

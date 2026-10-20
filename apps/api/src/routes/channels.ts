@@ -1,6 +1,6 @@
 import { Elysia, t } from "elysia";
 import { encryptSecret, randomSecret, sha256 } from "@/lib/crypto";
-import { badRequest, forbidden, notFound } from "@/lib/errors";
+import { badRequest, forbidden, invalidState, notFound } from "@/lib/errors";
 import { db } from "@/lib/db";
 import { isValidHostRule, normalizeCidr } from "@/lib/ip";
 import {
@@ -188,6 +188,11 @@ export const channelsRoute = new Elysia({ name: "routes.channels" })
     "/api/groups/:groupId/channels",
     async ({ params: { groupId }, body, user }) => {
       await requireGroupAccess(groupId, user, true);
+      const group = await db.group.findUnique({
+        where: { id: groupId },
+        select: { channelsEnabled: true },
+      });
+      if (!group?.channelsEnabled) throw invalidState("Channels are turned off for this group");
       const channel = await createChannel(
         groupId,
         { name: body.name, parentId: body.parentId ?? null, topic: body.topic?.trim() || null },

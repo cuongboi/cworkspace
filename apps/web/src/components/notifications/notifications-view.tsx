@@ -1,6 +1,7 @@
 import { useQueryClient } from "@tanstack/react-query"
 import { BellIcon, CheckCheckIcon } from "lucide-react"
 import { useEffect, useRef, useState } from "react"
+import { useTranslation } from "react-i18next"
 import { toast } from "sonner"
 import { PageTitle } from "@/components/common/page-title"
 import {
@@ -20,12 +21,14 @@ import {
 import { Spinner } from "@/components/ui/spinner"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { db } from "@/lib/api-client"
+import { errorMessage } from "@/lib/i18n"
 import { invalidateModels, useDbInfinite, useDbQuery } from "@/lib/query"
 
 const PAGE_SIZE = 20
 type Filter = "all" | "unread"
 
 export function NotificationsView() {
+  const { t } = useTranslation()
   const queryClient = useQueryClient()
   const [filter, setFilter] = useState<Filter>("all")
 
@@ -87,18 +90,18 @@ export function NotificationsView() {
     } catch (err) {
       toast.error(
         err instanceof Error
-          ? err.message
-          : "Couldn't mark notifications as read"
+          ? errorMessage(err)
+          : t("notifications.markAllFailed")
       )
     }
   }
 
   return (
     <>
-      <PageTitle title="Notifications" />
+      <PageTitle title={t("notifications.title")} />
       <div className="mx-auto flex w-full max-w-2xl flex-col gap-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <h1 className="text-2xl font-semibold">Notifications</h1>
+          <h1 className="text-2xl font-semibold">{t("notifications.title")}</h1>
           <Button
             variant="outline"
             size="sm"
@@ -106,7 +109,7 @@ export function NotificationsView() {
             disabled={unread === 0}
           >
             <CheckCheckIcon />
-            Mark all as read
+            {t("notifications.markAllRead")}
           </Button>
         </div>
         <ToggleGroup
@@ -115,13 +118,14 @@ export function NotificationsView() {
           spacing={0}
           value={filter}
           onValueChange={(v) => v && setFilter(v as Filter)}
-          aria-label="Filter notifications"
+          aria-label={t("notifications.filterLabel")}
         >
           <ToggleGroupItem value="all" className="px-4">
-            All
+            {t("notifications.all")}
           </ToggleGroupItem>
           <ToggleGroupItem value="unread" className="px-4">
-            Unread{unread > 0 ? ` (${unread > 99 ? "99+" : unread})` : ""}
+            {t("notifications.unread")}
+            {unread > 0 ? ` (${unread > 99 ? "99+" : unread})` : ""}
           </ToggleGroupItem>
         </ToggleGroup>
         <Card className="py-2">
@@ -134,8 +138,8 @@ export function NotificationsView() {
             ) : isError ? (
               <Empty>
                 <EmptyHeader>
-                  <EmptyTitle>Couldn't load notifications</EmptyTitle>
-                  <EmptyDescription>{error.message}</EmptyDescription>
+                  <EmptyTitle>{t("notifications.loadFailed")}</EmptyTitle>
+                  <EmptyDescription>{errorMessage(error)}</EmptyDescription>
                 </EmptyHeader>
               </Empty>
             ) : items.length === 0 ? (
@@ -146,12 +150,11 @@ export function NotificationsView() {
                   </EmptyMedia>
                   <EmptyTitle>
                     {filter === "unread"
-                      ? "No unread notifications"
-                      : "No notifications yet"}
+                      ? t("notifications.noUnread")
+                      : t("notifications.none")}
                   </EmptyTitle>
                   <EmptyDescription>
-                    When someone mentions you, comments on your posts, invites
-                    you to an event or calls you, you'll see it here.
+                    {t("notifications.noneBody")}
                   </EmptyDescription>
                 </EmptyHeader>
               </Empty>
@@ -169,11 +172,11 @@ export function NotificationsView() {
                     disabled={isFetchingNextPage}
                   >
                     {isFetchingNextPage ? <Spinner /> : null}
-                    Load more
+                    {t("common.loadMore")}
                   </Button>
                 ) : items.length > PAGE_SIZE ? (
                   <p className="py-3 text-center text-xs text-muted-foreground">
-                    That's everything.
+                    {t("notifications.end")}
                   </p>
                 ) : null}
               </>

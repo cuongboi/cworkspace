@@ -19,17 +19,3 @@ export type GroupWithMe = GroupGetPayload<{
 
 export type MyMembership =
   { role: GroupRole; status: MembershipStatus } | undefined
-
-export const PRIVACY_LABEL = {
-  PUBLIC: "Public group",
-  CLOSED: "Closed group",
-  SECRET: "Secret group",
-} as const
-
-export const PRIVACY_DESCRIPTION = {
-  PUBLIC: "Anyone in the company can see posts and join.",
-  CLOSED:
-    "Anyone can find the group and see who's in it. Only members see posts; joining needs approval.",
-  SECRET:
-    "Only members can find the group and see posts. Members are added by admins.",
-} as const

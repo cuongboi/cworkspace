@@ -2,6 +2,7 @@ import { useQueryClient } from "@tanstack/react-query"
 import { format, isPast } from "date-fns"
 import { CopyIcon, MailIcon, MailPlusIcon, XIcon } from "lucide-react"
 import { useState } from "react"
+import { useTranslation } from "react-i18next"
 import { toast } from "sonner"
 import { TimeAgo } from "@/components/common/time-ago"
 import {
@@ -55,12 +56,13 @@ import {
 } from "@/components/ui/tooltip"
 import { api, db } from "@/lib/api-client"
 import { COMPANY_NAME } from "@/lib/company"
+import { useDateLocale } from "@/lib/i18n"
 import { invalidateModels, useDbQuery } from "@/lib/query"
 import {
   asRole,
   errorMessage,
   type InstanceRole,
-  ROLE_LABELS,
+  roleLabel,
 } from "./settings-utils"
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
@@ -78,6 +80,8 @@ function parseEmails(input: string) {
 }
 
 export function InvitationsSettings() {
+  const { t } = useTranslation()
+  const locale = useDateLocale()
   const queryClient = useQueryClient()
   const [emails, setEmails] = useState("")
   const [role, setRole] = useState<InstanceRole>("user")
@@ -98,9 +102,9 @@ export function InvitationsSettings() {
   const { valid, invalid } = parseEmails(emails)
   const formError =
     invalid.length > 0
-      ? `Not a valid email: ${invalid.join(", ")}`
+      ? t("settings.invitations.invalid", { emails: invalid.join(", ") })
       : valid.length === 0
-        ? "Enter at least one email address"
+        ? t("settings.invitations.required")
         : null
 
   const send = async () => {
@@ -115,13 +119,19 @@ export function InvitationsSettings() {
         sent++
       } catch (err) {
         failed.push(email)
-        toast.error(`${email}: ${errorMessage(err, "couldn't invite")}`)
+        toast.error(
+          err instanceof Error && err.message
+            ? t("settings.invitations.inviteFailedReason", {
+                email,
+                reason: err.message,
+              })
+            : t("settings.invitations.inviteFailed", { email })
+        )
       }
     }
     await invalidateModels(queryClient, ["invitation"])
     setSending(false)
-    if (sent > 0)
-      toast.success(sent === 1 ? "Invitation sent" : `${sent} invitations sent`)
+    if (sent > 0) toast.success(t("settings.invitations.sent", { count: sent }))
     setEmails(failed.join(", "))
     setSubmitted(false)
   }
@@ -132,10 +142,10 @@ export function InvitationsSettings() {
     try {
       await api.post(`/api/invitations/${cancelId}/cancel`)
       await invalidateModels(queryClient, ["invitation"])
-      toast.success("Invitation cancelled")
+      toast.success(t("settings.invitations.cancelled"))
       setCancelId(null)
     } catch (err) {
-      toast.error(errorMessage(err, "Couldn't cancel the invitation"))
+      toast.error(errorMessage(err, t("settings.invitations.cancelFailed")))
     } finally {
       setCancelling(false)
     }
@@ -144,8 +154,8 @@ export function InvitationsSettings() {
   const copyLink = (id: string) => {
     void navigator.clipboard
       .writeText(`${window.location.origin}/invite/${id}`)
-      .then(() => toast.success("Invite link copied"))
-      .catch(() => toast.error("Couldn't copy the link"))
+      .then(() => toast.success(t("settings.invitations.linkCopied")))
+      .catch(() => toast.error(t("common.copyFailed")))
   }
 
   const sorted = [...(invitations ?? [])].sort(
@@ -159,9 +169,9 @@ export function InvitationsSettings() {
     <div className="flex flex-col gap-6">
       <Card>
         <CardHeader>
-          <CardTitle>Invite people</CardTitle>
+          <CardTitle>{t("settings.invitations.inviteTitle")}</CardTitle>
           <CardDescription>
-            We'll email them a link to join {COMPANY_NAME}.
+            {t("settings.invitations.inviteBody", { company: COMPANY_NAME })}
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -173,7 +183,9 @@ export function InvitationsSettings() {
             }}
           >
             <Field data-invalid={submitted && Boolean(formError)}>
-              <FieldLabel htmlFor="invite-emails">Email addresses</FieldLabel>
+              <FieldLabel htmlFor="invite-emails">
+                {t("settings.invitations.emails")}
+              </FieldLabel>
               <Textarea
                 id="invite-emails"
                 value={emails}
@@ -192,31 +204,33 @@ export function InvitationsSettings() {
                 <FieldError>{formError}</FieldError>
               ) : (
                 <FieldDescription>
-                  Separate several addresses with commas.
+                  {t("settings.invitations.emailsHint")}
                 </FieldDescription>
               )}
             </Field>
             <div className="flex flex-wrap items-end justify-between gap-3">
               <Field className="w-fit">
-                <FieldLabel htmlFor="invite-role">Role</FieldLabel>
+                <FieldLabel htmlFor="invite-role">
+                  {t("settings.invitations.role")}
+                </FieldLabel>
                 <NativeSelect
                   id="invite-role"
                   value={role}
                   onChange={(e) => setRole(asRole(e.target.value))}
                 >
                   <NativeSelectOption value="user">
-                    {ROLE_LABELS.user}
+                    {roleLabel("user")}
                   </NativeSelectOption>
                   <NativeSelectOption value="admin">
-                    {ROLE_LABELS.admin}
+                    {roleLabel("admin")}
                   </NativeSelectOption>
                 </NativeSelect>
               </Field>
               <Button type="submit" disabled={sending}>
                 {sending ? <Spinner /> : <MailPlusIcon />}
-                {valid.length > 1
-                  ? `Send ${valid.length} invitations`
-                  : "Send invitation"}
+                {t("settings.invitations.send", {
+                  count: Math.max(valid.length, 1),
+                })}
               </Button>
             </div>
           </form>
@@ -225,11 +239,8 @@ export function InvitationsSettings() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Invitations</CardTitle>
-          <CardDescription>
-            Pending invitations expire after a while; you can resend them by
-            inviting again.
-          </CardDescription>
+          <CardTitle>{t("settings.invitations.title")}</CardTitle>
+          <CardDescription>{t("settings.invitations.body")}</CardDescription>
         </CardHeader>
         <CardContent className="px-0">
           {isPending ? (
@@ -245,9 +256,9 @@ export function InvitationsSettings() {
                 <EmptyMedia variant="icon">
                   <MailIcon />
                 </EmptyMedia>
-                <EmptyTitle>No invitations yet</EmptyTitle>
+                <EmptyTitle>{t("settings.invitations.none")}</EmptyTitle>
                 <EmptyDescription>
-                  Invite your teammates with the form above.
+                  {t("settings.invitations.noneBody")}
                 </EmptyDescription>
               </EmptyHeader>
             </Empty>
@@ -255,12 +266,20 @@ export function InvitationsSettings() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead className="pl-6">Email</TableHead>
-                  <TableHead className="hidden sm:table-cell">Role</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead className="hidden md:table-cell">Sent</TableHead>
+                  <TableHead className="pl-6">
+                    {t("settings.invitations.email")}
+                  </TableHead>
+                  <TableHead className="hidden sm:table-cell">
+                    {t("settings.invitations.role")}
+                  </TableHead>
+                  <TableHead>{t("settings.invitations.status")}</TableHead>
+                  <TableHead className="hidden md:table-cell">
+                    {t("settings.invitations.sentAt")}
+                  </TableHead>
                   <TableHead className="pr-6 text-right">
-                    <span className="sr-only">Actions</span>
+                    <span className="sr-only">
+                      {t("settings.invitations.actions")}
+                    </span>
                   </TableHead>
                 </TableRow>
               </TableHeader>
@@ -276,14 +295,16 @@ export function InvitationsSettings() {
                         {inv.email}
                       </TableCell>
                       <TableCell className="hidden sm:table-cell">
-                        {ROLE_LABELS[asRole(inv.role)]}
+                        {roleLabel(asRole(inv.role))}
                       </TableCell>
                       <TableCell>
                         <div className="flex flex-col gap-0.5">
                           <StatusBadge status={expired ? "expired" : status} />
                           {isPendingInvite ? (
                             <span className="text-xs text-muted-foreground">
-                              Expires {format(expiresAt, "MMM d, p")}
+                              {t("settings.invitations.expires", {
+                                date: format(expiresAt, "PPp", { locale }),
+                              })}
                             </span>
                           ) : null}
                         </div>
@@ -300,12 +321,19 @@ export function InvitationsSettings() {
                                   variant="ghost"
                                   size="icon-sm"
                                   onClick={() => copyLink(inv.id)}
-                                  aria-label={`Copy invite link for ${inv.email}`}
+                                  aria-label={t(
+                                    "settings.invitations.copyFor",
+                                    {
+                                      email: inv.email,
+                                    }
+                                  )}
                                 >
                                   <CopyIcon />
                                 </Button>
                               </TooltipTrigger>
-                              <TooltipContent>Copy link</TooltipContent>
+                              <TooltipContent>
+                                {t("common.copyLink")}
+                              </TooltipContent>
                             </Tooltip>
                             <Tooltip>
                               <TooltipTrigger asChild>
@@ -313,12 +341,19 @@ export function InvitationsSettings() {
                                   variant="ghost"
                                   size="icon-sm"
                                   onClick={() => setCancelId(inv.id)}
-                                  aria-label={`Cancel invitation for ${inv.email}`}
+                                  aria-label={t(
+                                    "settings.invitations.cancelFor",
+                                    {
+                                      email: inv.email,
+                                    }
+                                  )}
                                 >
                                   <XIcon />
                                 </Button>
                               </TooltipTrigger>
-                              <TooltipContent>Cancel</TooltipContent>
+                              <TooltipContent>
+                                {t("common.cancel")}
+                              </TooltipContent>
                             </Tooltip>
                           </div>
                         ) : null}
@@ -338,15 +373,21 @@ export function InvitationsSettings() {
       >
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Cancel this invitation?</AlertDialogTitle>
+            <AlertDialogTitle>
+              {t("settings.invitations.cancelTitle")}
+            </AlertDialogTitle>
             <AlertDialogDescription>
               {cancelTarget
-                ? `${cancelTarget.email} won't be able to join with the link they received.`
+                ? t("settings.invitations.cancelBody", {
+                    email: cancelTarget.email,
+                  })
                 : ""}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={cancelling}>Keep</AlertDialogCancel>
+            <AlertDialogCancel disabled={cancelling}>
+              {t("settings.invitations.keep")}
+            </AlertDialogCancel>
             <AlertDialogAction
               variant="destructive"
               disabled={cancelling}
@@ -356,7 +397,7 @@ export function InvitationsSettings() {
               }}
             >
               {cancelling ? <Spinner /> : null}
-              Cancel invitation
+              {t("settings.invitations.cancelInvitation")}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -366,29 +407,31 @@ export function InvitationsSettings() {
 }
 
 function StatusBadge({ status }: { status: string }) {
+  const { t } = useTranslation()
   switch (status) {
     case "pending":
-      return <Badge variant="secondary">Pending</Badge>
+      return (
+        <Badge variant="secondary">
+          {t("settings.invitations.statuses.pending")}
+        </Badge>
+      )
     case "accepted":
       return (
-        <Badge
-          variant="outline"
-          className="border-emerald-500/40 text-emerald-700 dark:text-emerald-300"
-        >
-          Accepted
+        <Badge variant="outline" className="border-success/40 text-success">
+          {t("settings.invitations.statuses.accepted")}
         </Badge>
       )
     case "expired":
       return (
         <Badge variant="outline" className="text-muted-foreground">
-          Expired
+          {t("settings.invitations.statuses.expired")}
         </Badge>
       )
     case "canceled":
     case "cancelled":
       return (
         <Badge variant="outline" className="text-muted-foreground">
-          Cancelled
+          {t("settings.invitations.statuses.cancelled")}
         </Badge>
       )
     default:

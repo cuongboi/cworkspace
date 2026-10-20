@@ -1,4 +1,5 @@
 import { NewspaperIcon, UsersIcon } from "lucide-react"
+import { useTranslation } from "react-i18next"
 import { Link } from "react-router-dom"
 import { FeedShell } from "@/components/feed/feed-shell"
 import { PostComposer } from "@/components/feed/post-composer"
@@ -16,11 +17,12 @@ import { useApp } from "@/hooks/use-app"
 
 /** News feed: posts from every group I'm an active member of, newest first. */
 const HomePage = () => {
+  const { t } = useTranslation()
   const { me } = useApp()
 
   return (
     <FeedShell>
-      <h1 className="sr-only">News feed</h1>
+      <h1 className="sr-only">{t("feed.home.title")}</h1>
       <PostComposer />
       <PostFeed
         scope={["home", me.id]}
@@ -35,17 +37,14 @@ const HomePage = () => {
               <EmptyMedia variant="icon">
                 <NewspaperIcon />
               </EmptyMedia>
-              <EmptyTitle>Your feed is quiet</EmptyTitle>
-              <EmptyDescription>
-                Write the first post above, or join groups to see what your
-                colleagues are sharing.
-              </EmptyDescription>
+              <EmptyTitle>{t("feed.home.emptyTitle")}</EmptyTitle>
+              <EmptyDescription>{t("feed.home.emptyBody")}</EmptyDescription>
             </EmptyHeader>
             <EmptyContent>
               <Button asChild variant="outline">
                 <Link to={"/groups"}>
                   <UsersIcon />
-                  Discover groups
+                  {t("feed.home.discoverGroups")}
                 </Link>
               </Button>
             </EmptyContent>

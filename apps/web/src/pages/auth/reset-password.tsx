@@ -1,5 +1,6 @@
 import { useQueryStates, parseAsString } from "nuqs"
-import { useState } from "react"
+import { useMemo, useState } from "react"
+import { useTranslation } from "react-i18next"
 import type { UseFormReturn } from "react-hook-form"
 import { Link, useNavigate } from "react-router-dom"
 import { z } from "zod"
@@ -19,31 +20,40 @@ import { Input } from "@/components/ui/input"
 import { authClient } from "@/lib/auth-client"
 import { FormError } from "./auth-layout"
 
-const shape = {
-  password: z.string().min(8, "Use at least 8 characters"),
-  confirmPassword: z.string().min(8, "Use at least 8 characters"),
-}
-type Values = z.infer<z.ZodObject<typeof shape>>
+type Values = { password: string; confirmPassword: string }
 
 const newPassword = { type: "password", autoComplete: "new-password" }
 
-const schema: AutoFormSchema<typeof shape> = {
-  password: {
-    schema: shape.password,
-    label: "New password",
-    as: Input,
-    meta: newPassword,
-  },
-  confirmPassword: {
-    schema: shape.confirmPassword,
-    label: "Confirm password",
-    as: Input,
-    meta: newPassword,
-  },
+function useSchema() {
+  const { t } = useTranslation()
+  return useMemo(() => {
+    const min = t("auth.validation.passwordLength")
+    const shape = {
+      password: z.string().min(8, min),
+      confirmPassword: z.string().min(8, min),
+    }
+    const schema: AutoFormSchema<typeof shape> = {
+      password: {
+        schema: shape.password,
+        label: t("auth.fields.newPassword"),
+        as: Input,
+        meta: newPassword,
+      },
+      confirmPassword: {
+        schema: shape.confirmPassword,
+        label: t("auth.fields.confirmPassword"),
+        as: Input,
+        meta: newPassword,
+      },
+    }
+    return schema
+  }, [t])
 }
 
 /** better-auth redirects here with `?token=…` on success or `?error=INVALID_TOKEN`. */
 export function ResetPasswordPage() {
+  const { t } = useTranslation()
+  const schema = useSchema()
   const navigate = useNavigate()
   const [{ token, error: linkError }] = useQueryStates({
     token: parseAsString,
@@ -56,7 +66,7 @@ export function ResetPasswordPage() {
     if (!token) return
     if (values.password !== values.confirmPassword) {
       return form.setError("confirmPassword", {
-        message: "Passwords do not match",
+        message: t("auth.validation.passwordMismatch"),
       })
     }
     setPending(true)
@@ -66,7 +76,7 @@ export function ResetPasswordPage() {
       token,
     })
     setPending(false)
-    if (error) return setError(error.message ?? "Unable to reset password")
+    if (error) return setError(error.message ?? t("auth.reset.failed"))
     navigate("/sign-in", { replace: true })
   }
 
@@ -74,14 +84,14 @@ export function ResetPasswordPage() {
     return (
       <Card>
         <CardHeader>
-          <CardTitle>Invalid link</CardTitle>
+          <CardTitle>{t("auth.reset.invalidTitle")}</CardTitle>
           <CardDescription>
-            This reset link is invalid or has expired. Request a new one.
+            {t("auth.reset.invalidDescription")}
           </CardDescription>
         </CardHeader>
         <CardFooter>
           <Button asChild className="w-full">
-            <Link to="/forgot-password">Request new link</Link>
+            <Link to="/forgot-password">{t("auth.reset.requestNew")}</Link>
           </Button>
         </CardFooter>
       </Card>
@@ -91,10 +101,8 @@ export function ResetPasswordPage() {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Reset password</CardTitle>
-        <CardDescription>
-          Choose a new password for your account.
-        </CardDescription>
+        <CardTitle>{t("auth.reset.title")}</CardTitle>
+        <CardDescription>{t("auth.reset.description")}</CardDescription>
       </CardHeader>
       <CardContent>
         <AutoForm
@@ -104,7 +112,7 @@ export function ResetPasswordPage() {
         >
           <FormError message={error} />
           <Button type="submit" className="mt-2 w-full" disabled={pending}>
-            {pending ? "Saving…" : "Reset password"}
+            {pending ? t("common.saving") : t("auth.reset.submit")}
           </Button>
         </AutoForm>
       </CardContent>

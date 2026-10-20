@@ -1,24 +1,30 @@
-import { cn } from "cn"
-import { LockIcon, MessageSquareIcon, SearchXIcon } from "lucide-react"
+import {
+  EyeOffIcon,
+  LockIcon,
+  MessageSquareIcon,
+  SearchXIcon,
+} from "lucide-react"
 import { parseAsString, useQueryState } from "nuqs"
-import { Link, useParams } from "react-router-dom"
+import { Link, Navigate, useParams } from "react-router-dom"
 import { useEffect } from "react"
+import { useTranslation } from "react-i18next"
 import { PostComposer } from "@/components/feed/post-composer"
+import { canModerate } from "@/components/groups/channel-data"
 import { PostFeed } from "@/components/feed/post-feed"
 import { GroupAbout } from "@/components/groups/group-about"
 import { GroupCalendar } from "@/components/groups/group-calendar"
+import { GroupLiveCallBanner } from "@/components/groups/group-call-bar"
 import {
-  GroupCallButton,
-  GroupLiveCallBanner,
-} from "@/components/groups/group-call-bar"
+  GROUP_TABS,
+  GroupHeader,
+  type GroupTab,
+} from "@/components/groups/group-header"
 import { GroupMembers } from "@/components/groups/group-members"
-import { type GroupWithMe, groupInclude } from "@/components/groups/group-query"
-import { GroupCover, PrivacyLabel } from "@/components/groups/group-visuals"
+import { groupInclude } from "@/components/groups/group-query"
+import { GroupSideRail } from "@/components/groups/group-side-rail"
 import { MembershipButton } from "@/components/groups/membership-button"
 import { useGroupCall } from "@/components/groups/use-group-call"
-import { GroupKnowledge } from "@/components/groups/wiki/group-knowledge"
 import { Button } from "@/components/ui/button"
-import { Card } from "@/components/ui/card"
 import {
   Empty,
   EmptyContent,
@@ -28,37 +34,22 @@ import {
   EmptyTitle,
 } from "@/components/ui/empty"
 import { Skeleton } from "@/components/ui/skeleton"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Tabs, TabsContent } from "@/components/ui/tabs"
 import { useApp } from "@/hooks/use-app"
 import { db } from "@/lib/api-client"
 import { rememberGroup } from "@/lib/last-group"
 import { useDbQuery } from "@/lib/query"
-import type { GroupCallState } from "@/lib/realtime-events"
 import { ScrollArea } from "@/components/ui/scroll-area"
-
-const TABS = [
-  "discussion",
-  "knowledge",
-  "calendar",
-  "members",
-  "about",
-] as const
-type Tab = (typeof TABS)[number]
-/** tabs that need the wide content column */
-const WIDE_TABS: Tab[] = ["knowledge", "calendar"]
 
 const GroupPage = () => {
   const params = useParams()
-  const { me } = useApp()
+  const { me, isAdmin } = useApp()
+  const { t } = useTranslation()
   const slug = params.groupSlug ?? ""
   const [tabParam, setTabParam] = useQueryState(
     "tab",
     parseAsString.withDefault("")
   )
-  const tab: Tab = (TABS as readonly string[]).includes(tabParam)
-    ? (tabParam as Tab)
-    : "discussion"
-
   const { data: group, isPending } = useDbQuery(
     ["group", "findFirst", "slug", slug, me.id],
     () =>
@@ -71,12 +62,26 @@ const GroupPage = () => {
   const setTab = (next: string) =>
     void setTabParam(next === "discussion" ? null : next, { scroll: false })
 
+  const tab: GroupTab =
+    (GROUP_TABS as readonly string[]).includes(tabParam) &&
+    (tabParam !== "calendar" || group?.calendarEnabled !== false)
+      ? (tabParam as GroupTab)
+      : "discussion"
+
   const isMember = group?.members[0]?.status === "ACTIVE"
+  // mirrors the Post create policy (the server enforces it)
+  const canPost =
+    isMember &&
+    (group?.postPolicy !== "ADMINS" ||
+      canModerate(group.members[0]?.role, isAdmin))
   const live = useGroupCall(group?.id ?? "", Boolean(group) && isMember)
   useEffect(() => {
     if (isMember && group) rememberGroup(group.slug)
   }, [isMember, group])
 
+  // the wiki used to be a tab: keep old links working
+  if (tabParam === "knowledge")
+    return <Navigate to={`/groups/${slug}/wiki`} replace />
   if (isPending) return <GroupSkeleton />
 
   if (!group) {
@@ -86,14 +91,12 @@ const GroupPage = () => {
           <EmptyMedia variant="icon">
             <SearchXIcon />
           </EmptyMedia>
-          <EmptyTitle>Group not found</EmptyTitle>
-          <EmptyDescription>
-            This group doesn't exist, or it's secret and you're not a member.
-          </EmptyDescription>
+          <EmptyTitle>{t("groups.notFound")}</EmptyTitle>
+          <EmptyDescription>{t("groups.notFoundBody")}</EmptyDescription>
         </EmptyHeader>
         <EmptyContent>
           <Button asChild variant="outline">
-            <Link to={"/groups/discover"}>Browse groups</Link>
+            <Link to={"/groups/discover"}>{t("groups.browse")}</Link>
           </Button>
         </EmptyContent>
       </Empty>
@@ -102,22 +105,28 @@ const GroupPage = () => {
 
   const membership = group.members[0]
   const canSeePosts = isMember || group.privacy === "PUBLIC"
-  const locked = (
-    <Empty className="rounded-xl border border-dashed bg-card">
-      <EmptyHeader>
-        <EmptyMedia variant="icon">
-          <LockIcon />
-        </EmptyMedia>
-        <EmptyTitle>Members only</EmptyTitle>
-        <EmptyDescription>
-          {membership?.status === "PENDING"
-            ? "Your request is waiting for an admin's approval."
-            : "Join the group to take part."}
-        </EmptyDescription>
-      </EmptyHeader>
+  const joinCta =
+    membership?.status === "PENDING" || group.privacy === "SECRET" ? null : (
       <EmptyContent>
         <MembershipButton group={group} membership={membership} />
       </EmptyContent>
+    )
+  const locked = (
+    <Empty className="rounded-2xl border bg-card py-12">
+      <EmptyHeader>
+        <EmptyMedia variant="icon">
+          {group.privacy === "SECRET" ? <EyeOffIcon /> : <LockIcon />}
+        </EmptyMedia>
+        <EmptyTitle>{t("groups.membersOnly")}</EmptyTitle>
+        <EmptyDescription>
+          {membership?.status === "PENDING"
+            ? t("groups.pendingBody")
+            : group.privacy === "SECRET"
+              ? t("groups.secretBody")
+              : t("groups.closedBody")}
+        </EmptyDescription>
+      </EmptyHeader>
+      {joinCta}
     </Empty>
   )
 
@@ -126,69 +135,55 @@ const GroupPage = () => {
       <Tabs
         value={tab}
         onValueChange={setTab}
-        className="min-h-full gap-0 bg-muted/50"
+        className="min-h-full gap-0 bg-background"
       >
-        <GroupHeader
-          group={group}
-          live={isMember ? live : null}
-          onTab={setTab}
-        />
-        <div
-          className={cn(
-            "mx-auto flex w-full flex-col gap-4 p-4 md:p-6",
-            WIDE_TABS.includes(tab) ? "max-w-5xl" : "max-w-2xl"
-          )}
-        >
-          {isMember && live ? <GroupLiveCallBanner live={live} /> : null}
-          <TabsContent value="discussion" className="flex flex-col gap-4">
-            {canSeePosts ? (
-              <>
-                {isMember ? (
-                  <PostComposer groupId={group.id} groupName={group.name} />
-                ) : null}
-                <PostFeed
-                  scope={["group", group.id, me.id]}
-                  where={{ groupId: group.id }}
-                  pinnedFirst
-                  showGroup={false}
-                  empty={
-                    <Empty className="rounded-xl border border-dashed bg-card">
-                      <EmptyHeader>
-                        <EmptyMedia variant="icon">
-                          <MessageSquareIcon />
-                        </EmptyMedia>
-                        <EmptyTitle>No posts yet</EmptyTitle>
-                        <EmptyDescription>
-                          {isMember
-                            ? "Start the conversation with the first post."
-                            : "Join the group to post here."}
-                        </EmptyDescription>
-                      </EmptyHeader>
-                    </Empty>
-                  }
-                />
-              </>
-            ) : (
-              <Empty className="rounded-xl border border-dashed bg-card">
-                <EmptyHeader>
-                  <EmptyMedia variant="icon">
-                    <LockIcon />
-                  </EmptyMedia>
-                  <EmptyTitle>This group is closed</EmptyTitle>
-                  <EmptyDescription>
-                    {membership?.status === "PENDING"
-                      ? "Your request is waiting for an admin's approval."
-                      : "Only members can see posts. Request to join to take part."}
-                  </EmptyDescription>
-                </EmptyHeader>
-                <EmptyContent>
-                  <MembershipButton group={group} membership={membership} />
-                </EmptyContent>
-              </Empty>
-            )}
-          </TabsContent>
-          <TabsContent value="knowledge">
-            {canSeePosts ? <GroupKnowledge group={group} /> : locked}
+        <GroupHeader group={group} tab={tab} live={isMember ? live : null} />
+        <div className="mx-auto w-full max-w-5xl px-3 py-4 md:px-6 md:py-5">
+          <TabsContent
+            value="discussion"
+            className="grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_280px]"
+          >
+            <div className="flex min-w-0 flex-col gap-3">
+              {isMember && live ? <GroupLiveCallBanner live={live} /> : null}
+              {canSeePosts ? (
+                <>
+                  {canPost ? (
+                    <PostComposer groupId={group.id} groupName={group.name} />
+                  ) : isMember ? (
+                    <p className="rounded-xl border bg-card px-4 py-3 text-sm text-muted-foreground">
+                      {t("groups.features.adminsOnlyPosting")}
+                    </p>
+                  ) : null}
+                  <PostFeed
+                    scope={["group", group.id, me.id]}
+                    where={{ groupId: group.id }}
+                    pinnedFirst
+                    showGroup={false}
+                    empty={
+                      <Empty className="rounded-2xl border bg-card">
+                        <EmptyHeader>
+                          <EmptyMedia variant="icon">
+                            <MessageSquareIcon />
+                          </EmptyMedia>
+                          <EmptyTitle>{t("groups.noPosts")}</EmptyTitle>
+                          <EmptyDescription>
+                            {isMember
+                              ? t("groups.noPostsMember")
+                              : t("groups.noPostsGuest")}
+                          </EmptyDescription>
+                        </EmptyHeader>
+                        {isMember ? null : joinCta}
+                      </Empty>
+                    }
+                  />
+                </>
+              ) : (
+                locked
+              )}
+            </div>
+            <div className="hidden lg:block">
+              <GroupSideRail group={group} isMember={isMember} />
+            </div>
           </TabsContent>
           <TabsContent value="calendar">
             {canSeePosts ? (
@@ -197,11 +192,22 @@ const GroupPage = () => {
               locked
             )}
           </TabsContent>
-          <TabsContent value="members">
-            <GroupMembers group={group} />
+          <TabsContent value="members" className="mx-auto w-full">
+            {canSeePosts || group.privacy === "CLOSED" ? (
+              <GroupMembers group={group} />
+            ) : (
+              locked
+            )}
           </TabsContent>
-          <TabsContent value="about">
+          <TabsContent
+            value="about"
+            className="mx-auto flex w-full flex-col gap-3"
+          >
             <GroupAbout group={group} />
+            {/* phones have no side column: its members and shortcuts live here */}
+            <div className="lg:hidden">
+              <GroupSideRail group={group} isMember={isMember} hideAbout />
+            </div>
           </TabsContent>
         </div>
       </Tabs>
@@ -209,86 +215,33 @@ const GroupPage = () => {
   )
 }
 
-/** Rendered inside the page's `Tabs` root so the tab list controls the panels below. */
-function GroupHeader({
-  group,
-  live,
-  onTab,
-}: {
-  group: GroupWithMe
-  /** null for non-members: they can't see or join the group's call */
-  live: GroupCallState | null
-  onTab: (tab: string) => void
-}) {
-  const membership = group.members[0]
-  const isMember = membership?.status === "ACTIVE"
-  return (
-    <div className="border-b bg-card">
-      <div className="mx-auto max-w-4xl">
-        <GroupCover group={group} className="h-36 md:h-56 md:rounded-b-xl" />
-        <div className="flex flex-col gap-4 px-4 pt-4 md:px-6">
-          <div className="flex flex-wrap items-end justify-between gap-3">
-            <div className="min-w-0">
-              <h1 className="text-2xl font-bold tracking-tight md:text-3xl">
-                {group.name}
-              </h1>
-              <p className="mt-1 flex flex-wrap items-center gap-x-1.5 text-sm text-muted-foreground">
-                <PrivacyLabel privacy={group.privacy} />
-                <span aria-hidden>·</span>
-                <button
-                  type="button"
-                  className="hover:underline"
-                  onClick={() => onTab("members")}
-                >
-                  {group._count.members} member
-                  {group._count.members === 1 ? "" : "s"}
-                </button>
-              </p>
-            </div>
-            <div className="flex items-center gap-2">
-              {isMember ? (
-                <GroupCallButton groupId={group.id} live={live} />
-              ) : null}
-              <MembershipButton group={group} membership={membership} />
-            </div>
-          </div>
-          <ScrollArea orientation="horizontal" className="-mb-0.5 max-w-full">
-            <TabsList variant="line" className="justify-start">
-              <TabsTrigger value="discussion" className="p-2">
-                Discussion
-              </TabsTrigger>
-              <TabsTrigger value="knowledge" className="p-2">
-                Knowledge
-              </TabsTrigger>
-              <TabsTrigger value="calendar" className="p-2">
-                Calendar
-              </TabsTrigger>
-              <TabsTrigger value="members" className="p-2">
-                Members
-              </TabsTrigger>
-              <TabsTrigger value="about" className="p-2">
-                About
-              </TabsTrigger>
-            </TabsList>
-          </ScrollArea>
-        </div>
-      </div>
-    </div>
-  )
-}
-
 function GroupSkeleton() {
   return (
-    <div aria-busy>
-      <div className="mx-auto max-w-4xl">
-        <Skeleton className="h-36 rounded-none md:h-56 md:rounded-b-xl" />
-        <div className="flex flex-col gap-3 p-4 md:px-6">
-          <Skeleton className="h-8 w-64" />
-          <Skeleton className="h-4 w-40" />
+    <div aria-busy className="h-full bg-background">
+      <div className="border-b bg-card">
+        <Skeleton className="h-28 rounded-none md:h-36" />
+        <div className="mx-auto flex max-w-5xl flex-col gap-4 px-4 pb-4 md:flex-row md:items-end md:px-6">
+          <Skeleton className="-mt-9 size-18 rounded-xl border-4 border-card md:-mt-10 md:size-20" />
+          <div className="flex flex-1 flex-col gap-2">
+            <Skeleton className="h-8 w-64" />
+            <Skeleton className="h-4 w-40" />
+          </div>
+          <Skeleton className="h-9 w-28" />
         </div>
       </div>
-      <div className="mx-auto flex max-w-2xl flex-col gap-4 p-4 md:p-6">
-        <Card className="h-32" />
+      <div className="border-b bg-card">
+        <div className="mx-auto flex h-11 max-w-5xl items-center gap-6 px-5 md:px-7">
+          {[72, 36, 60, 64, 44].map((w) => (
+            <Skeleton key={w} className="h-4" style={{ width: w }} />
+          ))}
+        </div>
+      </div>
+      <div className="mx-auto grid max-w-5xl gap-6 px-4 py-5 md:px-6 md:py-6 lg:grid-cols-[minmax(0,1fr)_300px]">
+        <div className="flex flex-col gap-4">
+          <Skeleton className="h-28 rounded-xl" />
+          <Skeleton className="h-48 rounded-xl" />
+        </div>
+        <Skeleton className="hidden h-56 rounded-xl lg:block" />
       </div>
     </div>
   )

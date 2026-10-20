@@ -1,6 +1,7 @@
 import { cn } from "cn"
 import type { CaptionLang } from "@/lib/realtime-events"
 import type { CaptionLine } from "@/lib/rtc/use-call"
+import { useTranslation } from "react-i18next"
 
 /**
  * One utterance for a reader of `lang`: the text in their language, with the original under it
@@ -18,6 +19,7 @@ export function CaptionText({
   className?: string
   originalClassName?: string
 }) {
+  const { t } = useTranslation()
   const translated = line.sourceLang !== lang && !line.untranslated
   const main = translated ? line.translation : line.source
   return (
@@ -28,7 +30,7 @@ export function CaptionText({
         </span>
       ) : (
         <span className={cn(className, "italic opacity-60")}>
-          {line.source?.text ? "Translating…" : "…"}
+          {line.source?.text ? t("call.captions.translating") : "…"}
         </span>
       )}
       {translated && line.source?.text ? (

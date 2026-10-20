@@ -2,6 +2,7 @@ import { useQueryClient } from "@tanstack/react-query"
 import { cn } from "cn"
 import { format } from "date-fns"
 import { useState } from "react"
+import { useTranslation } from "react-i18next"
 import { toast } from "sonner"
 import { TimeAgo } from "@/components/common/time-ago"
 import { UserAvatar } from "@/components/common/user-avatar"
@@ -16,6 +17,7 @@ import {
 import { Skeleton } from "@/components/ui/skeleton"
 import { Spinner } from "@/components/ui/spinner"
 import { ApiError, db } from "@/lib/api-client"
+import { errorMessage, useDateLocale } from "@/lib/i18n"
 import { invalidateModels, useDbQuery } from "@/lib/query"
 import { Markdown } from "./markdown"
 import {
@@ -37,6 +39,8 @@ export function WikiHistorySheet({
   onOpenChange: (open: boolean) => void
   canEdit: boolean
 }) {
+  const { t } = useTranslation()
+  const locale = useDateLocale()
   const qc = useQueryClient()
   const { data: revisions, isPending } = useDbQuery(
     wikiRevisionsKey(page.id),
@@ -67,17 +71,17 @@ export function WikiHistorySheet({
       })
       await invalidateModels(qc, ["wikiPage", "wikiRevision"])
       toast.success(
-        `Restored the version from ${format(selected.createdAt, "PPp")}`
+        t("wiki.history.restored", {
+          date: format(selected.createdAt, "PPp", { locale }),
+        })
       )
       setSelectedId(null)
       onOpenChange(false)
     } catch (err) {
       toast.error(
         err instanceof ApiError && err.code === "NOT_FOUND"
-          ? "The page changed meanwhile. Reopen the history and try again."
-          : err instanceof ApiError
-            ? err.message
-            : "Could not restore"
+          ? t("wiki.history.changedMeanwhile")
+          : errorMessage(err)
       )
       await invalidateModels(qc, ["wikiPage", "wikiRevision"])
     } finally {
@@ -89,62 +93,70 @@ export function WikiHistorySheet({
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent className="w-full! gap-0 sm:max-w-3xl!">
         <SheetHeader className="border-b">
-          <SheetTitle>Page history</SheetTitle>
+          <SheetTitle>{t("wiki.history.title")}</SheetTitle>
           <SheetDescription>
             {revisions
-              ? `${revisions.length}${revisions.length === 100 ? "+" : ""} versions of “${page.title}”`
-              : "Loading versions…"}
+              ? t("wiki.history.versions", {
+                  count: revisions.length,
+                  more: revisions.length === 100 ? "+" : "",
+                  title: page.title,
+                })
+              : t("wiki.history.loading")}
           </SheetDescription>
         </SheetHeader>
-        <div className="grid min-h-0 flex-1 md:grid-cols-[16rem_1fr]">
-          <ScrollArea
-            className="min-h-0 border-b md:border-r md:border-b-0"
-            viewportClassName="max-h-48 md:max-h-none"
+        <div className="grid min-h-0">
+          <div
+            className={cn(
+              "flex scrollbar-thin size-full max-h-48 min-h-0 min-w-0 scrollbar-gutter-stable flex-col overflow-y-auto overscroll-contain [overflow-anchor:none]"
+            )}
+            style={{
+              scrollbarWidth: "unset",
+            }}
           >
             <ul className="p-2">
               {isPending
                 ? Array.from({ length: 4 }, (_, i) => (
-                  <li key={i} className="p-2">
-                    <Skeleton className="h-9 w-full" />
-                  </li>
-                ))
+                    <li key={i} className="p-2">
+                      <Skeleton className="h-9 w-full" />
+                    </li>
+                  ))
                 : revisions?.map((r, i) => (
-                  <li key={r.id}>
-                    <button
-                      type="button"
-                      onClick={() => setSelectedId(r.id)}
-                      className={cn(
-                        "flex w-full items-center gap-2 rounded-md p-2 text-left text-sm hover:bg-accent",
-                        selected?.id === r.id && "bg-accent"
-                      )}
-                    >
-                      <UserAvatar user={r.author} size="sm" />
-                      <span className="min-w-0 flex-1">
-                        <span className="block truncate font-medium">
-                          {r.author.name}
-                          {i === 0 ? (
-                            <span className="text-muted-foreground">
-                              {" "}
-                              · current
-                            </span>
-                          ) : null}
+                    <li key={r.id}>
+                      <button
+                        type="button"
+                        onClick={() => setSelectedId(r.id)}
+                        className={cn(
+                          "flex w-full items-center gap-2 rounded-md p-2 text-left text-sm hover:bg-accent",
+                          selected?.id === r.id && "bg-accent"
+                        )}
+                      >
+                        <UserAvatar user={r.author} size="sm" />
+                        <span className="min-w-0 flex-1">
+                          <span className="block truncate font-medium">
+                            {r.author.name}
+                            {i === 0 ? (
+                              <span className="text-muted-foreground">
+                                {" "}
+                                · {t("wiki.history.current")}
+                              </span>
+                            ) : null}
+                          </span>
+                          <TimeAgo
+                            date={r.createdAt}
+                            className="block text-xs text-muted-foreground"
+                          />
                         </span>
-                        <TimeAgo
-                          date={r.createdAt}
-                          className="block text-xs text-muted-foreground"
-                        />
-                      </span>
-                    </button>
-                  </li>
-                ))}
+                      </button>
+                    </li>
+                  ))}
             </ul>
-          </ScrollArea>
+          </div>
           <div className="flex min-h-0 flex-col">
             {selected ? (
               <>
                 <div className="flex items-center gap-2 border-b px-4 py-2">
                   <span className="min-w-0 flex-1 truncate text-sm text-muted-foreground">
-                    {format(selected.createdAt, "PPpp")}
+                    {format(selected.createdAt, "PPpp", { locale })}
                   </span>
                   {canEdit && !isCurrent ? (
                     <Button
@@ -153,14 +165,16 @@ export function WikiHistorySheet({
                       disabled={restoring}
                     >
                       {restoring ? <Spinner /> : null}
-                      Restore this version
+                      {t("wiki.history.restore")}
                     </Button>
                   ) : null}
                 </div>
                 <ScrollArea className="min-h-0 flex-1">
                   <div className="p-4">
                     <h2 className="mb-4 text-xl font-bold">{selected.title}</h2>
-                    <Markdown>{selected.content || "_Empty page_"}</Markdown>
+                    <Markdown>
+                      {selected.content || `_${t("wiki.history.empty")}_`}
+                    </Markdown>
                   </div>
                 </ScrollArea>
               </>

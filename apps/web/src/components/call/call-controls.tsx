@@ -35,6 +35,7 @@ import {
   isCaptionLang,
 } from "@/lib/realtime-events"
 import type { CaptionStatus, DeviceOption } from "@/lib/rtc/use-call"
+import { useTranslation } from "react-i18next"
 
 /** Round icon button with a tooltip; `off` renders the "disabled device" (red) look. */
 export function ControlButton({
@@ -84,9 +85,10 @@ export function MicButton({
   onToggle: () => void
   disabled?: boolean
 }) {
+  const { t } = useTranslation()
   return (
     <ControlButton
-      label={on ? "Mute microphone" : "Unmute microphone"}
+      label={on ? t("call.controls.mute") : t("call.controls.unmute")}
       aria-pressed={!on}
       off={!on}
       onClick={onToggle}
@@ -106,9 +108,10 @@ export function CameraButton({
   onToggle: () => void
   disabled?: boolean
 }) {
+  const { t } = useTranslation()
   return (
     <ControlButton
-      label={on ? "Turn camera off" : "Turn camera on"}
+      label={on ? t("call.controls.cameraOff") : t("call.controls.cameraOn")}
       aria-pressed={!on}
       off={!on}
       onClick={onToggle}
@@ -126,9 +129,12 @@ export function ScreenButton({
   on: boolean
   onToggle: () => void
 }) {
+  const { t } = useTranslation()
   return (
     <ControlButton
-      label={on ? "Stop presenting" : "Share your screen"}
+      label={
+        on ? t("call.controls.stopPresenting") : t("call.controls.shareScreen")
+      }
       aria-pressed={on}
       onClick={onToggle}
       className={cn(
@@ -141,8 +147,9 @@ export function ScreenButton({
 }
 
 export function LeaveButton({ onLeave }: { onLeave: () => void }) {
+  const { t } = useTranslation()
   return (
-    <ControlButton label="Leave call" danger onClick={onLeave}>
+    <ControlButton label={t("call.controls.leave")} danger onClick={onLeave}>
       <PhoneOffIcon />
     </ControlButton>
   )
@@ -159,6 +166,7 @@ export function DeviceMenu({
   videoDeviceId: string | null
   onSelect: (kind: "audio" | "video", deviceId: string) => void
 }) {
+  const { t } = useTranslation()
   if (!devices.audio.length && !devices.video.length) return null
   return (
     <DropdownMenu>
@@ -169,19 +177,23 @@ export function DeviceMenu({
               type="button"
               size="icon-lg"
               variant="secondary"
-              aria-label="Audio and video settings"
+              aria-label={t("call.controls.deviceSettings")}
               className="size-12 rounded-full [&_svg:not([class*='size-'])]:size-5"
             >
               <Settings2Icon />
             </Button>
           </DropdownMenuTrigger>
         </TooltipTrigger>
-        <TooltipContent side="top">Audio and video settings</TooltipContent>
+        <TooltipContent side="top">
+          {t("call.controls.deviceSettings")}
+        </TooltipContent>
       </Tooltip>
       <DropdownMenuContent side="top" align="center" className="w-72">
         {devices.audio.length ? (
           <>
-            <DropdownMenuLabel>Microphone</DropdownMenuLabel>
+            <DropdownMenuLabel>
+              {t("call.controls.microphone")}
+            </DropdownMenuLabel>
             <DropdownMenuRadioGroup
               value={audioDeviceId ?? ""}
               onValueChange={(id) => onSelect("audio", id)}
@@ -203,7 +215,7 @@ export function DeviceMenu({
         ) : null}
         {devices.video.length ? (
           <>
-            <DropdownMenuLabel>Camera</DropdownMenuLabel>
+            <DropdownMenuLabel>{t("call.controls.camera")}</DropdownMenuLabel>
             <DropdownMenuRadioGroup
               value={videoDeviceId ?? ""}
               onValueChange={(id) => onSelect("video", id)}
@@ -226,12 +238,6 @@ export function DeviceMenu({
 }
 
 /** CC: live captions on/off + the language the user speaks and reads them in. */
-const CAPTION_STATUS: Record<CaptionStatus, string> = {
-  off: "Speech is sent to Google Gemini only while someone reads captions",
-  connecting: "Connecting to live captions…",
-  live: "Live captions are on",
-  error: "Live captions failed",
-}
 
 export function CaptionsButton({
   captions,
@@ -249,11 +255,12 @@ export function CaptionsButton({
   /** in the call only: the glossary is shared by the people in it */
   onEditGlossary?: () => void
 }) {
+  const { t } = useTranslation()
   const label = !available
-    ? "Live captions aren't available"
+    ? t("call.captions.unavailable")
     : captions.enabled
-      ? "Caption settings"
-      : "Turn on captions"
+      ? t("call.captions.settings")
+      : t("call.captions.turnOn")
   return (
     <DropdownMenu>
       <Tooltip>
@@ -287,7 +294,7 @@ export function CaptionsButton({
           checked={captions.enabled}
           onCheckedChange={(enabled) => onChange({ ...captions, enabled })}
         >
-          Show captions
+          {t("call.captions.show")}
         </DropdownMenuCheckboxItem>
         <p
           className={cn(
@@ -295,17 +302,17 @@ export function CaptionsButton({
             status === "error" && "text-destructive"
           )}
         >
-          {CAPTION_STATUS[status]}
+          {t(`call.captions.status.${status}`)}
           {status === "error" && error ? `: ${error}` : null}
         </p>
         {onEditGlossary ? (
           <DropdownMenuItem onSelect={onEditGlossary}>
-            Glossary…
+            {t("call.captions.glossary")}
           </DropdownMenuItem>
         ) : null}
         <DropdownMenuSeparator />
         <DropdownMenuLabel className="text-xs font-normal text-muted-foreground">
-          I speak and read
+          {t("call.captions.language")}
         </DropdownMenuLabel>
         <DropdownMenuRadioGroup
           value={captions.lang}

@@ -1,5 +1,6 @@
 import { CameraIcon } from "lucide-react"
 import { useMemo, useRef, useState } from "react"
+import { useTranslation } from "react-i18next"
 import { toast } from "sonner"
 import { z } from "zod"
 import { UserAvatar } from "@/components/common/user-avatar"
@@ -18,6 +19,7 @@ import { Spinner } from "@/components/ui/spinner"
 import { Textarea } from "@/components/ui/textarea"
 import { useApp } from "@/hooks/use-app"
 import { db } from "@/lib/api-client"
+import { errorMessage } from "@/lib/i18n"
 import { authClient } from "@/lib/auth-client"
 import { useDbMutation } from "@/lib/query"
 import { fileUrl, uploadFile } from "@/lib/upload"
@@ -37,7 +39,7 @@ export type EditableProfile = {
 const optionalText = (max: number) => z.string().trim().max(max)
 
 const shape = {
-  name: z.string().trim().min(1, "Enter your name").max(100),
+  name: z.string().trim().max(100),
   email: z.string(),
   title: optionalText(100),
   department: optionalText(100),
@@ -49,51 +51,6 @@ type Draft = z.infer<z.ZodObject<typeof shape>>
 
 const FULL_WIDTH = { container: "sm:col-span-2" }
 
-const schema: AutoFormSchema<typeof shape> = {
-  name: {
-    schema: shape.name,
-    label: "Full name",
-    as: Input,
-    classNames: FULL_WIDTH,
-  },
-  email: {
-    schema: shape.email,
-    as: Input,
-    disabled: true,
-    description: "Your sign-in email can't be changed here.",
-    classNames: FULL_WIDTH,
-  },
-  title: {
-    schema: shape.title,
-    label: "Job title",
-    as: Input,
-    placeholder: "e.g. Product designer",
-  },
-  department: {
-    schema: shape.department,
-    as: Input,
-    placeholder: "e.g. Design",
-  },
-  location: {
-    schema: shape.location,
-    as: Input,
-    placeholder: "e.g. Ho Chi Minh City",
-  },
-  phone: {
-    schema: shape.phone,
-    as: Input,
-    placeholder: "+84 …",
-    meta: { type: "tel" },
-  },
-  bio: {
-    schema: shape.bio,
-    as: Textarea,
-    placeholder: "A few words about you and your work",
-    meta: { rows: 4 },
-    classNames: FULL_WIDTH,
-  },
-}
-
 /** Edits my own profile (`db.user.update` on my row; email is immutable). Mount it only while open. */
 export function EditProfileDialog({
   profile,
@@ -102,8 +59,61 @@ export function EditProfileDialog({
   profile: EditableProfile
   onOpenChange: (open: boolean) => void
 }) {
+  const { t } = useTranslation()
   const { me } = useApp()
   const session = authClient.useSession()
+  const schema: AutoFormSchema<typeof shape> = useMemo(
+    () => ({
+      name: {
+        schema: shape.name.min(1, t("people.edit.nameRequired")),
+        label: t("people.edit.fullName"),
+        as: Input,
+        classNames: FULL_WIDTH,
+      },
+      email: {
+        schema: shape.email,
+        label: t("people.edit.email"),
+        as: Input,
+        disabled: true,
+        description: t("people.edit.emailHint"),
+        classNames: FULL_WIDTH,
+      },
+      title: {
+        schema: shape.title,
+        label: t("people.edit.jobTitle"),
+        as: Input,
+        placeholder: t("people.edit.jobTitlePlaceholder"),
+      },
+      department: {
+        schema: shape.department,
+        label: t("people.edit.department"),
+        as: Input,
+        placeholder: t("people.edit.departmentPlaceholder"),
+      },
+      location: {
+        schema: shape.location,
+        label: t("people.edit.location"),
+        as: Input,
+        placeholder: t("people.edit.locationPlaceholder"),
+      },
+      phone: {
+        schema: shape.phone,
+        label: t("people.edit.phone"),
+        as: Input,
+        placeholder: "+84 …",
+        meta: { type: "tel" },
+      },
+      bio: {
+        schema: shape.bio,
+        label: t("people.edit.bio"),
+        as: Textarea,
+        placeholder: t("people.edit.bioPlaceholder"),
+        meta: { rows: 4 },
+        classNames: FULL_WIDTH,
+      },
+    }),
+    [t]
+  )
   const defaultValues = useMemo(
     () => ({
       name: profile.name,
@@ -140,7 +150,7 @@ export function EditProfileDialog({
   const onAvatar = async (file: File | undefined) => {
     if (!file) return
     if (!file.type.startsWith("image/")) {
-      toast.error("Choose an image")
+      toast.error(t("people.edit.chooseImage"))
       return
     }
     setUploading(true)
@@ -148,7 +158,11 @@ export function EditProfileDialog({
       const attachment = await uploadFile(file, { isPublic: true })
       setImage(fileUrl(attachment.id))
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Upload failed")
+      toast.error(
+        err instanceof Error && err.message
+          ? err.message
+          : t("people.edit.uploadFailed")
+      )
     } finally {
       setUploading(false)
     }
@@ -157,12 +171,12 @@ export function EditProfileDialog({
   const submit = (draft: Draft) =>
     save.mutate(draft, {
       onSuccess: () => {
-        toast.success("Profile updated")
+        toast.success(t("people.edit.updated"))
         // the sidebar reads name/avatar from the session
         void session.refetch()
         onOpenChange(false)
       },
-      onError: (err) => toast.error(err.message),
+      onError: (err) => toast.error(errorMessage(err)),
     })
 
   return (
@@ -174,9 +188,9 @@ export function EditProfileDialog({
         >
           <div className="grid gap-6 p-6">
             <DialogHeader>
-              <DialogTitle>Edit profile</DialogTitle>
+              <DialogTitle>{t("people.edit.title")}</DialogTitle>
               <DialogDescription>
-                This is what your colleagues see in the directory.
+                {t("people.edit.description")}
               </DialogDescription>
             </DialogHeader>
             <AutoForm
@@ -205,7 +219,7 @@ export function EditProfileDialog({
                             onClick={() => avatarRef.current?.click()}
                           >
                             {uploading ? <Spinner /> : <CameraIcon />}
-                            Change photo
+                            {t("people.edit.changePhoto")}
                           </Button>
                           {image ? (
                             <Button
@@ -214,12 +228,12 @@ export function EditProfileDialog({
                               size="sm"
                               onClick={() => setImage(null)}
                             >
-                              Remove
+                              {t("common.remove")}
                             </Button>
                           ) : null}
                         </div>
                         <p className="text-xs text-muted-foreground">
-                          PNG, JPG or WebP.
+                          {t("people.edit.photoFormats")}
                         </p>
                       </div>
                       <input
@@ -243,11 +257,11 @@ export function EditProfileDialog({
                   variant="outline"
                   onClick={() => onOpenChange(false)}
                 >
-                  Cancel
+                  {t("common.cancel")}
                 </Button>
                 <Button type="submit" disabled={save.isPending || uploading}>
                   {save.isPending ? <Spinner /> : null}
-                  Save
+                  {t("common.save")}
                 </Button>
               </DialogFooter>
             </AutoForm>

@@ -184,9 +184,10 @@ write as
   - Failures throw `ApiError` with a typed `code`; branch on `code`, not message text. Show errors with `toast.error` (sonner).
 - Auth: use `authClient` from `src/lib/auth-client.ts`. Protected routes sit under `<RequireAuth />`, guest-only pages under `<GuestOnly />` in `src/router.tsx`. `/invite/:id` and `/reset-password` are reachable either way.
 - Signed-in pages are children of the pathless `AppLayout` route. Use `useApp()` → `{ me, isAdmin }` and link with plain paths (`"/groups"`). The company name is `COMPANY_NAME` from `src/lib/company.ts`. Shell options per page go in the route's `handle` (`{ rail: true }` contacts rail, `{ bleed: true }` full-bleed).
+- UI strings go through `t()` (react-i18next); add keys to `src/locales/{en,ja,vi}/<area>.ts` (`ja`/`vi` are typed against `en`). Pass `useDateLocale()` to date-fns formatting.
 - Keep filter/tab/dialog state in the URL with `nuqs` (see `src/lib/search-params.ts`).
 - Don't read `Date.now()` during render (React Compiler lint): use `useNow()`.
-- Theme follows `design.html`: Tailwind zinc tokens in `src/index.css`, Geist, flat 1px borders (no shadows), buttons 8px / cards 12px radius, avatar and group accents from `src/lib/accent.ts`.
+- Theme follows Tailwind zinc tokens in `src/index.css`, Geist, flat 1px borders (no shadows), buttons 8px / cards 12px radius, avatar and group accents from `src/lib/accent.ts`.
 - Add UI primitives with `bunx shadcn@latest add <component>` (lands in `src/components/ui`). Import via the `@/` alias and compose classes with `cn()` from `@/lib/utils`.
 
 ## Where to put code

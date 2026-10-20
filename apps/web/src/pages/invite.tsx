@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next"
 import { Link, useParams } from "react-router-dom"
 import { AuthCard } from "@/components/layout/auth-card"
 import { Button } from "@/components/ui/button"
@@ -19,6 +20,7 @@ type InvitationInfo = {
  * the server when this email signs up, so the page only points to the right next step.
  */
 export default function InvitePage() {
+  const { t } = useTranslation()
   const id = useParams().id ?? ""
   const { data: session, isPending: sessionPending } = authClient.useSession()
   const { data: invitation, error } = useDbQuery(
@@ -40,21 +42,21 @@ export default function InvitePage() {
   if (unusable && !session) {
     return (
       <AuthCard
-        title="Invitation"
+        title={t("auth.invite.title")}
         description={
           error instanceof ApiError && error.code === "NOT_FOUND"
-            ? "This invitation doesn't exist."
+            ? t("auth.invite.notFound")
             : invitation?.status === "ACCEPTED"
-              ? "This invitation was already used. Sign in to continue."
-              : "This invitation is no longer valid. You can still create an account."
+              ? t("auth.invite.used")
+              : t("auth.invite.invalid")
         }
       >
         <div className="flex flex-col gap-2">
           <Button asChild>
-            <Link to="/sign-in">Sign in</Link>
+            <Link to="/sign-in">{t("auth.invite.signIn")}</Link>
           </Button>
           <Button variant="outline" asChild>
-            <Link to="/sign-up">Create an account</Link>
+            <Link to="/sign-up">{t("auth.invite.createAccount")}</Link>
           </Button>
         </div>
       </AuthCard>
@@ -64,11 +66,11 @@ export default function InvitePage() {
   if (session) {
     return (
       <AuthCard
-        title={`You're in ${COMPANY_NAME}`}
-        description={`Signed in as ${session.user.email}`}
+        title={t("auth.invite.youreIn", { company: COMPANY_NAME })}
+        description={t("auth.invite.signedInAs", { email: session.user.email })}
       >
         <Button asChild>
-          <Link to="/">Go to the feed</Link>
+          <Link to="/">{t("auth.invite.goToFeed")}</Link>
         </Button>
       </AuthCard>
     )
@@ -78,15 +80,18 @@ export default function InvitePage() {
   const signUp = `/sign-up?email=${encodeURIComponent(invitation!.email)}&redirect=${encodeURIComponent("/")}`
   return (
     <AuthCard
-      title={`Join ${COMPANY_NAME}`}
-      description={`${invitation!.inviterName} invited ${invitation!.email}`}
+      title={t("auth.invite.join", { company: COMPANY_NAME })}
+      description={t("auth.invite.invited", {
+        inviter: invitation!.inviterName,
+        email: invitation!.email,
+      })}
     >
       <div className="flex flex-col gap-2">
         <Button asChild>
-          <Link to={signUp}>Create your account</Link>
+          <Link to={signUp}>{t("auth.invite.createYourAccount")}</Link>
         </Button>
         <Button variant="outline" asChild>
-          <Link to="/sign-in">I already have an account</Link>
+          <Link to="/sign-in">{t("auth.invite.haveAccount")}</Link>
         </Button>
       </div>
     </AuthCard>

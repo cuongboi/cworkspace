@@ -6,6 +6,7 @@ import {
   Trash2Icon,
   UsersIcon,
 } from "lucide-react"
+import { useTranslation } from "react-i18next"
 import { useNavigate } from "react-router-dom"
 import { type FormEvent, useRef, useState } from "react"
 import { toast } from "sonner"
@@ -43,15 +44,19 @@ import {
   FieldLabel,
 } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
-import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select"
 import { Spinner } from "@/components/ui/spinner"
 import { Textarea } from "@/components/ui/textarea"
 import { useApp } from "@/hooks/use-app"
+import { errorMessage, useDateLocale } from "@/lib/i18n"
 import { db } from "@/lib/api-client"
 import { useDbMutation } from "@/lib/query"
 import { fileUrl, uploadFile } from "@/lib/upload"
-import type { GroupPrivacy, WikiEditPolicy } from "@app/api/zenstack/models"
-import { type GroupWithMe, PRIVACY_DESCRIPTION } from "./group-query"
+import type { GroupPrivacy } from "@app/api/zenstack/models"
+import {
+  type GroupFeatures,
+  GroupFeaturesFields,
+} from "./group-features-fields"
+import type { GroupWithMe } from "./group-query"
 import { GroupCover, PrivacyLabel } from "./group-visuals"
 import { PrivacyPicker } from "./privacy-picker"
 import { ScrollArea } from "@/components/ui/scroll-area"
@@ -64,13 +69,15 @@ export function useCanAdminGroup(group: GroupWithMe) {
 }
 
 export function GroupAbout({ group }: { group: GroupWithMe }) {
+  const { t } = useTranslation()
+  const locale = useDateLocale()
   const canEdit = useCanAdminGroup(group)
   const [editing, setEditing] = useState(false)
 
   return (
-    <Card className="gap-4 py-4">
-      <CardHeader className="px-4">
-        <CardTitle>About this group</CardTitle>
+    <Card>
+      <CardHeader>
+        <CardTitle>{t("groups.about")}</CardTitle>
         {canEdit ? (
           <CardAction>
             <Button
@@ -79,35 +86,53 @@ export function GroupAbout({ group }: { group: GroupWithMe }) {
               onClick={() => setEditing(true)}
             >
               <PencilIcon />
-              Edit
+              {t("common.edit")}
             </Button>
           </CardAction>
         ) : null}
       </CardHeader>
-      <CardContent className="flex flex-col gap-4 px-4">
+      <CardContent className="flex flex-col gap-4">
         {group.description ? (
           <RichText text={group.description} className="text-sm" />
         ) : (
-          <p className="text-sm text-muted-foreground">No description yet.</p>
+          <div className="flex flex-col items-start gap-2 rounded-lg border border-dashed p-4">
+            <p className="text-sm text-muted-foreground">
+              {canEdit
+                ? t("groups.aboutTab.descriptionHint")
+                : t("groups.noDescription")}
+            </p>
+            {canEdit ? (
+              <Button size="sm" variant="soft" onClick={() => setEditing(true)}>
+                <PencilIcon />
+                {t("groups.aboutTab.addDescription")}
+              </Button>
+            ) : null}
+          </div>
         )}
         <ul className="flex flex-col gap-3 text-sm">
           <li className="flex flex-col gap-0.5">
             <PrivacyLabel privacy={group.privacy} className="font-medium" />
             <span className="pl-5 text-muted-foreground">
-              {PRIVACY_DESCRIPTION[group.privacy]}
+              {t(`groups.privacyDescription.${group.privacy}`)}
             </span>
           </li>
           <li className="flex items-center gap-1.5">
             <UsersIcon className="size-3.5 text-muted-foreground" aria-hidden />
-            {group._count.members} member{group._count.members === 1 ? "" : "s"}
+            {t("groups.memberCount", { count: group._count.members })}
           </li>
           <li className="flex items-center gap-1.5">
             <CalendarIcon
               className="size-3.5 text-muted-foreground"
               aria-hidden
             />
-            Created {format(group.createdAt, "MMMM d, yyyy")}
-            {group.isDefault ? "" : ` by ${group.createdBy.name}`}
+            {group.isDefault
+              ? t("groups.aboutTab.created", {
+                  date: format(group.createdAt, "PPP", { locale }),
+                })
+              : t("groups.aboutTab.createdBy", {
+                  date: format(group.createdAt, "PPP", { locale }),
+                  name: group.createdBy.name,
+                })}
           </li>
         </ul>
       </CardContent>
@@ -122,11 +147,11 @@ type Draft = {
   name: string
   description: string
   privacy: GroupPrivacy
-  wikiEditPolicy: WikiEditPolicy
   coverUrl: string | null
+  features: GroupFeatures
 }
 
-function EditGroupDialog({
+export function EditGroupDialog({
   group,
   open,
   onOpenChange,
@@ -135,13 +160,20 @@ function EditGroupDialog({
   open: boolean
   onOpenChange: (open: boolean) => void
 }) {
+  const { t } = useTranslation()
   const navigate = useNavigate()
   const [draft, setDraft] = useState<Draft>(() => ({
     name: group.name,
     description: group.description ?? "",
     privacy: group.privacy,
-    wikiEditPolicy: group.wikiEditPolicy,
     coverUrl: group.coverUrl,
+    features: {
+      wikiEnabled: group.wikiEnabled,
+      channelsEnabled: group.channelsEnabled,
+      calendarEnabled: group.calendarEnabled,
+      postPolicy: group.postPolicy,
+      wikiEditPolicy: group.wikiEditPolicy,
+    },
   }))
   const [uploading, setUploading] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
@@ -155,7 +187,7 @@ function EditGroupDialog({
           name: d.name.trim(),
           description: d.description.trim() || null,
           coverUrl: d.coverUrl,
-          wikiEditPolicy: d.wikiEditPolicy,
+          ...d.features,
           ...(group.isDefault ? {} : { privacy: d.privacy }),
         },
       }),
@@ -171,7 +203,7 @@ function EditGroupDialog({
   const onCover = async (file: File | undefined) => {
     if (!file) return
     if (!file.type.startsWith("image/")) {
-      toast.error("Choose an image")
+      toast.error(t("groups.edit.chooseImage"))
       return
     }
     setUploading(true)
@@ -179,7 +211,7 @@ function EditGroupDialog({
       const attachment = await uploadFile(file, { isPublic: true })
       setDraft((d) => ({ ...d, coverUrl: fileUrl(attachment.id) }))
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Upload failed")
+      toast.error(errorMessage(err))
     } finally {
       setUploading(false)
     }
@@ -190,10 +222,10 @@ function EditGroupDialog({
     if (!draft.name.trim()) return
     save.mutate(draft, {
       onSuccess: () => {
-        toast.success("Group updated")
+        toast.success(t("groups.edit.updated"))
         onOpenChange(false)
       },
-      onError: (err) => toast.error(err.message),
+      onError: (err) => toast.error(errorMessage(err)),
     })
   }
 
@@ -207,14 +239,14 @@ function EditGroupDialog({
           <div className="grid gap-6 p-6">
             <form onSubmit={submit} className="flex flex-col gap-6">
               <DialogHeader>
-                <DialogTitle>Edit group</DialogTitle>
+                <DialogTitle>{t("groups.editGroup")}</DialogTitle>
                 <DialogDescription>
-                  Changes are visible to everyone who can see the group.
+                  {t("groups.edit.description")}
                 </DialogDescription>
               </DialogHeader>
               <FieldGroup>
                 <Field>
-                  <FieldLabel>Cover photo</FieldLabel>
+                  <FieldLabel>{t("groups.edit.cover")}</FieldLabel>
                   <div className="relative overflow-hidden rounded-lg border">
                     <GroupCover
                       group={{
@@ -231,7 +263,7 @@ function EditGroupDialog({
                           variant="secondary"
                           onClick={() => setDraft({ ...draft, coverUrl: null })}
                         >
-                          Remove
+                          {t("common.remove")}
                         </Button>
                       ) : null}
                       <Button
@@ -242,7 +274,9 @@ function EditGroupDialog({
                         onClick={() => coverRef.current?.click()}
                       >
                         {uploading ? <Spinner /> : <ImageIcon />}
-                        {draft.coverUrl ? "Change" : "Upload"}
+                        {draft.coverUrl
+                          ? t("groups.edit.change")
+                          : t("groups.edit.upload")}
                       </Button>
                     </div>
                   </div>
@@ -258,7 +292,9 @@ function EditGroupDialog({
                   />
                 </Field>
                 <Field>
-                  <FieldLabel htmlFor="edit-group-name">Name</FieldLabel>
+                  <FieldLabel htmlFor="edit-group-name">
+                    {t("groups.form.name")}
+                  </FieldLabel>
                   <Input
                     id="edit-group-name"
                     value={draft.name}
@@ -271,7 +307,7 @@ function EditGroupDialog({
                 </Field>
                 <Field>
                   <FieldLabel htmlFor="edit-group-description">
-                    Description
+                    {t("groups.form.description")}
                   </FieldLabel>
                   <Textarea
                     id="edit-group-description"
@@ -284,7 +320,7 @@ function EditGroupDialog({
                   />
                 </Field>
                 <Field>
-                  <FieldLabel>Privacy</FieldLabel>
+                  <FieldLabel>{t("groups.form.privacy")}</FieldLabel>
                   <PrivacyPicker
                     idPrefix="edit-privacy"
                     value={draft.privacy}
@@ -293,34 +329,19 @@ function EditGroupDialog({
                   />
                   {group.isDefault ? (
                     <FieldDescription>
-                      The company-wide group is always visible to everyone.
+                      {t("groups.edit.defaultPrivacy")}
                     </FieldDescription>
                   ) : null}
                 </Field>
                 <Field>
-                  <FieldLabel htmlFor="edit-wiki-policy">
-                    Who can edit Knowledge
-                  </FieldLabel>
-                  <NativeSelect
-                    id="edit-wiki-policy"
-                    value={draft.wikiEditPolicy}
-                    onChange={(e) =>
-                      setDraft({
-                        ...draft,
-                        wikiEditPolicy: e.target.value as WikiEditPolicy,
-                      })
-                    }
-                    className="w-full"
-                  >
-                    <NativeSelectOption value="MEMBERS">
-                      All members
-                    </NativeSelectOption>
-                    <NativeSelectOption value="ADMINS">
-                      Admins and moderators
-                    </NativeSelectOption>
-                  </NativeSelect>
+                  <FieldLabel>{t("groups.features.title")}</FieldLabel>
+                  <GroupFeaturesFields
+                    idPrefix="edit-features"
+                    value={draft.features}
+                    onChange={(features) => setDraft({ ...draft, features })}
+                  />
                   <FieldDescription>
-                    Applies to creating, editing and moving the group's pages.
+                    {t("groups.features.keptHint")}
                   </FieldDescription>
                 </Field>
               </FieldGroup>
@@ -334,7 +355,7 @@ function EditGroupDialog({
                     onClick={() => setConfirmDelete(true)}
                   >
                     <Trash2Icon />
-                    Delete group
+                    {t("groups.edit.delete")}
                   </Button>
                 )}
                 <div className="flex flex-col-reverse gap-2 sm:flex-row">
@@ -343,14 +364,14 @@ function EditGroupDialog({
                     variant="outline"
                     onClick={() => onOpenChange(false)}
                   >
-                    Cancel
+                    {t("common.cancel")}
                   </Button>
                   <Button
                     type="submit"
                     disabled={!draft.name.trim() || save.isPending || uploading}
                   >
                     {save.isPending ? <Spinner /> : null}
-                    Save changes
+                    {t("groups.edit.save")}
                   </Button>
                 </div>
               </DialogFooter>
@@ -361,28 +382,29 @@ function EditGroupDialog({
       <AlertDialog open={confirmDelete} onOpenChange={setConfirmDelete}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete {group.name}?</AlertDialogTitle>
+            <AlertDialogTitle>
+              {t("groups.edit.deleteTitle", { name: group.name })}
+            </AlertDialogTitle>
             <AlertDialogDescription>
-              All posts, comments and memberships of this group will be
-              permanently deleted.
+              {t("groups.edit.deleteBody")}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogCancel>{t("common.cancel")}</AlertDialogCancel>
             <AlertDialogAction
               variant="destructive"
               onClick={() =>
                 remove.mutate(undefined, {
                   onSuccess: () => {
-                    toast.success("Group deleted")
+                    toast.success(t("groups.edit.deleted"))
                     onOpenChange(false)
                     void navigate("/groups")
                   },
-                  onError: (err) => toast.error(err.message),
+                  onError: (err) => toast.error(errorMessage(err)),
                 })
               }
             >
-              Delete group
+              {t("groups.edit.delete")}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

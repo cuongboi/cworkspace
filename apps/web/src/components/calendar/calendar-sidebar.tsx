@@ -1,6 +1,8 @@
 import { cn } from "cn"
 import { PlusIcon } from "lucide-react"
 import { useState } from "react"
+import { useTranslation } from "react-i18next"
+import { useDateLocale } from "@/lib/i18n"
 import { Button } from "@/components/ui/button"
 import { Calendar } from "@/components/ui/calendar"
 import { Checkbox } from "@/components/ui/checkbox"
@@ -8,7 +10,11 @@ import { Label } from "@/components/ui/label"
 import { Separator } from "@/components/ui/separator"
 import { Switch } from "@/components/ui/switch"
 import type { EventType } from "@app/api/zenstack/models"
-import { EVENT_TYPE_STYLES, EVENT_TYPES } from "./event-colors"
+import {
+  EVENT_TYPE_STYLES,
+  EVENT_TYPES,
+  eventTypeLabelKey,
+} from "./event-colors"
 import { ScrollArea } from "@/components/ui/scroll-area"
 
 type Props = {
@@ -32,6 +38,8 @@ export function CalendarSidebar({
   onCreate,
   className,
 }: Props) {
+  const { t } = useTranslation()
+  const locale = useDateLocale()
   // browsing the mini calendar doesn't move the main view; picking a day does
   const [month, setMonth] = useState(date)
   const [syncedDate, setSyncedDate] = useState(date)
@@ -45,15 +53,16 @@ export function CalendarSidebar({
       <ScrollArea className="min-h-0 flex-1">
         <div className="flex flex-col gap-4 p-3">
           <Button
-            className="w-fit rounded-full px-4 shadow-sm"
+            className="w-fit rounded-full px-4 shadow-raised"
             size="lg"
             onClick={onCreate}
           >
             <PlusIcon />
-            New event
+            {t("calendar.newEvent")}
           </Button>
           <Calendar
             mode="single"
+            locale={locale}
             required
             selected={date}
             onSelect={(d) => d && onDateChange(d)}
@@ -64,7 +73,7 @@ export function CalendarSidebar({
           <Separator />
           <div className="flex flex-col gap-2">
             <h3 className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
-              Event types
+              {t("calendar.eventTypes")}
             </h3>
             {EVENT_TYPES.map((type) => {
               const style = EVENT_TYPE_STYLES[type]
@@ -83,7 +92,7 @@ export function CalendarSidebar({
                     }}
                   />
                   <Label htmlFor={id} className="font-normal">
-                    {style.label}
+                    {t(eventTypeLabelKey(type))}
                   </Label>
                 </div>
               )
@@ -92,7 +101,7 @@ export function CalendarSidebar({
           <Separator />
           <div className="flex items-center justify-between gap-2">
             <Label htmlFor="mine-only" className="font-normal">
-              My events only
+              {t("calendar.myEventsOnly")}
             </Label>
             <Switch
               id="mine-only"

@@ -3,6 +3,7 @@ import { BellIcon, CheckCheckIcon } from "lucide-react"
 import { Link } from "react-router-dom"
 import { useNavigate } from "react-router-dom"
 import { useState } from "react"
+import { useTranslation } from "react-i18next"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import {
@@ -25,6 +26,7 @@ import {
 } from "@/components/ui/tooltip"
 import { useSocketEvent } from "@/hooks/use-socket"
 import { db } from "@/lib/api-client"
+import { errorMessage } from "@/lib/i18n"
 import { invalidateModels, useDbQuery } from "@/lib/query"
 import {
   describeNotification,
@@ -39,6 +41,7 @@ const LATEST = 15
 
 /** Header bell: unread badge, latest notifications in a popover, live toasts. */
 export function NotificationBell() {
+  const { t } = useTranslation()
   const navigate = useNavigate()
   const [open, setOpen] = useState(false)
 
@@ -56,7 +59,7 @@ export function NotificationBell() {
     toast(<span className="text-sm">{describeNotification(n)}</span>, {
       id: n.id,
       action: {
-        label: "View",
+        label: t("notifications.view"),
         onClick: () => {
           void db.notification
             .update({ where: { id: n.id }, data: { readAt: new Date() } })
@@ -68,7 +71,9 @@ export function NotificationBell() {
   })
 
   const label =
-    unread > 0 ? `Notifications (${unread} unread)` : "Notifications"
+    unread > 0
+      ? t("notifications.bellLabel", { count: unread })
+      : t("notifications.title")
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -83,14 +88,14 @@ export function NotificationBell() {
             >
               <BellIcon />
               {unread > 0 ? (
-                <span className="absolute -top-0.5 -right-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-destructive px-1 text-[10px] font-semibold text-white">
+                <span className="absolute -top-0.5 -right-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-destructive px-1 text-2xs font-semibold text-white">
                   {unread > 99 ? "99+" : unread}
                 </span>
               ) : null}
             </Button>
           </PopoverTrigger>
         </TooltipTrigger>
-        <TooltipContent>Notifications</TooltipContent>
+        <TooltipContent>{t("notifications.title")}</TooltipContent>
       </Tooltip>
       <PopoverContent
         align="end"
@@ -111,6 +116,7 @@ function BellPanel({
   unread: number
   onNavigate: () => void
 }) {
+  const { t } = useTranslation()
   const queryClient = useQueryClient()
 
   const { data: items, isPending } = useDbQuery(
@@ -133,8 +139,8 @@ function BellPanel({
     } catch (err) {
       toast.error(
         err instanceof Error
-          ? err.message
-          : "Couldn't mark notifications as read"
+          ? errorMessage(err)
+          : t("notifications.markAllFailed")
       )
     }
   }
@@ -142,7 +148,7 @@ function BellPanel({
   return (
     <>
       <div className="flex items-center justify-between gap-2 px-4 py-3">
-        <h2 className="text-base font-semibold">Notifications</h2>
+        <h2 className="text-base font-semibold">{t("notifications.title")}</h2>
         <Button
           variant="ghost"
           size="sm"
@@ -150,7 +156,7 @@ function BellPanel({
           disabled={unread === 0}
         >
           <CheckCheckIcon />
-          Mark all as read
+          {t("notifications.markAllRead")}
         </Button>
       </div>
       <Separator />
@@ -167,9 +173,9 @@ function BellPanel({
                 <EmptyMedia variant="icon">
                   <BellIcon />
                 </EmptyMedia>
-                <EmptyTitle>You're all caught up</EmptyTitle>
+                <EmptyTitle>{t("notifications.caughtUp")}</EmptyTitle>
                 <EmptyDescription>
-                  Mentions, comments, invites and reminders will show up here.
+                  {t("notifications.caughtUpBody")}
                 </EmptyDescription>
               </EmptyHeader>
             </Empty>
@@ -187,7 +193,7 @@ function BellPanel({
       <Separator />
       <Button variant="ghost" className="m-1 rounded-md" asChild>
         <Link to={"/notifications"} onClick={onNavigate}>
-          See all
+          {t("common.seeAll")}
         </Link>
       </Button>
     </>

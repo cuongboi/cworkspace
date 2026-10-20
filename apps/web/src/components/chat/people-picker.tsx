@@ -1,6 +1,7 @@
 import { cn } from "cn"
 import { CheckIcon, SearchIcon, XIcon } from "lucide-react"
 import { useState } from "react"
+import { useTranslation } from "react-i18next"
 import { UserAvatar } from "@/components/common/user-avatar"
 import { Input } from "@/components/ui/input"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -26,6 +27,7 @@ export function PeoplePicker({
   exclude = [],
   autoFocus,
 }: Props) {
+  const { t } = useTranslation()
   const { me } = useApp()
   const [q, setQ] = useState("")
   const term = q.trim()
@@ -63,8 +65,8 @@ export function PeoplePicker({
         <Input
           value={q}
           onChange={(e) => setQ(e.target.value)}
-          placeholder="Search people"
-          aria-label="Search people"
+          placeholder={t("chat.picker.search")}
+          aria-label={t("chat.picker.search")}
           className="pl-8"
           autoFocus={autoFocus}
           onKeyDown={(e) => {
@@ -80,14 +82,17 @@ export function PeoplePicker({
       </div>
 
       {value.length > 0 ? (
-        <ul className="flex flex-wrap gap-1.5" aria-label="Selected people">
+        <ul
+          className="flex flex-wrap gap-1.5"
+          aria-label={t("chat.picker.selected")}
+        >
           {value.map((u) => (
             <li key={u.id}>
               <button
                 type="button"
                 onClick={() => toggle(u)}
                 className="inline-flex items-center gap-1.5 rounded-full bg-primary/10 py-0.5 pr-2 pl-0.5 text-sm text-primary hover:bg-primary/20"
-                aria-label={`Remove ${u.name}`}
+                aria-label={t("chat.picker.remove", { name: u.name })}
               >
                 <UserAvatar user={u} size="sm" />
                 <span className="max-w-32 truncate">{u.name}</span>
@@ -110,7 +115,7 @@ export function PeoplePicker({
           </div>
         ) : candidates.length === 0 ? (
           <p className="px-2 py-6 text-center text-sm text-muted-foreground">
-            No people found
+            {t("chat.picker.none")}
           </p>
         ) : (
           <ul className="flex flex-col">

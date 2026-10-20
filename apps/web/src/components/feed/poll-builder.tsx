@@ -1,4 +1,5 @@
 import { PlusIcon, XIcon } from "lucide-react"
+import { useTranslation } from "react-i18next"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -16,11 +17,11 @@ export type PollDraft = {
 export const MAX_POLL_OPTIONS = 10
 
 const DURATIONS = [
-  { hours: 0, label: "Never closes" },
-  { hours: 24, label: "1 day" },
-  { hours: 72, label: "3 days" },
-  { hours: 168, label: "1 week" },
-]
+  { hours: 0, label: "feed.poll.duration.never" },
+  { hours: 24, label: "feed.poll.duration.day1" },
+  { hours: 72, label: "feed.poll.duration.day3" },
+  { hours: 168, label: "feed.poll.duration.week1" },
+] as const
 
 let keySeq = 0
 const newOption = (text = "") => ({ key: `opt-${++keySeq}`, text })
@@ -70,6 +71,7 @@ export function PollBuilder({
   onChange: (poll: PollDraft) => void
   onRemove: () => void
 }) {
+  const { t } = useTranslation()
   const setOption = (key: string, text: string) =>
     onChange({
       ...value,
@@ -79,22 +81,22 @@ export function PollBuilder({
   return (
     <fieldset className="relative flex flex-col gap-3 rounded-lg border bg-muted/30 p-3">
       <legend className="float-left h-6 text-sm leading-6 font-medium">
-        Poll
+        {t("feed.poll.title")}
       </legend>
       <Button
         variant="ghost"
         size="icon-xs"
         className="absolute top-3 right-3"
         onClick={onRemove}
-        aria-label="Remove poll"
+        aria-label={t("feed.poll.remove")}
       >
         <XIcon />
       </Button>
       <Input
         value={value.question}
         onChange={(e) => onChange({ ...value, question: e.target.value })}
-        placeholder="Ask a question…"
-        aria-label="Poll question"
+        placeholder={t("feed.poll.questionPlaceholder")}
+        aria-label={t("feed.poll.question")}
         maxLength={300}
       />
       <div className="flex flex-col gap-2">
@@ -103,8 +105,8 @@ export function PollBuilder({
             <Input
               value={o.text}
               onChange={(e) => setOption(o.key, e.target.value)}
-              placeholder={`Option ${i + 1}`}
-              aria-label={`Option ${i + 1}`}
+              placeholder={t("feed.poll.option", { n: i + 1 })}
+              aria-label={t("feed.poll.option", { n: i + 1 })}
               maxLength={120}
               onKeyDown={(e) => {
                 if (
@@ -130,7 +132,7 @@ export function PollBuilder({
                   options: value.options.filter((x) => x.key !== o.key),
                 })
               }
-              aria-label={`Remove option ${i + 1}`}
+              aria-label={t("feed.poll.removeOption", { n: i + 1 })}
             >
               <XIcon />
             </Button>
@@ -146,7 +148,7 @@ export function PollBuilder({
             }
           >
             <PlusIcon />
-            Add option
+            {t("feed.poll.addOption")}
           </Button>
         ) : null}
       </div>
@@ -160,7 +162,7 @@ export function PollBuilder({
             }
           />
           <Label htmlFor="poll-multiple" className="font-normal">
-            Allow multiple answers
+            {t("feed.poll.allowMultiple")}
           </Label>
         </div>
         <NativeSelect
@@ -169,11 +171,11 @@ export function PollBuilder({
           onChange={(e) =>
             onChange({ ...value, durationHours: Number(e.target.value) })
           }
-          aria-label="Poll duration"
+          aria-label={t("feed.poll.durationLabel")}
         >
           {DURATIONS.map((d) => (
             <NativeSelectOption key={d.hours} value={d.hours}>
-              {d.label}
+              {t(d.label)}
             </NativeSelectOption>
           ))}
         </NativeSelect>

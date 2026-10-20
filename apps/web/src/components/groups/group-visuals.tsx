@@ -1,8 +1,8 @@
 import { cn } from "cn"
 import { EyeOffIcon, GlobeIcon, LockIcon } from "lucide-react"
 import type { GroupPrivacy } from "@app/api/zenstack/models"
+import { useTranslation } from "react-i18next"
 import { accentFor } from "@/lib/accent"
-import { PRIVACY_LABEL } from "./group-query"
 
 export function PrivacyIcon({
   privacy,
@@ -27,15 +27,36 @@ export function PrivacyLabel({
   privacy: GroupPrivacy
   className?: string
 }) {
+  const { t } = useTranslation()
   return (
     <span className={cn("inline-flex items-center gap-1", className)}>
       <PrivacyIcon privacy={privacy} className="size-3.5" />
-      {PRIVACY_LABEL[privacy]}
+      {t(`groups.privacyGroup.${privacy}`)}
     </span>
   )
 }
 
-/** Cover image, or a tinted banner with the group's initial. */
+/** Small rounded pill: privacy at a glance (translated). */
+export function PrivacyBadge({ privacy }: { privacy: GroupPrivacy }) {
+  const { t } = useTranslation()
+  return (
+    <span
+      className={cn(
+        "inline-flex h-5 items-center gap-1 rounded-full px-2 text-xs font-semibold",
+        privacy === "PUBLIC"
+          ? "bg-brand-subtle text-brand"
+          : privacy === "CLOSED"
+            ? "bg-warning-subtle text-warning"
+            : "bg-muted text-muted-foreground"
+      )}
+    >
+      <PrivacyIcon privacy={privacy} className="size-3" />
+      {t(`groups.privacy.${privacy}`)}
+    </span>
+  )
+}
+
+/** Cover image, or a soft accent gradient (the group's avatar carries its initial). */
 export function GroupCover({
   group,
   className,
@@ -53,16 +74,47 @@ export function GroupCover({
       />
     )
   }
+  const accent = accentFor(group.id ?? group.name)
   return (
     <div
       aria-hidden
+      className={cn("w-full", className)}
+      style={{
+        backgroundColor: `color-mix(in oklab, ${accent} 22%, var(--card))`,
+        backgroundImage: `radial-gradient(circle at 1px 1px, color-mix(in oklab, ${accent} 45%, transparent) 1.5px, transparent 0), linear-gradient(120deg, color-mix(in oklab, ${accent} 30%, transparent), transparent 70%)`,
+        backgroundSize: "18px 18px, 100% 100%",
+      }}
+    />
+  )
+}
+
+/** Square group mark: the cover image, or the initial on the group's accent. */
+export function GroupAvatar({
+  group,
+  className,
+}: {
+  group: { id?: string; name: string; coverUrl: string | null }
+  className?: string
+}) {
+  if (group.coverUrl) {
+    return (
+      <img
+        src={group.coverUrl}
+        alt=""
+        className={cn("size-10 shrink-0 rounded-2xl object-cover", className)}
+      />
+    )
+  }
+  return (
+    <span
+      aria-hidden
       className={cn(
-        "flex w-full items-center justify-center font-semibold text-white",
+        "inline-flex size-10 shrink-0 items-center justify-center rounded-2xl font-bold text-white",
         className
       )}
       style={{ backgroundColor: accentFor(group.id ?? group.name) }}
     >
-      <span className="text-4xl">{group.name[0]?.toUpperCase()}</span>
-    </div>
+      {group.name[0]?.toUpperCase()}
+    </span>
   )
 }

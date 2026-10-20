@@ -1,5 +1,6 @@
 import Elysia from "elysia";
-import { auth } from "@/lib/auth";
+import { auth, CLIENT_IP_HEADER } from "@/lib/auth";
+import { clientIp } from "@/lib/ip";
 import { dbFor, toSessionUser } from "@/server/session";
 import { env } from "@/env";
 
@@ -67,7 +68,16 @@ export const authMacro = () =>
   });
 
 // Explicit GET/POST routes (not `.mount`) so they take precedence over the static plugin's GET `/*` wildcard.
-const authHandler = ({ request }: { request: Request }) => auth.handler(request);
+// A Bun `Request` carries no socket address, so the resolved client IP is stamped into a header
+// better-auth trusts (`advanced.ipAddress`), overwriting any value the client sent.
+const authHandler = (ctx: Parameters<typeof clientIp>[0]) => {
+  const headers = new Headers(ctx.request.headers);
+  headers.delete(CLIENT_IP_HEADER);
+  const ip = ctx.server?.requestIP(ctx.request);
+  if (!ip) throw new Error("Client IP not found");
+  headers.set(CLIENT_IP_HEADER, ip.address);
+  return auth.handler(new Request(ctx.request, { headers }));
+};
 
 export const betterAuthPlugin = new Elysia({ name: "better-auth" }).group(
   env.BETTER_AUTH_BASE_PATH,

@@ -1,10 +1,74 @@
 /* Service worker: background push (FCM data messages from apps/api/src/server/push.ts) and PWA install. */
 
-self.addEventListener("install", () => self.skipWaiting())
-self.addEventListener("activate", (event) => event.waitUntil(self.clients.claim()))
+const CACHE = "cw-shell-v1"
+const SHELL = ["/", "/index.html", "/manifest.webmanifest", "/icon-192.png", "/icon-512.png", "/badge-72.png"]
 
-// a fetch handler makes Android Chrome offer "Install app"; requests go straight to the network
-self.addEventListener("fetch", () => {})
+self.addEventListener("install", (event) => {
+  event.waitUntil(caches.open(CACHE).then((cache) => cache.addAll(SHELL)))
+  // first install has nothing to replace; updates wait for SKIP_WAITING so open tabs keep their chunks
+  if (!self.registration.active) self.skipWaiting()
+})
+
+self.addEventListener("activate", (event) => {
+  event.waitUntil(
+    (async () => {
+      const keys = await caches.keys()
+      await Promise.all(keys.filter((k) => k.startsWith("cw-shell-") && k !== CACHE).map((k) => caches.delete(k)))
+      await self.clients.claim()
+    })(),
+  )
+})
+
+self.addEventListener("message", (event) => {
+  if (event.data && event.data.type === "SKIP_WAITING") self.skipWaiting()
+})
+
+async function put(request, response) {
+  if (response.ok && response.type === "basic") {
+    const cache = await caches.open(CACHE)
+    await cache.put(request, response.clone())
+  }
+  return response
+}
+
+self.addEventListener("fetch", (event) => {
+  const { request } = event
+  const url = new URL(request.url)
+  // data, auth and sockets always hit the network
+  if (
+    request.method !== "GET" ||
+    url.origin !== self.location.origin ||
+    url.pathname.startsWith("/api/") ||
+    url.pathname.startsWith("/ws") ||
+    url.pathname.startsWith("/openapi")
+  )
+    return
+
+  if (request.mode === "navigate") {
+    // network-first so a deploy shows up on reload; offline falls back to the SPA shell
+    event.respondWith(
+      fetch(request)
+        .then((res) => put("/index.html", res))
+        .catch(async () => (await caches.match("/index.html")) || Response.error()),
+    )
+    return
+  }
+
+  if (url.pathname.startsWith("/assets/")) {
+    // Vite hashes these file names, so a cached copy never goes stale
+    event.respondWith(caches.match(request).then((hit) => hit || fetch(request).then((res) => put(request, res))))
+    return
+  }
+
+  event.respondWith(
+    caches.match(request).then((hit) => {
+      const network = fetch(request)
+        .then((res) => put(request, res))
+        .catch(() => hit || Response.error())
+      return hit || network
+    }),
+  )
+})
 
 function readPayload(event) {
   try {

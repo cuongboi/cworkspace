@@ -1,6 +1,7 @@
 import { cn } from "cn"
 import { ChevronRightIcon } from "lucide-react"
 import { type ReactNode, useState } from "react"
+import { useTranslation } from "react-i18next"
 import {
   Collapsible,
   CollapsibleContent,
@@ -12,11 +13,11 @@ import {
  * and collapsible sections whose state is remembered per viewer.
  */
 export const sidebarRowClass =
-  "flex h-7 w-full items-center gap-2 rounded-md px-2 text-xs transition-colors outline-none hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring"
+  "flex h-8 w-full items-center gap-2 rounded-lg px-2 text-sm transition-colors max-md:h-12 max-md:gap-3 max-md:px-3 max-md:text-[15px] active:bg-muted outline-none hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring aria-[current=page]:bg-brand-subtle aria-[current=page]:font-medium aria-[current=page]:text-brand"
 
 export function SidebarCount({ children }: { children: ReactNode }) {
   return (
-    <span className="shrink-0 text-[11px] text-muted-foreground tabular-nums">
+    <span className="shrink-0 text-2xs text-muted-foreground tabular-nums">
       {children}
     </span>
   )
@@ -64,7 +65,7 @@ export function SidebarSection({
   label,
   action,
   children,
-  empty = "None yet",
+  empty,
 }: {
   id: string
   storageKey: string
@@ -74,11 +75,12 @@ export function SidebarSection({
   children: ReactNode[]
   empty?: ReactNode
 }) {
+  const { t } = useTranslation()
   const [open, setOpen] = usePersistedOpen(storageKey, id)
   return (
     <Collapsible open={open} onOpenChange={setOpen}>
       <div className="group/section flex h-7 items-center justify-between pr-1 pl-2">
-        <CollapsibleTrigger className="flex items-center gap-1 rounded-sm text-[11px] font-medium text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring">
+        <CollapsibleTrigger className="flex items-center gap-1 rounded-sm text-2xs font-medium text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring">
           {label}
           <ChevronRightIcon
             className={cn(
@@ -94,8 +96,8 @@ export function SidebarSection({
           {children.length ? (
             children
           ) : (
-            <p className="px-2 py-1 text-[11px] text-muted-foreground">
-              {empty}
+            <p className="px-2 py-1 text-2xs text-muted-foreground">
+              {empty ?? t("feed.noneYet")}
             </p>
           )}
         </nav>

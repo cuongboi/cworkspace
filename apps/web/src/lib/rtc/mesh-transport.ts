@@ -13,6 +13,7 @@ import {
   type JoinResult,
   type TransportEvents,
 } from "./transport"
+import i18n from "@/lib/i18n"
 
 type SignalingSocket = RealtimeClient
 
@@ -89,7 +90,7 @@ export class MeshTransport
     media: MediaState,
     captions: CaptionPrefs
   ): Promise<JoinResult> {
-    if (this.closed) throw new Error("This call was left")
+    if (this.closed) throw new Error(i18n.t("call.session.callLeft"))
     this.captions = captions
     this.audioTrack = localStream?.getAudioTracks()[0] ?? null
     this.cameraTrack = localStream?.getVideoTracks()[0] ?? null
@@ -154,13 +155,13 @@ export class MeshTransport
       })
       .catch(() => ({
         ok: false as const,
-        error: "The server didn't answer, check your connection",
+        error: i18n.t("call.session.noAnswer"),
       }))
     if (!res.ok) throw new Error(res.error)
     if (this.closed) {
       // left while the join was in flight
       this.socket.emit("call:leave", { callId: this.callId })
-      throw new Error("This call was left")
+      throw new Error(i18n.t("call.session.callLeft"))
     }
     this.selfId = this.socket.id ?? null
     this.joined = true
@@ -234,7 +235,7 @@ export class MeshTransport
     const onEnded = ({ callId }: { callId: string }) => {
       if (callId !== this.callId) return
       this.teardown()
-      this.emit("ended", "The call has ended")
+      this.emit("ended", i18n.t("call.ended.default"))
     }
     const onDeclined = ({
       callId,
@@ -260,7 +261,9 @@ export class MeshTransport
           this.teardown()
           this.emit(
             "ended",
-            err instanceof Error ? err.message : "Could not rejoin the call"
+            err instanceof Error
+              ? err.message
+              : i18n.t("call.session.couldNotRejoin")
           )
         }
       )

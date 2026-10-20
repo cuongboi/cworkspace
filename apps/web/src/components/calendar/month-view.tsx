@@ -1,6 +1,8 @@
 import { cn } from "cn"
 import { format, isSameMonth, isToday, setHours } from "date-fns"
+import { useTranslation } from "react-i18next"
 import { Button } from "@/components/ui/button"
+import { useDateLocale } from "@/lib/i18n"
 import {
   Popover,
   PopoverContent,
@@ -33,6 +35,8 @@ export function MonthView({
   onCreate,
   onOpenDay,
 }: Props) {
+  const { t } = useTranslation()
+  const locale = useDateLocale()
   const days = daysOf(range.start, range.end)
   const weeks = Math.ceil(days.length / 7)
 
@@ -44,8 +48,10 @@ export function MonthView({
             key={d.toISOString()}
             className="py-2 text-center text-xs font-medium text-muted-foreground uppercase"
           >
-            <span className="hidden sm:inline">{format(d, "EEE")}</span>
-            <span className="sm:hidden">{format(d, "EEEEE")}</span>
+            <span className="hidden sm:inline">
+              {format(d, "EEE", { locale })}
+            </span>
+            <span className="sm:hidden">{format(d, "EEEEE", { locale })}</span>
           </div>
         ))}
       </div>
@@ -64,7 +70,9 @@ export function MonthView({
               key={day.toISOString()}
               role="button"
               tabIndex={-1}
-              aria-label={`Create event on ${format(day, "PPPP")}`}
+              aria-label={t("calendar.createEventOn", {
+                date: format(day, "PPPP", { locale }),
+              })}
               onClick={() => onCreate(setHours(day, 9))}
               onKeyDown={(e) => {
                 if (e.key === "Enter") onCreate(setHours(day, 9))
@@ -86,9 +94,9 @@ export function MonthView({
                     isToday(day) &&
                       "bg-primary text-primary-foreground hover:bg-primary/90"
                   )}
-                  aria-label={format(day, "PPPP")}
+                  aria-label={format(day, "PPPP", { locale })}
                 >
-                  {format(day, "d")}
+                  {format(day, "d", { locale })}
                 </button>
               </div>
               {visible.map((o) => (
@@ -107,7 +115,7 @@ export function MonthView({
                       onClick={(e) => e.stopPropagation()}
                       className="rounded px-1.5 text-left text-xs font-medium text-muted-foreground hover:bg-muted hover:text-foreground"
                     >
-                      {hidden} more
+                      {t("calendar.moreCount", { count: hidden })}
                     </button>
                   </PopoverTrigger>
                   <PopoverContent
@@ -116,10 +124,10 @@ export function MonthView({
                   >
                     <div className="mb-2 text-center">
                       <div className="text-xs text-muted-foreground uppercase">
-                        {format(day, "EEE")}
+                        {format(day, "EEE", { locale })}
                       </div>
                       <div className="text-xl font-semibold">
-                        {format(day, "d")}
+                        {format(day, "d", { locale })}
                       </div>
                     </div>
                     <div className="flex flex-col gap-0.5">
@@ -138,7 +146,7 @@ export function MonthView({
                       className="mt-1 w-full"
                       onClick={() => onOpenDay(day)}
                     >
-                      Open day
+                      {t("calendar.openDay")}
                     </Button>
                   </PopoverContent>
                 </Popover>

@@ -13,6 +13,7 @@ import { cn } from "cn"
 import { useQueryState } from "nuqs"
 import { Link } from "react-router-dom"
 import { type ReactNode, useEffect, useState } from "react"
+import { useTranslation } from "react-i18next"
 import { toast } from "sonner"
 import { useCalls } from "@/components/call/call-provider"
 import {
@@ -92,6 +93,7 @@ export function ChatThread({
   /** page variant: replaces the default "Section / title" breadcrumb */
   crumbs?: ReactNode
 }) {
+  const { t } = useTranslation()
   useLiveMessages(conversationId)
   const conversation = useDbQuery(conversationKey(conversationId), () =>
     fetchConversation(conversationId)
@@ -108,15 +110,15 @@ export function ChatThread({
           <EmptyMedia variant="icon">
             <MessageCircleOffIcon />
           </EmptyMedia>
-          <EmptyTitle>Conversation not available</EmptyTitle>
+          <EmptyTitle>{t("chat.thread.unavailableTitle")}</EmptyTitle>
           <EmptyDescription>
-            It may have been deleted, or you're no longer a member.
+            {t("chat.thread.unavailableBody")}
           </EmptyDescription>
         </EmptyHeader>
         {variant === "page" ? (
           <EmptyContent>
             <Button asChild variant="secondary">
-              <Link to={"/chat"}>Back to chats</Link>
+              <Link to={"/chat"}>{t("chat.thread.backToChats")}</Link>
             </Button>
           </EmptyContent>
         ) : null}
@@ -150,6 +152,7 @@ function ThreadView({
   actions?: ReactNode
   crumbs?: ReactNode
 }) {
+  const { t } = useTranslation()
   const { me } = useApp()
   const qc = useQueryClient()
   const uploads = useUploads()
@@ -208,7 +211,9 @@ function ThreadView({
         ...m,
         reactions: previous,
       }))
-      toast.error(err instanceof ApiError ? err.message : "Could not react")
+      toast.error(
+        err instanceof ApiError ? err.message : t("chat.thread.reactFailed")
+      )
     })
   }
 
@@ -232,7 +237,7 @@ function ThreadView({
           ...previous,
         }))
         toast.error(
-          err instanceof ApiError ? err.message : "Could not unsend the message"
+          err instanceof ApiError ? err.message : t("chat.thread.unsendFailed")
         )
       })
   }
@@ -240,7 +245,7 @@ function ThreadView({
   return (
     <div className="flex h-full min-h-0">
       <section
-        aria-label="Conversation"
+        aria-label={t("chat.conversation")}
         className="relative flex h-full min-h-0 min-w-0 flex-1 flex-col bg-background"
         onDragEnter={(e) => {
           if (e.dataTransfer.types.includes("Files")) setDragging(true)
@@ -294,7 +299,7 @@ function ThreadView({
         {dragging ? (
           <div className="pointer-events-none absolute inset-2 z-30 flex flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-primary bg-background/90 text-primary">
             <UploadIcon className="size-8" />
-            <p className="text-sm font-medium">Drop files to attach</p>
+            <p className="text-sm font-medium">{t("chat.thread.dropFiles")}</p>
           </div>
         ) : null}
 
@@ -312,14 +317,15 @@ function ThreadView({
         >
           <AlertDialogContent>
             <AlertDialogHeader>
-              <AlertDialogTitle>Unsend this message?</AlertDialogTitle>
+              <AlertDialogTitle>
+                {t("chat.thread.unsendTitle")}
+              </AlertDialogTitle>
               <AlertDialogDescription>
-                It will be removed for everyone in the conversation. People will
-                see that a message was deleted.
+                {t("chat.thread.unsendBody")}
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
-              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogCancel>{t("common.cancel")}</AlertDialogCancel>
               <AlertDialogAction
                 variant="destructive"
                 onClick={() => {
@@ -327,7 +333,7 @@ function ThreadView({
                   setToDelete(null)
                 }}
               >
-                Unsend
+                {t("chat.thread.unsend")}
               </AlertDialogAction>
             </AlertDialogFooter>
           </AlertDialogContent>
@@ -335,7 +341,7 @@ function ThreadView({
       </section>
       {showColumn ? (
         <aside
-          aria-label="Conversation details"
+          aria-label={t("chat.thread.details")}
           className="w-80 shrink-0 border-l"
         >
           <ConversationInfoPanel
@@ -368,6 +374,7 @@ function ThreadHeader({
   onOpenInfo: () => void
   onSearch: () => void
 }) {
+  const { t } = useTranslation()
   const { me } = useApp()
   const isMobile = useIsMobile()
   const { startCall } = useCalls()
@@ -377,9 +384,9 @@ function ThreadHeader({
   const online = useIsOnline(other?.id)
   const title = conversationTitle(conversation, members, me.id)
   const subtitle = isGroup
-    ? `${members.length} members`
+    ? t("chat.thread.memberCount", { count: members.length })
     : online
-      ? "Active now"
+      ? t("chat.thread.activeNow")
       : null
 
   const call = async (type: CallKind) => {
@@ -423,13 +430,13 @@ function ThreadHeader({
               <Button
                 variant="ghost"
                 size="icon-sm"
-                aria-label="Search in conversation"
+                aria-label={t("chat.thread.searchIn")}
                 onClick={onSearch}
               >
                 <SearchIcon />
               </Button>
             </TooltipTrigger>
-            <TooltipContent>Search in conversation</TooltipContent>
+            <TooltipContent>{t("chat.thread.searchIn")}</TooltipContent>
           </Tooltip>
           {actions}
         </div>
@@ -441,13 +448,13 @@ function ThreadHeader({
     <header className="flex h-12 shrink-0 items-center gap-2 border-b px-2 md:px-5">
       {isMobile ? (
         <Button asChild variant="ghost" size="icon-sm">
-          <Link to={"/chat"} aria-label="Back to chats">
+          <Link to={"/chat"} aria-label={t("chat.thread.backToChats")}>
             <ArrowLeftIcon />
           </Link>
         </Button>
       ) : null}
       <nav
-        aria-label="Breadcrumb"
+        aria-label={t("chat.thread.breadcrumb")}
         className="flex min-w-0 flex-1 items-center gap-2 text-xs"
       >
         {crumbs ?? (
@@ -456,7 +463,9 @@ function ThreadHeader({
               to={"/chat"}
               className="hidden shrink-0 text-muted-foreground hover:text-foreground sm:inline"
             >
-              {isGroup ? "Groups" : "Direct messages"}
+              {isGroup
+                ? t("chat.thread.groups")
+                : t("chat.thread.directMessages")}
             </Link>
             <span className="hidden text-muted-foreground/60 sm:inline">/</span>
             {isGroup ? (
@@ -468,14 +477,13 @@ function ThreadHeader({
                 members={members}
                 meId={me.id}
                 size="sm"
-                className="size-5"
               />
             )}
             <h2 className="min-w-0 truncate font-medium" aria-current="page">
               {title}
             </h2>
             {subtitle ? (
-              <span className="hidden shrink-0 text-[11px] text-muted-foreground md:inline">
+              <span className="hidden shrink-0 text-2xs text-muted-foreground md:inline">
                 · {subtitle}
               </span>
             ) : null}
@@ -489,48 +497,48 @@ function ThreadHeader({
             <Button
               variant="ghost"
               size="icon-sm"
-              aria-label="Search in conversation"
+              aria-label={t("chat.thread.searchIn")}
               onClick={onSearch}
             >
               <SearchIcon />
             </Button>
           </TooltipTrigger>
-          <TooltipContent>Search in conversation</TooltipContent>
+          <TooltipContent>{t("chat.thread.searchIn")}</TooltipContent>
         </Tooltip>
         <Tooltip>
           <TooltipTrigger asChild>
             <Button
               variant="ghost"
               size="icon-sm"
-              aria-label="Start video call"
+              aria-label={t("chat.thread.startVideo")}
               disabled={calling !== null}
               onClick={() => void call("VIDEO")}
             >
               <VideoIcon />
             </Button>
           </TooltipTrigger>
-          <TooltipContent>Video call</TooltipContent>
+          <TooltipContent>{t("chat.thread.videoCall")}</TooltipContent>
         </Tooltip>
         <Tooltip>
           <TooltipTrigger asChild>
             <Button
               variant="ghost"
               size="icon-sm"
-              aria-label="Start audio call"
+              aria-label={t("chat.thread.startAudio")}
               disabled={calling !== null}
               onClick={() => void call("AUDIO")}
             >
               <PhoneIcon />
             </Button>
           </TooltipTrigger>
-          <TooltipContent>Audio call</TooltipContent>
+          <TooltipContent>{t("chat.thread.audioCall")}</TooltipContent>
         </Tooltip>
         <Tooltip>
           <TooltipTrigger asChild>
             <Button
               variant="ghost"
               size="icon-sm"
-              aria-label="Conversation details"
+              aria-label={t("chat.thread.details")}
               aria-pressed={infoShown}
               className={cn(infoShown && "bg-accent")}
               onClick={onOpenInfo}
@@ -539,7 +547,9 @@ function ThreadHeader({
             </Button>
           </TooltipTrigger>
           <TooltipContent>
-            {infoShown ? "Hide details" : "Show details"}
+            {infoShown
+              ? t("chat.thread.hideDetails")
+              : t("chat.thread.showDetails")}
           </TooltipContent>
         </Tooltip>
       </div>
@@ -593,14 +603,15 @@ function useTypingUsers(conversationId: string) {
 }
 
 function TypingIndicator({ names }: { names: string[] }) {
+  const { t } = useTranslation()
   const label =
     names.length === 0
       ? ""
       : names.length === 1
-        ? `${names[0]} is typing…`
+        ? t("chat.thread.typingOne", { name: names[0] })
         : names.length === 2
-          ? `${names[0]} and ${names[1]} are typing…`
-          : "Several people are typing…"
+          ? t("chat.thread.typingTwo", { a: names[0], b: names[1] })
+          : t("chat.thread.typingMany")
   return (
     <div
       className="h-5 shrink-0 px-4 text-xs text-muted-foreground"

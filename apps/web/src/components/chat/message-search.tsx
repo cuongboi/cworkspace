@@ -1,11 +1,13 @@
 import { format } from "date-fns"
 import { SearchIcon } from "lucide-react"
 import { useQueryState } from "nuqs"
+import { useTranslation } from "react-i18next"
 import { type ReactNode, useEffect, useState } from "react"
 import { UserAvatar } from "@/components/common/user-avatar"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Skeleton } from "@/components/ui/skeleton"
+import { useDateLocale } from "@/lib/i18n"
 import { toPlainText } from "@/lib/mentions"
 import { useDbInfinite } from "@/lib/query"
 import { chatSearchParser } from "@/lib/search-params"
@@ -28,6 +30,7 @@ export function MessageSearch({
   /** called after jumping, so a sheet host can close itself */
   onPick?: () => void
 }) {
+  const { t } = useTranslation()
   const [q, setQ] = useQueryState("mq", chatSearchParser)
   const [input, setInput] = useState(q)
   const { jumpTo } = useThreadScroll()
@@ -45,7 +48,8 @@ export function MessageSearch({
           autoFocus
           value={input}
           onChange={(e) => setInput(e.target.value)}
-          placeholder="Search in conversation"
+          placeholder={t("chat.search.placeholder")}
+          aria-label={t("chat.search.placeholder")}
           className="h-8 pl-8 text-xs"
         />
       </div>
@@ -61,7 +65,7 @@ export function MessageSearch({
         />
       ) : (
         <p className="py-6 text-center text-xs text-muted-foreground">
-          Type at least {MIN_QUERY} characters to search messages.
+          {t("chat.search.minChars", { count: MIN_QUERY })}
         </p>
       )}
     </div>
@@ -77,6 +81,8 @@ function Results({
   q: string
   onPick: (id: string) => void
 }) {
+  const { t } = useTranslation()
+  const locale = useDateLocale()
   const {
     data,
     isPending,
@@ -102,7 +108,7 @@ function Results({
   if (error) {
     return (
       <p className="py-6 text-center text-xs text-destructive">
-        Could not search messages.
+        {t("chat.search.failed")}
       </p>
     )
   }
@@ -110,7 +116,7 @@ function Results({
   if (!hits.length) {
     return (
       <p className="py-6 text-center text-xs text-muted-foreground">
-        No messages match “{q}”.
+        {t("chat.search.noMatch", { q })}
       </p>
     )
   }
@@ -130,8 +136,8 @@ function Results({
               <span className="truncate text-xs font-medium">
                 {hit.sender.name}
               </span>
-              <span className="ml-auto shrink-0 text-[10px] text-muted-foreground">
-                {format(hit.createdAt, "MMM d, yyyy")}
+              <span className="ml-auto shrink-0 text-2xs text-muted-foreground">
+                {format(hit.createdAt, "PP", { locale })}
               </span>
             </span>
             <span className="line-clamp-2 text-xs break-words text-muted-foreground">
@@ -148,7 +154,7 @@ function Results({
           disabled={isFetchingNextPage}
           onClick={() => void fetchNextPage()}
         >
-          {isFetchingNextPage ? "Loading…" : "Load more"}
+          {isFetchingNextPage ? t("common.loading") : t("common.loadMore")}
         </Button>
       ) : null}
     </div>

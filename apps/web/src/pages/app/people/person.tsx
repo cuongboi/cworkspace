@@ -12,12 +12,12 @@ import {
 } from "lucide-react"
 import { Link, useParams } from "react-router-dom"
 import { type ReactNode, useState } from "react"
+import { useTranslation } from "react-i18next"
 import { RichText } from "@/components/common/rich-text"
 import { UserAvatar } from "@/components/common/user-avatar"
 import { FeedShell } from "@/components/feed/feed-shell"
 import { PostFeed } from "@/components/feed/post-feed"
 import { EditProfileDialog } from "@/components/people/edit-profile-dialog"
-import { PushSettings } from "@/components/people/push-settings"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
@@ -34,11 +34,12 @@ import { useApp } from "@/hooks/use-app"
 import { useIsOnline } from "@/hooks/use-presence"
 import { db } from "@/lib/api-client"
 import { useDbQuery } from "@/lib/query"
+import { useDateLocale } from "@/lib/i18n"
 import { COMPANY_NAME } from "@/lib/company"
 
-const ROLE_LABEL: Record<string, string> = { admin: "Admin" }
-
 const ProfilePage = () => {
+  const { t } = useTranslation()
+  const locale = useDateLocale()
   const params = useParams()
   const { me } = useApp()
   const userId = params.userId ?? ""
@@ -86,21 +87,21 @@ const ProfilePage = () => {
           <EmptyMedia variant="icon">
             <UserXIcon />
           </EmptyMedia>
-          <EmptyTitle>Person not found</EmptyTitle>
+          <EmptyTitle>{t("people.notFound")}</EmptyTitle>
           <EmptyDescription>
-            They may have left {COMPANY_NAME}.
+            {t("people.notFoundBody", { company: COMPANY_NAME })}
           </EmptyDescription>
         </EmptyHeader>
         <EmptyContent>
           <Button asChild variant="outline">
-            <Link to={"/people"}>Browse people</Link>
+            <Link to={"/people"}>{t("people.browse")}</Link>
           </Button>
         </EmptyContent>
       </Empty>
     )
   }
 
-  const roleLabel = user.role ? ROLE_LABEL[user.role] : undefined
+  const roleLabel = user.role === "admin" ? t("people.roleAdmin") : undefined
 
   return (
     <FeedShell>
@@ -121,13 +122,13 @@ const ProfilePage = () => {
               {isMe ? (
                 <Button variant="outline" onClick={() => setEditing(true)}>
                   <PencilIcon />
-                  Edit profile
+                  {t("people.editProfile")}
                 </Button>
               ) : (
                 <Button asChild>
                   <Link to={`/chat?with=${user.id}`}>
                     <MessageCircleIcon />
-                    Message
+                    {t("people.message")}
                   </Link>
                 </Button>
               )}
@@ -148,29 +149,33 @@ const ProfilePage = () => {
                 aria-hidden
                 className={
                   online || isMe
-                    ? "size-2 rounded-full bg-emerald-500"
+                    ? "size-2 rounded-full bg-success"
                     : "size-2 rounded-full bg-muted-foreground/40"
                 }
               />
-              {online || isMe ? "Active now" : "Offline"}
+              {online || isMe ? t("people.activeNow") : t("people.offline")}
             </p>
           </div>
           {user.bio ? <RichText text={user.bio} className="text-sm" /> : null}
           <dl className="grid gap-3 text-sm sm:grid-cols-2">
-            <Detail icon={<BriefcaseIcon />} label="Title" value={user.title} />
+            <Detail
+              icon={<BriefcaseIcon />}
+              label={t("people.fields.title")}
+              value={user.title}
+            />
             <Detail
               icon={<Building2Icon />}
-              label="Department"
+              label={t("people.fields.department")}
               value={user.department}
             />
             <Detail
               icon={<MapPinIcon />}
-              label="Location"
+              label={t("people.fields.location")}
               value={user.location}
             />
             <Detail
               icon={<MailIcon />}
-              label="Email"
+              label={t("people.fields.email")}
               value={
                 <a href={`mailto:${user.email}`} className="hover:underline">
                   {user.email}
@@ -179,7 +184,7 @@ const ProfilePage = () => {
             />
             <Detail
               icon={<PhoneIcon />}
-              label="Phone"
+              label={t("people.fields.phone")}
               value={
                 user.phone ? (
                   <a href={`tel:${user.phone}`} className="hover:underline">
@@ -190,24 +195,29 @@ const ProfilePage = () => {
             />
             <Detail
               icon={<CalendarIcon />}
-              label="Joined"
-              value={`Joined ${COMPANY_NAME} in ${format(user.createdAt, "MMMM yyyy")}`}
+              label={t("people.fields.joined")}
+              value={t("people.joinedAt", {
+                company: COMPANY_NAME,
+                date: format(user.createdAt, t("people.joinedPattern"), {
+                  locale,
+                }),
+              })}
             />
           </dl>
         </CardContent>
       </Card>
 
-      {isMe ? <PushSettings /> : null}
-
       <h2 className="mt-2 text-lg font-semibold">
-        {isMe ? "Your posts" : `Posts by ${user.name.split(" ")[0]}`}
+        {isMe
+          ? t("people.yourPosts")
+          : t("people.postsBy", { name: user.name.split(" ")[0] })}
       </h2>
       <PostFeed
         scope={["author", user.id, me.id]}
         where={{ authorId: user.id }}
         empty={
           <p className="rounded-xl border border-dashed bg-card p-8 text-center text-sm text-muted-foreground">
-            No posts you can see yet.
+            {t("people.noPosts")}
           </p>
         }
       />

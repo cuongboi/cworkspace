@@ -1,5 +1,6 @@
 import type { InfiniteData, QueryClient } from "@tanstack/react-query"
 import { db } from "@/lib/api-client"
+import i18n from "@/lib/i18n"
 import type { ReactionType } from "@app/api/zenstack/models"
 
 /**
@@ -357,23 +358,27 @@ export function conversationTitle(
 ) {
   if (conversation.group) return conversation.group.name
   const others = otherUsers(members, meId)
-  if (conversation.type === "DIRECT") return others[0]?.name ?? "Conversation"
+  if (conversation.type === "DIRECT")
+    return others[0]?.name ?? i18n.t("chat.conversation")
   if (conversation.title?.trim()) return conversation.title.trim()
   const names = others.map((u) => u.name.split(/\s+/)[0] ?? u.name)
-  if (names.length === 0) return "Just you"
+  if (names.length === 0) return i18n.t("chat.justYou")
   if (names.length <= 3) return names.join(", ")
-  return `${names.slice(0, 2).join(", ")} and ${names.length - 2} others`
+  return i18n.t("chat.namesAndOthers", {
+    names: names.slice(0, 2).join(", "),
+    count: names.length - 2,
+  })
 }
 
-export const REACTIONS: { type: ReactionType; emoji: string; label: string }[] =
-  [
-    { type: "LIKE", emoji: "👍", label: "Like" },
-    { type: "LOVE", emoji: "❤️", label: "Love" },
-    { type: "HAHA", emoji: "😆", label: "Haha" },
-    { type: "WOW", emoji: "😮", label: "Wow" },
-    { type: "SAD", emoji: "😢", label: "Sad" },
-    { type: "ANGRY", emoji: "😡", label: "Angry" },
-  ]
+/** labels: `t(`chat.reactions.${type}`)` at render */
+export const REACTIONS: { type: ReactionType; emoji: string }[] = [
+  { type: "LIKE", emoji: "👍" },
+  { type: "LOVE", emoji: "❤️" },
+  { type: "HAHA", emoji: "😆" },
+  { type: "WOW", emoji: "😮" },
+  { type: "SAD", emoji: "😢" },
+  { type: "ANGRY", emoji: "😡" },
+]
 
 export const reactionEmoji = (type: ReactionType) =>
   REACTIONS.find((r) => r.type === type)?.emoji ?? "👍"
@@ -405,18 +410,23 @@ export function parseCallData(data: unknown): CallData {
 }
 
 export function formatDuration(sec: number) {
-  if (sec < 60) return `${Math.max(0, Math.round(sec))} sec`
+  if (sec < 60)
+    return i18n.t("chat.duration.sec", { count: Math.max(0, Math.round(sec)) })
   const min = Math.round(sec / 60)
-  if (min < 60) return `${min} min`
+  if (min < 60) return i18n.t("chat.duration.min", { count: min })
   const h = Math.floor(min / 60)
-  return `${h} h ${min % 60} min`
+  return i18n.t("chat.duration.hourMin", { h, m: min % 60 })
 }
 
 export function callLabel(data: CallData) {
-  const kind = data.callType === "VIDEO" ? "Video call" : "Audio call"
-  if (data.live) return `${kind} in progress`
-  if (data.groupCall) return `${kind} · ${formatDuration(data.durationSec)}`
-  return data.answered
-    ? `${kind} · ${formatDuration(data.durationSec)}`
-    : `Missed ${kind.toLowerCase()}`
+  const video = data.callType === "VIDEO"
+  if (data.live)
+    return i18n.t(
+      video ? "chat.callMsg.videoInProgress" : "chat.callMsg.audioInProgress"
+    )
+  if (data.groupCall || data.answered)
+    return i18n.t(video ? "chat.callMsg.video" : "chat.callMsg.audio", {
+      duration: formatDuration(data.durationSec),
+    })
+  return i18n.t(video ? "chat.callMsg.missedVideo" : "chat.callMsg.missedAudio")
 }

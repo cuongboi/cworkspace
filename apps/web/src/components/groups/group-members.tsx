@@ -6,6 +6,7 @@ import {
   UserPlusIcon,
   XIcon,
 } from "lucide-react"
+import { useTranslation } from "react-i18next"
 import { Link } from "react-router-dom"
 import { useState } from "react"
 import { toast } from "sonner"
@@ -43,6 +44,7 @@ import {
 import { Skeleton } from "@/components/ui/skeleton"
 import { useApp } from "@/hooks/use-app"
 import { db } from "@/lib/api-client"
+import { errorMessage } from "@/lib/i18n"
 import { useDbMutation, useDbQuery } from "@/lib/query"
 import {
   type GroupRole,
@@ -51,14 +53,9 @@ import {
 import type { GroupWithMe } from "./group-query"
 import { ScrollArea } from "@/components/ui/scroll-area"
 
-const ROLE_LABEL: Record<GroupRole, string> = {
-  ADMIN: "Admin",
-  MODERATOR: "Moderator",
-  MEMBER: "Member",
-}
-
 /** Members tab: pending requests (for admins), member list with role management. */
 export function GroupMembers({ group }: { group: GroupWithMe }) {
+  const { t } = useTranslation()
   const { me, isAdmin: orgAdmin } = useApp()
   const myRole =
     group.members[0]?.status === "ACTIVE" ? group.members[0].role : undefined
@@ -106,7 +103,7 @@ export function GroupMembers({ group }: { group: GroupWithMe }) {
     { invalidates: ["groupMember", "group"] }
   )
 
-  const onError = (err: Error) => toast.error(err.message)
+  const onError = (err: Error) => toast.error(errorMessage(err))
   const pending = (rows ?? []).filter((r) => r.status === "PENDING")
   const q = filter.trim().toLowerCase()
   const active = (rows ?? []).filter(
@@ -122,7 +119,9 @@ export function GroupMembers({ group }: { group: GroupWithMe }) {
       {canRemove && pending.length > 0 ? (
         <Card className="gap-2 py-4">
           <CardHeader className="px-4">
-            <CardTitle>Membership requests · {pending.length}</CardTitle>
+            <CardTitle>
+              {t("groups.members.requests")} · {pending.length}
+            </CardTitle>
           </CardHeader>
           <CardContent className="px-2">
             <ItemGroup>
@@ -141,7 +140,7 @@ export function GroupMembers({ group }: { group: GroupWithMe }) {
                       </Link>
                     </ItemTitle>
                     <ItemDescription>
-                      {r.user.title || "Wants to join"}
+                      {r.user.title || t("groups.members.wantsToJoin")}
                     </ItemDescription>
                   </ItemContent>
                   <ItemActions>
@@ -154,14 +153,18 @@ export function GroupMembers({ group }: { group: GroupWithMe }) {
                             { userId: r.userId, data: { status: "ACTIVE" } },
                             {
                               onSuccess: () =>
-                                toast.success(`${r.user.name} approved`),
+                                toast.success(
+                                  t("groups.members.approved", {
+                                    name: r.user.name,
+                                  })
+                                ),
                               onError,
                             }
                           )
                         }
                       >
                         <CheckIcon />
-                        Approve
+                        {t("groups.members.approve")}
                       </Button>
                     ) : null}
                     <Button
@@ -171,7 +174,7 @@ export function GroupMembers({ group }: { group: GroupWithMe }) {
                       onClick={() => remove.mutate(r.userId, { onError })}
                     >
                       <XIcon />
-                      Decline
+                      {t("groups.members.decline")}
                     </Button>
                   </ItemActions>
                 </Item>
@@ -183,22 +186,24 @@ export function GroupMembers({ group }: { group: GroupWithMe }) {
 
       <Card className="gap-3 py-4">
         <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-2 px-4">
-          <CardTitle>Members · {group._count.members}</CardTitle>
+          <CardTitle>
+            {t("groups.membersCard")} · {group._count.members}
+          </CardTitle>
           <div className="flex items-center gap-2">
             <div className="relative">
               <SearchIcon className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
               <Input
                 value={filter}
                 onChange={(e) => setFilter(e.target.value)}
-                placeholder="Find a member"
-                aria-label="Find a member"
+                placeholder={t("groups.members.find")}
+                aria-label={t("groups.members.find")}
                 className="h-8 w-44 pl-8"
               />
             </div>
             {canAdd && !group.isDefault ? (
               <Button size="sm" onClick={() => setAdding(true)}>
                 <UserPlusIcon />
-                Add
+                {t("common.add")}
               </Button>
             ) : null}
           </div>
@@ -215,7 +220,7 @@ export function GroupMembers({ group }: { group: GroupWithMe }) {
             </div>
           ) : active.length === 0 ? (
             <p className="px-2 py-4 text-center text-sm text-muted-foreground">
-              No members match "{filter}".
+              {t("groups.members.noMatch", { query: filter })}
             </p>
           ) : (
             <ItemGroup>
@@ -242,7 +247,7 @@ export function GroupMembers({ group }: { group: GroupWithMe }) {
                         </Link>
                         {isMe ? (
                           <span className="font-normal text-muted-foreground">
-                            (you)
+                            ({t("common.you")})
                           </span>
                         ) : null}
                         {r.role !== "MEMBER" ? (
@@ -252,7 +257,7 @@ export function GroupMembers({ group }: { group: GroupWithMe }) {
                             }
                           >
                             <ShieldIcon />
-                            {ROLE_LABEL[r.role]}
+                            {t(`groups.roles.${r.role}`)}
                           </Badge>
                         ) : null}
                       </ItemTitle>
@@ -271,7 +276,9 @@ export function GroupMembers({ group }: { group: GroupWithMe }) {
                             <Button
                               variant="ghost"
                               size="icon-sm"
-                              aria-label={`Manage ${r.user.name}`}
+                              aria-label={t("groups.members.manage", {
+                                name: r.user.name,
+                              })}
                             >
                               <MoreHorizontalIcon />
                             </Button>
@@ -279,7 +286,9 @@ export function GroupMembers({ group }: { group: GroupWithMe }) {
                           <DropdownMenuContent align="end" className="min-w-44">
                             {canManageRoles ? (
                               <>
-                                <DropdownMenuLabel>Role</DropdownMenuLabel>
+                                <DropdownMenuLabel>
+                                  {t("groups.members.role")}
+                                </DropdownMenuLabel>
                                 <DropdownMenuRadioGroup
                                   value={r.role}
                                   onValueChange={(role) =>
@@ -291,7 +300,12 @@ export function GroupMembers({ group }: { group: GroupWithMe }) {
                                       {
                                         onSuccess: () =>
                                           toast.success(
-                                            `${r.user.name} is now ${ROLE_LABEL[role as GroupRole].toLowerCase()}`
+                                            t("groups.members.roleChanged", {
+                                              name: r.user.name,
+                                              role: t(
+                                                `groups.roles.${role as GroupRole}`
+                                              ),
+                                            })
                                           ),
                                         onError,
                                       }
@@ -303,7 +317,7 @@ export function GroupMembers({ group }: { group: GroupWithMe }) {
                                       key={role}
                                       value={role}
                                     >
-                                      {ROLE_LABEL[role]}
+                                      {t(`groups.roles.${role}`)}
                                     </DropdownMenuRadioItem>
                                   ))}
                                 </DropdownMenuRadioGroup>
@@ -320,13 +334,15 @@ export function GroupMembers({ group }: { group: GroupWithMe }) {
                                     remove.mutate(r.userId, {
                                       onSuccess: () =>
                                         toast.success(
-                                          `${r.user.name} removed from the group`
+                                          t("groups.members.removed", {
+                                            name: r.user.name,
+                                          })
                                         ),
                                       onError,
                                     })
                                   }
                                 >
-                                  Remove from group
+                                  {t("groups.members.remove")}
                                 </DropdownMenuItem>
                               </>
                             ) : null}
@@ -363,6 +379,7 @@ function AddMembersDialog({
   groupId: string
   existing: Set<string>
 }) {
+  const { t } = useTranslation()
   const [q, setQ] = useState("")
   const { data: people = [], isPending } = useDbQuery(
     ["user", "findMany", "group-add", q.trim()],
@@ -389,14 +406,16 @@ function AddMembersDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Add members</DialogTitle>
-          <DialogDescription>People you add join right away.</DialogDescription>
+          <DialogTitle>{t("groups.members.addTitle")}</DialogTitle>
+          <DialogDescription>
+            {t("groups.members.addDescription")}
+          </DialogDescription>
         </DialogHeader>
         <Input
           value={q}
           onChange={(e) => setQ(e.target.value)}
-          placeholder="Search people"
-          aria-label="Search people"
+          placeholder={t("groups.members.searchPeople")}
+          aria-label={t("groups.members.searchPeople")}
           autoFocus
         />
         <ScrollArea className="-mx-2" viewportClassName="max-h-80">
@@ -426,12 +445,15 @@ function AddMembersDialog({
                         disabled={member || add.isPending}
                         onClick={() =>
                           add.mutate(p.id, {
-                            onSuccess: () => toast.success(`${p.name} added`),
-                            onError: (err) => toast.error(err.message),
+                            onSuccess: () =>
+                              toast.success(
+                                t("groups.members.added", { name: p.name })
+                              ),
+                            onError: (err) => toast.error(errorMessage(err)),
                           })
                         }
                       >
-                        {member ? "Member" : "Add"}
+                        {member ? t("groups.member") : t("common.add")}
                       </Button>
                     </ItemActions>
                   </Item>
@@ -439,7 +461,7 @@ function AddMembersDialog({
               })}
               {people.length === 0 ? (
                 <p className="p-4 text-center text-sm text-muted-foreground">
-                  No one found.
+                  {t("groups.members.noneFound")}
                 </p>
               ) : null}
             </ItemGroup>

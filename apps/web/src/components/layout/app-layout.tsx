@@ -10,7 +10,7 @@ import { usePushRefresh } from "@/hooks/use-push"
 import { useRealtimeSync } from "@/hooks/use-realtime-sync"
 import { authClient } from "@/lib/auth-client"
 import { AppHeader } from "./app-header"
-import { AppSidebar } from "./app-sidebar"
+import { AppSidebar, MobileTabBar } from "./app-sidebar"
 import { ContactsRail } from "./contacts-rail"
 
 /** Set on a route's `handle` to configure the shell for that page. */
@@ -65,6 +65,7 @@ export function AppLayout() {
                 {rail ? <ContactsRail /> : null}
               </div>
             </div>
+            <MobileTabBar className="md:hidden" />
           </div>
         </CallProvider>
       </PresenceProvider>

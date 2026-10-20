@@ -27,3 +27,9 @@ export const channelSettingsParser = parseAsStringLiteral([
   "general",
   "integrations",
 ] as const)
+
+/** Account settings tab. */
+export const accountTabs = ["security", "notifications", "preferences"] as const
+export type AccountTab = (typeof accountTabs)[number]
+export const accountTabParser =
+  parseAsStringLiteral(accountTabs).withDefault("security")

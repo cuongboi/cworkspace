@@ -1,5 +1,6 @@
 import { SearchIcon, UsersIcon } from "lucide-react"
 import { useEffect, useState } from "react"
+import { useTranslation } from "react-i18next"
 import { PersonCard, PersonCardSkeleton } from "@/components/people/person-card"
 import {
   Empty,
@@ -15,12 +16,13 @@ import { COMPANY_NAME } from "@/lib/company"
 
 /** Org directory: search by name, title or department. */
 const PeoplePage = () => {
+  const { t } = useTranslation()
   const [input, setInput] = useState("")
   const [q, setQ] = useState("")
 
   useEffect(() => {
-    const t = setTimeout(() => setQ(input.trim()), 250)
-    return () => clearTimeout(t)
+    const id = setTimeout(() => setQ(input.trim()), 250)
+    return () => clearTimeout(id)
   }, [input])
 
   const {
@@ -59,9 +61,11 @@ const PeoplePage = () => {
     <div className="mx-auto flex w-full max-w-5xl flex-col gap-6">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">People</h1>
+          <h1 className="text-2xl font-bold tracking-tight">
+            {t("people.title")}
+          </h1>
           <p className="text-sm text-muted-foreground">
-            Everyone at {COMPANY_NAME}.
+            {t("people.subtitle", { company: COMPANY_NAME })}
           </p>
         </div>
         <div className="relative w-full sm:w-80">
@@ -70,8 +74,8 @@ const PeoplePage = () => {
             type="search"
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            placeholder="Search by name, title or department"
-            aria-label="Search people"
+            placeholder={t("people.searchPlaceholder")}
+            aria-label={t("people.searchLabel")}
             className="pl-8"
           />
         </div>
@@ -89,11 +93,9 @@ const PeoplePage = () => {
             <EmptyMedia variant="icon">
               <UsersIcon />
             </EmptyMedia>
-            <EmptyTitle>No one found</EmptyTitle>
+            <EmptyTitle>{t("people.noneFound")}</EmptyTitle>
             <EmptyDescription>
-              {q
-                ? `Nobody matches "${q}". Try another name, title or department.`
-                : "Invite your team to get started."}
+              {q ? t("people.noMatch", { q }) : t("people.inviteTeam")}
             </EmptyDescription>
           </EmptyHeader>
         </Empty>

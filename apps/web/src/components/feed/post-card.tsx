@@ -12,6 +12,7 @@ import {
 } from "lucide-react"
 import { Link } from "react-router-dom"
 import { useState } from "react"
+import { useTranslation } from "react-i18next"
 import { toast } from "sonner"
 import { AttachmentList } from "@/components/common/attachment-list"
 import { MentionTextarea } from "@/components/common/mention-textarea"
@@ -41,6 +42,7 @@ import {
 import { Skeleton } from "@/components/ui/skeleton"
 import { useApp } from "@/hooks/use-app"
 import { db } from "@/lib/api-client"
+import { errorMessage } from "@/lib/i18n"
 import { useDbMutation } from "@/lib/query"
 import type { ReactionType } from "@app/api/zenstack/models"
 import { CommentsThread, useCanModerate } from "./comments-thread"
@@ -63,6 +65,7 @@ export function PostCard({
   commentsOpen?: boolean
   onDeleted?: () => void
 }) {
+  const { t } = useTranslation()
   const { me } = useApp()
   const canModerate = useCanModerate(post)
   const isAuthor = post.authorId === me.id
@@ -120,7 +123,7 @@ export function PostCard({
       return
     save.mutate(content, {
       onSuccess: () => setEditing(false),
-      onError: (err) => toast.error(err.message),
+      onError: (err) => toast.error(errorMessage(err)),
     })
   }
 
@@ -149,7 +152,7 @@ export function PostCard({
                 <>
                   <ChevronRightIcon
                     className="size-3.5 text-muted-foreground"
-                    aria-label="posted in"
+                    aria-label={t("feed.post.postedIn")}
                   />
                   <Link
                     to={`/groups/${post.group.slug}`}
@@ -164,11 +167,13 @@ export function PostCard({
               <Link to={permalink} className="hover:underline">
                 <TimeAgo date={post.createdAt} />
               </Link>
-              {post.editedAt ? <span>· Edited</span> : null}
+              {post.editedAt ? <span>· {t("feed.edited")}</span> : null}
               {post.group.privacy !== "PUBLIC" ? (
                 <LockIcon
                   className="size-3"
-                  aria-label={`${post.group.privacy.toLowerCase()} group`}
+                  aria-label={t("feed.post.groupPrivacy", {
+                    privacy: t(`groups.privacy.${post.group.privacy}`),
+                  })}
                 />
               ) : null}
             </p>
@@ -176,7 +181,7 @@ export function PostCard({
           {post.pinnedAt ? (
             <Badge variant="secondary" className="shrink-0">
               <PinIcon />
-              Pinned
+              {t("feed.post.pinned")}
             </Badge>
           ) : null}
           <DropdownMenu>
@@ -185,7 +190,7 @@ export function PostCard({
                 variant="ghost"
                 size="icon-sm"
                 className="-mt-1 -mr-2 text-muted-foreground"
-                aria-label="Post actions"
+                aria-label={t("feed.post.actions")}
               >
                 <MoreHorizontalIcon />
               </Button>
@@ -195,11 +200,11 @@ export function PostCard({
                 onSelect={() => {
                   void navigator.clipboard
                     .writeText(`${window.location.origin}${permalink}`)
-                    .then(() => toast.success("Link copied"))
+                    .then(() => toast.success(t("common.linkCopied")))
                 }}
               >
                 <LinkIcon />
-                Copy link
+                {t("common.copyLink")}
               </DropdownMenuItem>
               {canModerate ? (
                 <DropdownMenuItem
@@ -208,15 +213,15 @@ export function PostCard({
                       onSuccess: () =>
                         toast.success(
                           post.pinnedAt
-                            ? "Unpinned"
-                            : "Pinned to the top of the group"
+                            ? t("feed.post.unpinned")
+                            : t("feed.post.pinnedToast")
                         ),
-                      onError: (err) => toast.error(err.message),
+                      onError: (err) => toast.error(errorMessage(err)),
                     })
                   }
                 >
                   {post.pinnedAt ? <PinOffIcon /> : <PinIcon />}
-                  {post.pinnedAt ? "Unpin post" : "Pin post"}
+                  {post.pinnedAt ? t("feed.post.unpin") : t("feed.post.pin")}
                 </DropdownMenuItem>
               ) : null}
               {isAuthor ? (
@@ -227,7 +232,7 @@ export function PostCard({
                   }}
                 >
                   <PencilIcon />
-                  Edit post
+                  {t("feed.post.edit")}
                 </DropdownMenuItem>
               ) : null}
               {isAuthor || canModerate ? (
@@ -238,7 +243,7 @@ export function PostCard({
                     onSelect={() => setConfirmDelete(true)}
                   >
                     <Trash2Icon />
-                    Delete post
+                    {t("feed.post.delete")}
                   </DropdownMenuItem>
                 </>
               ) : null}
@@ -254,7 +259,7 @@ export function PostCard({
                 onChange={setDraft}
                 rows={4}
                 autoFocus
-                aria-label="Edit post"
+                aria-label={t("feed.post.edit")}
                 onKeyDown={(e) => {
                   if (e.key === "Escape") setEditing(false)
                   if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
@@ -269,14 +274,14 @@ export function PostCard({
                   size="sm"
                   onClick={() => setEditing(false)}
                 >
-                  Cancel
+                  {t("common.cancel")}
                 </Button>
                 <Button
                   size="sm"
                   onClick={submitEdit}
                   disabled={save.isPending}
                 >
-                  Save
+                  {t("common.save")}
                 </Button>
               </div>
             </div>
@@ -299,7 +304,7 @@ export function PostCard({
                   className="text-sm font-semibold hover:underline"
                   onClick={() => setExpanded(true)}
                 >
-                  See more
+                  {t("feed.post.seeMore")}
                 </button>
               ) : null}
             </div>
@@ -319,8 +324,7 @@ export function PostCard({
                 aria-expanded={commentsOpen}
                 onClick={() => setCommentsOpen((o) => !o)}
               >
-                {post._count.comments} comment
-                {post._count.comments === 1 ? "" : "s"}
+                {t("feed.post.commentCount", { count: post._count.comments })}
               </button>
             ) : null}
           </div>
@@ -332,7 +336,7 @@ export function PostCard({
             onChange={(type) => {
               setPendingReaction(type)
               react.mutate(type, {
-                onError: (err) => toast.error(err.message),
+                onError: (err) => toast.error(errorMessage(err)),
                 onSettled: () => setPendingReaction(undefined),
               })
             }}
@@ -346,7 +350,7 @@ export function PostCard({
             }}
           >
             <MessageCircleIcon />
-            Comment
+            {t("feed.post.comment")}
           </Button>
         </div>
 
@@ -360,27 +364,26 @@ export function PostCard({
       <AlertDialog open={confirmDelete} onOpenChange={setConfirmDelete}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete this post?</AlertDialogTitle>
+            <AlertDialogTitle>{t("feed.post.deleteTitle")}</AlertDialogTitle>
             <AlertDialogDescription>
-              The post, its comments and reactions will be removed for everyone.
-              This can't be undone.
+              {t("feed.post.deleteBody")}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogCancel>{t("common.cancel")}</AlertDialogCancel>
             <AlertDialogAction
               variant="destructive"
               onClick={() =>
                 remove.mutate(undefined, {
                   onSuccess: () => {
-                    toast.success("Post deleted")
+                    toast.success(t("feed.post.deleted"))
                     onDeleted?.()
                   },
-                  onError: (err) => toast.error(err.message),
+                  onError: (err) => toast.error(errorMessage(err)),
                 })
               }
             >
-              Delete
+              {t("common.delete")}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

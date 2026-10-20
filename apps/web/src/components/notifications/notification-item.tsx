@@ -18,6 +18,7 @@ import {
 } from "lucide-react"
 import { Link } from "react-router-dom"
 import type { ReactNode } from "react"
+import { Trans, useTranslation } from "react-i18next"
 import { toast } from "sonner"
 import { TimeAgo } from "@/components/common/time-ago"
 import { UserAvatar } from "@/components/common/user-avatar"
@@ -30,6 +31,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { Skeleton } from "@/components/ui/skeleton"
 import { db } from "@/lib/api-client"
+import i18n, { errorMessage } from "@/lib/i18n"
 import { toPlainText } from "@/lib/mentions"
 import { useDbMutation } from "@/lib/query"
 import {
@@ -71,78 +73,64 @@ export type NotificationLike = {
 
 const TYPE_META: Record<string, { icon: LucideIcon; className: string }> = {
   MENTION: { icon: AtSignIcon, className: "bg-blue-500" },
-  POST_COMMENT: { icon: MessageCircleIcon, className: "bg-emerald-500" },
-  COMMENT_REPLY: { icon: ReplyIcon, className: "bg-emerald-500" },
+  POST_COMMENT: { icon: MessageCircleIcon, className: "bg-success" },
+  COMMENT_REPLY: { icon: ReplyIcon, className: "bg-success" },
   POST_REACTION: { icon: HeartIcon, className: "bg-rose-500" },
   GROUP_POST: { icon: NewspaperIcon, className: "bg-indigo-500" },
   GROUP_JOIN_REQUEST: { icon: UserPlusIcon, className: "bg-sky-500" },
   GROUP_JOIN_APPROVED: { icon: CheckIcon, className: "bg-sky-500" },
   EVENT_INVITE: { icon: CalendarPlusIcon, className: "bg-violet-500" },
-  EVENT_REMINDER: { icon: BellRingIcon, className: "bg-amber-500" },
-  MISSED_CALL: { icon: PhoneMissedIcon, className: "bg-red-500" },
+  EVENT_REMINDER: { icon: BellRingIcon, className: "bg-warning" },
+  MISSED_CALL: { icon: PhoneMissedIcon, className: "bg-destructive" },
 }
 
 /** The sentence describing a notification, with emphasized names. */
 export function describeNotification(n: NotificationLike): ReactNode {
-  const actor = (
-    <strong className="font-semibold">{n.actor?.name ?? "Someone"}</strong>
-  )
-  const group = (
-    <strong className="font-semibold">{n.group?.name ?? "a group"}</strong>
-  )
-  const eventTitle = (
-    <strong className="font-semibold">
-      {n.event?.title ?? dataField(n.data, "title") ?? "an event"}
-    </strong>
-  )
-  switch (n.type) {
-    case "MENTION":
-      return (
-        <>
-          {actor} mentioned you in a{" "}
-          {n.conversationId ? "chat" : n.commentId ? "comment" : "post"}
-        </>
-      )
-    case "POST_COMMENT":
-      return <>{actor} commented on your post</>
-    case "COMMENT_REPLY":
-      return <>{actor} replied to your comment</>
-    case "POST_REACTION": {
-      const reaction = dataField(n.data, "reaction")
-      return (
-        <>
-          {actor} reacted {(reaction && REACTION_EMOJI[reaction]) ?? "👍"} to
-          your post
-        </>
-      )
+  const actor = n.actor?.name ?? i18n.t("notifications.someone")
+  const group = n.group?.name ?? i18n.t("notifications.aGroup")
+  const event =
+    n.event?.title ??
+    dataField(n.data, "title") ??
+    i18n.t("notifications.anEvent")
+  const reaction = dataField(n.data, "reaction")
+  const emoji = (reaction && REACTION_EMOJI[reaction]) ?? "👍"
+  const key = (() => {
+    switch (n.type) {
+      case "MENTION":
+        return n.conversationId
+          ? "notifications.text.mentionChat"
+          : n.commentId
+            ? "notifications.text.mentionComment"
+            : "notifications.text.mentionPost"
+      case "POST_COMMENT":
+        return "notifications.text.postComment"
+      case "COMMENT_REPLY":
+        return "notifications.text.commentReply"
+      case "POST_REACTION":
+        return "notifications.text.postReaction"
+      case "GROUP_POST":
+        return "notifications.text.groupPost"
+      case "GROUP_JOIN_REQUEST":
+        return "notifications.text.joinRequest"
+      case "GROUP_JOIN_APPROVED":
+        return "notifications.text.joinApproved"
+      case "EVENT_INVITE":
+        return "notifications.text.eventInvite"
+      case "EVENT_REMINDER":
+        return "notifications.text.eventReminder"
+      case "MISSED_CALL":
+        return "notifications.text.missedCall"
+      default:
+        return "notifications.text.other"
     }
-    case "GROUP_POST":
-      return (
-        <>
-          {actor} posted in {group}
-        </>
-      )
-    case "GROUP_JOIN_REQUEST":
-      return (
-        <>
-          {actor} asked to join {group}
-        </>
-      )
-    case "GROUP_JOIN_APPROVED":
-      return <>Your request to join {group} was approved</>
-    case "EVENT_INVITE":
-      return (
-        <>
-          {actor} invited you to {eventTitle}
-        </>
-      )
-    case "EVENT_REMINDER":
-      return <>Event starting soon: {eventTitle}</>
-    case "MISSED_CALL":
-      return <>Missed call from {actor}</>
-    default:
-      return <>New activity from {actor}</>
-  }
+  })()
+  return (
+    <Trans
+      i18nKey={key}
+      values={{ actor, group, event, emoji }}
+      components={{ b: <strong className="font-semibold" /> }}
+    />
+  )
 }
 
 /** Resolves the link of a live payload (which carries ids only). */
@@ -211,8 +199,7 @@ export function useNotificationActions() {
     (id: string) => db.notification.delete({ where: { id } }),
     opts
   )
-  const onError = (err: Error) =>
-    toast.error(err.message || "Something went wrong")
+  const onError = (err: Error) => toast.error(errorMessage(err))
   return {
     markRead: (id: string, read = true) =>
       markRead.mutate({ id, read }, { onError }),
@@ -232,6 +219,7 @@ export function NotificationItem({
   onNavigate,
   className,
 }: ItemProps) {
+  const { t } = useTranslation()
   const { markRead, dismiss } = useNotificationActions()
   const unread = n.readAt === null
   const snippet = n.post?.content ? toPlainText(n.post.content).trim() : ""
@@ -280,7 +268,7 @@ export function NotificationItem({
         {unread ? (
           <span
             className="size-2.5 rounded-full bg-primary"
-            aria-label="Unread"
+            aria-label={t("notifications.unreadDot")}
             role="img"
           />
         ) : null}
@@ -290,7 +278,7 @@ export function NotificationItem({
               variant="ghost"
               size="icon-sm"
               className="relative z-10 rounded-full opacity-0 group-hover/notification:opacity-100 focus-visible:opacity-100 aria-expanded:opacity-100 max-md:opacity-100"
-              aria-label="Notification options"
+              aria-label={t("notifications.options")}
             >
               <MoreHorizontalIcon />
             </Button>
@@ -298,14 +286,16 @@ export function NotificationItem({
           <DropdownMenuContent align="end">
             <DropdownMenuItem onSelect={() => markRead(n.id, unread)}>
               {unread ? <MailOpenIcon /> : <MailIcon />}
-              Mark as {unread ? "read" : "unread"}
+              {unread
+                ? t("notifications.markRead")
+                : t("notifications.markUnread")}
             </DropdownMenuItem>
             <DropdownMenuItem
               variant="destructive"
               onSelect={() => dismiss(n.id)}
             >
               <Trash2Icon />
-              Remove notification
+              {t("notifications.remove")}
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>

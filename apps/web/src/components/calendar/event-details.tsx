@@ -15,6 +15,7 @@ import {
 } from "lucide-react"
 import { Link } from "react-router-dom"
 import { useState } from "react"
+import { Trans, useTranslation } from "react-i18next"
 import { toast } from "sonner"
 import { useCalls } from "@/components/call/call-provider"
 import { RichText } from "@/components/common/rich-text"
@@ -44,6 +45,7 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { useApp } from "@/hooks/use-app"
 import { db } from "@/lib/api-client"
+import { errorMessage } from "@/lib/i18n"
 import { invalidateModels } from "@/lib/query"
 import type { Rsvp } from "@app/api/zenstack/models"
 import {
@@ -51,31 +53,27 @@ import {
   describeRrule,
   formatTimeRange,
 } from "./calendar-utils"
-import { EVENT_TYPE_STYLES } from "./event-colors"
+import { EVENT_TYPE_STYLES, eventTypeLabelKey } from "./event-colors"
 import { useCalendarEvent } from "./use-calendar-events"
 import { ScrollArea } from "@/components/ui/scroll-area"
 
 const RSVP_META: Record<
   Rsvp,
-  { label: string; icon: typeof CheckCircle2Icon; className: string }
+  { icon: typeof CheckCircle2Icon; className: string }
 > = {
   GOING: {
-    label: "Going",
     icon: CheckCircle2Icon,
-    className: "text-emerald-600 dark:text-emerald-400",
+    className: "text-success",
   },
   MAYBE: {
-    label: "Maybe",
     icon: CircleHelpIcon,
-    className: "text-amber-600 dark:text-amber-400",
+    className: "text-warning",
   },
   DECLINED: {
-    label: "Declined",
     icon: XCircleIcon,
     className: "text-destructive",
   },
   PENDING: {
-    label: "Awaiting",
     icon: ClockIcon,
     className: "text-muted-foreground",
   },
@@ -95,6 +93,7 @@ export function EventDetailsSheet({
   onOpenChange,
   onEdit,
 }: Props) {
+  const { t } = useTranslation()
   const { data: event, isPending, error } = useCalendarEvent(eventId)
 
   return (
@@ -119,15 +118,15 @@ export function EventDetailsSheet({
                     {isPending ? (
                       <Skeleton className="h-6 w-48" />
                     ) : (
-                      "Event not found"
+                      t("calendar.details.notFound")
                     )}
                   </SheetTitle>
                   <SheetDescription>
                     {isPending
-                      ? "Loading event…"
+                      ? t("calendar.details.loading")
                       : error
-                        ? error.message
-                        : "It was deleted, or you don't have access to it."}
+                        ? errorMessage(error)
+                        : t("calendar.details.noAccess")}
                   </SheetDescription>
                 </SheetHeader>
                 {isPending ? (
@@ -157,6 +156,7 @@ function EventDetailsBody({
   onEdit: (event: CalendarEvent) => void
   onClose: () => void
 }) {
+  const { t } = useTranslation()
   const { me } = useApp()
   const { startCall } = useCalls()
   const queryClient = useQueryClient()
@@ -185,9 +185,9 @@ function EventDetailsBody({
       })
       await invalidateModels(queryClient, ["event", "eventAttendee"])
     } catch (err) {
-      toast.error(
-        err instanceof Error ? err.message : "Couldn't update your response"
-      )
+      toast.error(t("calendar.details.rsvpFailed"), {
+        description: errorMessage(err),
+      })
     }
   }
 
@@ -201,13 +201,13 @@ function EventDetailsBody({
           .delete({ where: { id: event.postId } })
           .catch(() => undefined)
       await invalidateModels(queryClient, ["event", "eventAttendee", "post"])
-      toast.success("Event deleted")
+      toast.success(t("calendar.details.deleted"))
       setConfirmDelete(false)
       onClose()
     } catch (err) {
-      toast.error(
-        err instanceof Error ? err.message : "Couldn't delete the event"
-      )
+      toast.error(t("calendar.details.deleteFailed"), {
+        description: errorMessage(err),
+      })
     } finally {
       setBusy(false)
     }
@@ -219,7 +219,7 @@ function EventDetailsBody({
         <Badge variant="outline" className="w-fit gap-1.5">
           <span className={cn("size-2 rounded-full", style.dot)} aria-hidden />
           <TypeIcon />
-          {style.label}
+          {t(eventTypeLabelKey(event.type))}
         </Badge>
         <SheetTitle className="text-xl leading-tight">{event.title}</SheetTitle>
         <SheetDescription className="flex flex-col gap-1">
@@ -231,7 +231,7 @@ function EventDetailsBody({
             <span className="flex items-start gap-2">
               <RepeatIcon className="mt-0.5 size-4 shrink-0" />
               <span className="first-letter:uppercase">
-                {describeRrule(event.rrule)}
+                {describeRrule(event.rrule, event.startAt)}
               </span>
             </span>
           ) : null}
@@ -245,7 +245,7 @@ function EventDetailsBody({
             onClick={() => void startCall({ eventId: event.id, type: "VIDEO" })}
           >
             <VideoIcon />
-            Join video call
+            {t("calendar.details.joinVideo")}
           </Button>
         ) : null}
 
@@ -255,7 +255,7 @@ function EventDetailsBody({
               <dt>
                 <MapPinIcon
                   className="size-4 text-muted-foreground"
-                  aria-label="Location"
+                  aria-label={t("calendar.details.location")}
                 />
               </dt>
               <dd className="break-words">{event.location}</dd>
@@ -266,7 +266,7 @@ function EventDetailsBody({
               <dt>
                 <UsersIcon
                   className="size-4 text-muted-foreground"
-                  aria-label="Group"
+                  aria-label={t("calendar.details.group")}
                 />
               </dt>
               <dd>
@@ -283,17 +283,27 @@ function EventDetailsBody({
             <dt>
               <UserIcon
                 className="size-4 text-muted-foreground"
-                aria-label="Organizer"
+                aria-label={t("calendar.details.organizer")}
               />
             </dt>
             <dd>
-              Organized by{" "}
-              <Link
-                to={`/people/${event.creator.id}`}
-                className="font-medium hover:underline"
-              >
-                {event.creator.id === me.id ? "you" : event.creator.name}
-              </Link>
+              <Trans
+                i18nKey="calendar.details.organizedBy"
+                values={{
+                  name:
+                    event.creator.id === me.id
+                      ? t("common.you")
+                      : event.creator.name,
+                }}
+                components={{
+                  link: (
+                    <Link
+                      to={`/people/${event.creator.id}`}
+                      className="font-medium hover:underline"
+                    />
+                  ),
+                }}
+              />
             </dd>
           </div>
         </dl>
@@ -309,14 +319,16 @@ function EventDetailsBody({
           <>
             <Separator />
             <div className="flex flex-col gap-2">
-              <span className="text-sm font-medium">Going?</span>
+              <span className="text-sm font-medium">
+                {t("calendar.details.going")}
+              </span>
               <ToggleGroup
                 type="single"
                 variant="outline"
                 spacing={0}
                 value={mine?.rsvp && mine.rsvp !== "PENDING" ? mine.rsvp : ""}
                 onValueChange={(v) => v && void rsvp(v as Rsvp)}
-                aria-label="Your response"
+                aria-label={t("calendar.details.yourResponse")}
               >
                 {(["GOING", "MAYBE", "DECLINED"] as const).map((value) => {
                   const meta = RSVP_META[value]
@@ -324,11 +336,7 @@ function EventDetailsBody({
                   return (
                     <ToggleGroupItem key={value} value={value} className="px-3">
                       <Icon className={meta.className} />
-                      {value === "DECLINED"
-                        ? "No"
-                        : value === "GOING"
-                          ? "Yes"
-                          : "Maybe"}
+                      {t(`calendar.rsvpAnswer.${value}`)}
                     </ToggleGroupItem>
                   )
                 })}
@@ -343,14 +351,18 @@ function EventDetailsBody({
             <div className="flex flex-col gap-2">
               <div className="flex items-baseline justify-between gap-2">
                 <span className="text-sm font-medium">
-                  {event.attendees.length}{" "}
-                  {event.attendees.length === 1 ? "guest" : "guests"}
+                  {t("calendar.details.guests", {
+                    count: event.attendees.length,
+                  })}
                 </span>
                 <span className="text-xs text-muted-foreground">
                   {(["GOING", "MAYBE", "DECLINED", "PENDING"] as const)
                     .filter((r) => counts[r])
-                    .map(
-                      (r) => `${counts[r]} ${RSVP_META[r].label.toLowerCase()}`
+                    .map((r) =>
+                      t("calendar.details.rsvpCount", {
+                        count: counts[r],
+                        label: t(`calendar.rsvp.${r}`).toLowerCase(),
+                      })
                     )
                     .join(" · ")}
                 </span>
@@ -381,12 +393,12 @@ function EventDetailsBody({
                         {a.user.name}
                         {a.userId === event.creatorId ? (
                           <span className="ml-1 text-xs text-muted-foreground">
-                            Organizer
+                            {t("calendar.details.organizer")}
                           </span>
                         ) : null}
                       </Link>
                       <span className={cn("text-xs", meta.className)}>
-                        {meta.label}
+                        {t(`calendar.rsvp.${a.rsvp}`)}
                       </span>
                     </li>
                   )
@@ -401,11 +413,11 @@ function EventDetailsBody({
         <SheetFooter className="mt-auto flex-row justify-end border-t">
           <Button variant="destructive" onClick={() => setConfirmDelete(true)}>
             <Trash2Icon />
-            Delete
+            {t("common.delete")}
           </Button>
           <Button variant="outline" onClick={() => onEdit(event)}>
             <PencilIcon />
-            Edit
+            {t("common.edit")}
           </Button>
         </SheetFooter>
       ) : null}
@@ -413,17 +425,18 @@ function EventDetailsBody({
       <AlertDialog open={confirmDelete} onOpenChange={setConfirmDelete}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete “{event.title}”?</AlertDialogTitle>
+            <AlertDialogTitle>
+              {t("calendar.details.deleteTitle", { title: event.title })}
+            </AlertDialogTitle>
             <AlertDialogDescription>
-              {event.rrule
-                ? "All occurrences of this recurring event will be removed. "
-                : ""}
-              Guests will no longer see it on their calendar. This can't be
-              undone.
+              {event.rrule ? t("calendar.details.deleteRecurring") : ""}
+              {t("calendar.details.deleteBody")}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={busy}>Cancel</AlertDialogCancel>
+            <AlertDialogCancel disabled={busy}>
+              {t("common.cancel")}
+            </AlertDialogCancel>
             <AlertDialogAction
               variant="destructive"
               disabled={busy}
@@ -432,7 +445,7 @@ function EventDetailsBody({
                 void remove()
               }}
             >
-              Delete
+              {t("common.delete")}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

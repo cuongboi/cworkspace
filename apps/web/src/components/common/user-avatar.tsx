@@ -1,5 +1,6 @@
 import { cn } from "cn"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import { useTranslation } from "react-i18next"
 import { useIsOnline } from "@/hooks/use-presence"
 import { accentFor } from "@/lib/accent"
 
@@ -24,6 +25,7 @@ export function UserAvatar({
   presence = false,
   className,
 }: Props) {
+  const { t } = useTranslation()
   const online = useIsOnline(presence ? user.id : null)
   return (
     <span className={cn("relative inline-flex shrink-0", className)}>
@@ -45,8 +47,8 @@ export function UserAvatar({
       {online ? (
         <span
           role="img"
-          aria-label="Online"
-          className="absolute right-0 bottom-0 size-2.5 rounded-full bg-emerald-500 ring-2 ring-background"
+          aria-label={t("feed.online")}
+          className="absolute right-0 bottom-0 size-2.5 rounded-full bg-success ring-2 ring-background"
         />
       ) : null}
     </span>

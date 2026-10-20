@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next"
 import { Navigate } from "react-router-dom"
 import { PageTitle } from "@/components/common/page-title"
 import { fetchMyGroups, myGroupsKey } from "@/components/groups/channel-data"
@@ -9,13 +10,14 @@ import { lastGroupSlug } from "@/lib/last-group"
 
 /** /groups: reopen the last visited group, else the company-wide group (desktop). */
 const GroupsHome = () => {
+  const { t } = useTranslation()
   const { me } = useApp()
   const isMobile = useIsMobile()
   const { data, isPending } = useDbQuery(myGroupsKey(me.id), () =>
     fetchMyGroups(me.id)
   )
   // mobile: the layout shows the sidebar here
-  if (isMobile) return <PageTitle title="Groups" />
+  if (isMobile) return <PageTitle title={t("groups.title")} />
   if (isPending) {
     return (
       <div className="flex h-full items-center justify-center">

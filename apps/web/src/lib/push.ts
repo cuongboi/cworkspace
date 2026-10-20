@@ -1,3 +1,4 @@
+import i18n from "@/lib/i18n"
 import type { FirebaseOptions } from "firebase/app"
 import type { Messaging } from "firebase/messaging"
 import { api } from "@/lib/api-client"
@@ -80,7 +81,7 @@ async function register(config: Extract<PushConfig, { enabled: true }>) {
     vapidKey: config.vapidKey,
     serviceWorkerRegistration,
   })
-  if (!token) throw new Error("No push token")
+  if (!token) throw new Error(i18n.t("people.push.noToken"))
   const previous = storage.get()
   if (previous && previous !== token)
     await api.delete("/api/push/tokens", { token: previous }).catch(() => {})
@@ -91,7 +92,7 @@ async function register(config: Extract<PushConfig, { enabled: true }>) {
 /** Asks permission (call from a click: iOS requires a user gesture) and registers. */
 export async function enablePush(): Promise<NotificationPermission> {
   const config = await pushConfig()
-  if (!config.enabled) throw new Error("Push notifications are not configured")
+  if (!config.enabled) throw new Error(i18n.t("people.push.notConfigured"))
   const permission = await Notification.requestPermission()
   if (permission === "granted") await register(config)
   return permission

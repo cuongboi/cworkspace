@@ -11,6 +11,7 @@ import {
 } from "lucide-react"
 import { Link } from "react-router-dom"
 import { useState } from "react"
+import { useTranslation } from "react-i18next"
 import { toast } from "sonner"
 import { UserAvatar } from "@/components/common/user-avatar"
 import {
@@ -68,13 +69,14 @@ import { useApp } from "@/hooks/use-app"
 import { COMPANY_NAME } from "@/lib/company"
 import { db } from "@/lib/api-client"
 import { authClient } from "@/lib/auth-client"
+import { useDateLocale } from "@/lib/i18n"
 import { invalidateModels, useDbQuery } from "@/lib/query"
 import {
   asRole,
   errorMessage,
   type InstanceRole,
-  ROLE_DESCRIPTIONS,
-  ROLE_LABELS,
+  roleDescription,
+  roleLabel,
   unwrap,
 } from "./settings-utils"
 
@@ -88,13 +90,9 @@ type PendingAction =
     }
   | { kind: "ban" | "unban" | "remove"; userId: string; name: string }
 
-const CONFIRM: Record<Exclude<PendingAction["kind"], "role">, string> = {
-  ban: "Deactivate",
-  unban: "Reactivate",
-  remove: "Delete",
-}
-
 export function MembersSettings() {
+  const { t } = useTranslation()
+  const locale = useDateLocale()
   const { me } = useApp()
   const queryClient = useQueryClient()
   const [q, setQ] = useState("")
@@ -138,20 +136,29 @@ export function MembersSettings() {
         case "role":
           await unwrap(authClient.admin.setRole({ userId, role: pending.to }))
           toast.success(
-            `${pending.name} is now ${ROLE_LABELS[pending.to].toLowerCase()}`
+            t("settings.members.roleChanged", {
+              name: pending.name,
+              role: roleLabel(pending.to),
+            })
           )
           break
         case "ban":
           await unwrap(authClient.admin.banUser({ userId }))
-          toast.success(`${pending.name} was deactivated`)
+          toast.success(
+            t("settings.members.deactivatedToast", { name: pending.name })
+          )
           break
         case "unban":
           await unwrap(authClient.admin.unbanUser({ userId }))
-          toast.success(`${pending.name} was reactivated`)
+          toast.success(
+            t("settings.members.reactivatedToast", { name: pending.name })
+          )
           break
         case "remove":
           await unwrap(authClient.admin.removeUser({ userId }))
-          toast.success(`${pending.name} was deleted`)
+          toast.success(
+            t("settings.members.deletedToast", { name: pending.name })
+          )
           break
       }
       await invalidateModels(queryClient, ["user"])
@@ -167,11 +174,14 @@ export function MembersSettings() {
     <Card>
       <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div className="flex flex-col gap-1.5">
-          <CardTitle>Members</CardTitle>
+          <CardTitle>{t("settings.members.title")}</CardTitle>
           <CardDescription>
             {members
-              ? `${members.length} ${members.length === 1 ? "person" : "people"} in ${COMPANY_NAME}`
-              : "Loading…"}
+              ? t("settings.members.count", {
+                  count: members.length,
+                  company: COMPANY_NAME,
+                })
+              : t("common.loading")}
           </CardDescription>
         </div>
         <InputGroup className="sm:w-64">
@@ -181,8 +191,8 @@ export function MembersSettings() {
           <InputGroupInput
             value={q}
             onChange={(e) => setQ(e.target.value)}
-            placeholder="Search members"
-            aria-label="Search members"
+            placeholder={t("settings.members.search")}
+            aria-label={t("settings.members.search")}
           />
         </InputGroup>
       </CardHeader>
@@ -204,20 +214,30 @@ export function MembersSettings() {
               <EmptyMedia variant="icon">
                 <UsersIcon />
               </EmptyMedia>
-              <EmptyTitle>No members found</EmptyTitle>
-              <EmptyDescription>Nobody matches “{q}”.</EmptyDescription>
+              <EmptyTitle>{t("settings.members.none")}</EmptyTitle>
+              <EmptyDescription>
+                {t("settings.members.noMatch", { q })}
+              </EmptyDescription>
             </EmptyHeader>
           </Empty>
         ) : (
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead className="pl-6">Name</TableHead>
-                <TableHead className="hidden md:table-cell">Email</TableHead>
-                <TableHead>Role</TableHead>
-                <TableHead className="hidden sm:table-cell">Joined</TableHead>
+                <TableHead className="pl-6">
+                  {t("settings.members.name")}
+                </TableHead>
+                <TableHead className="hidden md:table-cell">
+                  {t("settings.members.email")}
+                </TableHead>
+                <TableHead>{t("settings.members.role")}</TableHead>
+                <TableHead className="hidden sm:table-cell">
+                  {t("settings.members.joined")}
+                </TableHead>
                 <TableHead className="w-12 pr-6">
-                  <span className="sr-only">Actions</span>
+                  <span className="sr-only">
+                    {t("settings.members.actions")}
+                  </span>
                 </TableHead>
               </TableRow>
             </TableHeader>
@@ -238,7 +258,7 @@ export function MembersSettings() {
                             {m.name}
                             {isMe ? (
                               <span className="ml-1 font-normal text-muted-foreground">
-                                (you)
+                                {t("settings.members.you")}
                               </span>
                             ) : null}
                           </span>
@@ -261,16 +281,16 @@ export function MembersSettings() {
                         variant={role === "admin" ? "secondary" : "outline"}
                       >
                         {role === "admin" ? <ShieldIcon /> : null}
-                        {ROLE_LABELS[role]}
+                        {roleLabel(role)}
                       </Badge>
                       {m.banned ? (
                         <Badge variant="destructive" className="ml-1">
-                          Deactivated
+                          {t("settings.members.deactivated")}
                         </Badge>
                       ) : null}
                     </TableCell>
                     <TableCell className="hidden text-muted-foreground sm:table-cell">
-                      {format(m.createdAt, "MMM d, yyyy")}
+                      {format(m.createdAt, "PP", { locale })}
                     </TableCell>
                     <TableCell className="pr-6 text-right">
                       {!isMe ? (
@@ -279,13 +299,17 @@ export function MembersSettings() {
                             <Button
                               variant="ghost"
                               size="icon-sm"
-                              aria-label={`Manage ${m.name}`}
+                              aria-label={t("settings.members.manage", {
+                                name: m.name,
+                              })}
                             >
                               <MoreHorizontalIcon />
                             </Button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end" className="w-64">
-                            <DropdownMenuLabel>Role</DropdownMenuLabel>
+                            <DropdownMenuLabel>
+                              {t("settings.members.role")}
+                            </DropdownMenuLabel>
                             <DropdownMenuRadioGroup
                               value={role}
                               onValueChange={(to) => {
@@ -306,9 +330,9 @@ export function MembersSettings() {
                                   className="items-start"
                                 >
                                   <span className="flex flex-col">
-                                    <span>{ROLE_LABELS[r]}</span>
+                                    <span>{roleLabel(r)}</span>
                                     <span className="text-xs text-muted-foreground">
-                                      {ROLE_DESCRIPTIONS[r]}
+                                      {roleDescription(r)}
                                     </span>
                                   </span>
                                 </DropdownMenuRadioItem>
@@ -325,7 +349,9 @@ export function MembersSettings() {
                               }
                             >
                               {m.banned ? <UserCheckIcon /> : <BanIcon />}
-                              {m.banned ? "Reactivate" : "Deactivate"}
+                              {m.banned
+                                ? t("settings.members.reactivate")
+                                : t("settings.members.deactivate")}
                             </DropdownMenuItem>
                             <DropdownMenuItem
                               variant="destructive"
@@ -338,7 +364,7 @@ export function MembersSettings() {
                               }
                             >
                               <UserMinusIcon />
-                              Delete account
+                              {t("settings.members.deleteAccount")}
                             </DropdownMenuItem>
                           </DropdownMenuContent>
                         </DropdownMenu>
@@ -360,25 +386,43 @@ export function MembersSettings() {
           <AlertDialogHeader>
             <AlertDialogTitle>
               {pending?.kind === "role"
-                ? `Make ${pending.name} ${ROLE_LABELS[pending.to].toLowerCase()}?`
-                : pending
-                  ? `${CONFIRM[pending.kind]} ${pending.name}?`
-                  : ""}
+                ? t("settings.members.confirmRole", {
+                    name: pending.name,
+                    role: roleLabel(pending.to),
+                  })
+                : pending?.kind === "ban"
+                  ? t("settings.members.confirmDeactivate", {
+                      name: pending.name,
+                    })
+                  : pending?.kind === "unban"
+                    ? t("settings.members.confirmReactivate", {
+                        name: pending.name,
+                      })
+                    : pending
+                      ? t("settings.members.confirmDelete", {
+                          name: pending.name,
+                        })
+                      : ""}
             </AlertDialogTitle>
             <AlertDialogDescription>
               {pending?.kind === "role"
-                ? `${ROLE_LABELS[pending.to]}s: ${ROLE_DESCRIPTIONS[pending.to].toLowerCase()}.`
+                ? t("settings.members.roleBody", {
+                    role: roleLabel(pending.to),
+                    description: roleDescription(pending.to),
+                  })
                 : pending?.kind === "ban"
-                  ? `${pending.name} is signed out and can't sign in until reactivated.`
+                  ? t("settings.members.banBody", { name: pending.name })
                   : pending?.kind === "unban"
-                    ? `${pending.name} can sign in again.`
+                    ? t("settings.members.unbanBody", { name: pending.name })
                     : pending
-                      ? `Permanently deletes ${pending.name}'s account with their posts, messages and the groups they created. Deactivate instead to keep their content.`
+                      ? t("settings.members.removeBody", { name: pending.name })
                       : ""}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={busy}>Cancel</AlertDialogCancel>
+            <AlertDialogCancel disabled={busy}>
+              {t("common.cancel")}
+            </AlertDialogCancel>
             <AlertDialogAction
               variant={
                 pending?.kind === "remove" || pending?.kind === "ban"
@@ -393,10 +437,14 @@ export function MembersSettings() {
             >
               {busy ? <Spinner /> : null}
               {pending?.kind === "role"
-                ? "Change role"
-                : pending
-                  ? CONFIRM[pending.kind]
-                  : null}
+                ? t("settings.members.changeRole")
+                : pending?.kind === "ban"
+                  ? t("settings.members.deactivate")
+                  : pending?.kind === "unban"
+                    ? t("settings.members.reactivate")
+                    : pending
+                      ? t("settings.members.delete")
+                      : null}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

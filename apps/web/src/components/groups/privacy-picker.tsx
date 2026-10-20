@@ -7,7 +7,7 @@ import {
 } from "@/components/ui/field"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { GroupPrivacy } from "@app/api/zenstack/models"
-import { PRIVACY_DESCRIPTION, PRIVACY_LABEL } from "./group-query"
+import { useTranslation } from "react-i18next"
 import { PrivacyIcon } from "./group-visuals"
 
 const OPTIONS = [GroupPrivacy.PUBLIC, GroupPrivacy.CLOSED, GroupPrivacy.SECRET]
@@ -23,12 +23,13 @@ export function PrivacyPicker({
   idPrefix: string
   disabled?: boolean
 }) {
+  const { t } = useTranslation()
   return (
     <RadioGroup
       value={value}
       onValueChange={(v) => onChange(v as GroupPrivacy)}
       disabled={disabled}
-      aria-label="Privacy"
+      aria-label={t("groups.form.privacy")}
       className="gap-2"
     >
       {OPTIONS.map((p) => (
@@ -39,8 +40,10 @@ export function PrivacyPicker({
               className="mt-0.5 size-4 shrink-0 text-muted-foreground"
             />
             <FieldContent>
-              <FieldTitle>{PRIVACY_LABEL[p]}</FieldTitle>
-              <FieldDescription>{PRIVACY_DESCRIPTION[p]}</FieldDescription>
+              <FieldTitle>{t(`groups.privacyGroup.${p}`)}</FieldTitle>
+              <FieldDescription>
+                {t(`groups.privacyDescription.${p}`)}
+              </FieldDescription>
             </FieldContent>
             <RadioGroupItem value={p} id={`${idPrefix}-${p}`} />
           </Field>

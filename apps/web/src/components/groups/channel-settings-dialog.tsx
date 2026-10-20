@@ -17,6 +17,7 @@ import {
 } from "lucide-react"
 import { useQueryState } from "nuqs"
 import { type ReactNode, useState } from "react"
+import { useTranslation } from "react-i18next"
 import { useNavigate } from "react-router-dom"
 import { toast } from "sonner"
 import {
@@ -53,6 +54,7 @@ import { Switch } from "@/components/ui/switch"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Textarea } from "@/components/ui/textarea"
 import { ApiError, api } from "@/lib/api-client"
+import { errorMessage, useDateLocale } from "@/lib/i18n"
 import { invalidateModels, useDbQuery } from "@/lib/query"
 import { channelSettingsParser } from "@/lib/search-params"
 import {
@@ -63,19 +65,18 @@ import {
   type Integration,
   type IntegrationKind,
   integrationsKey,
-  KIND_DESCRIPTION,
-  KIND_LABEL,
 } from "./channel-data"
 import { ChannelFormDialog } from "./channel-form-dialog"
 
 const errorText = (err: unknown, fallback: string) =>
-  err instanceof ApiError ? err.message : fallback
+  err instanceof ApiError ? errorMessage(err) : fallback
 
 const KIND_ICON: Record<IntegrationKind, typeof WebhookIcon> = {
   INCOMING_WEBHOOK: ArrowDownLeftIcon,
   OUTGOING_WEBHOOK: ArrowUpRightIcon,
   BOT_TOKEN: BotIcon,
 }
+const KINDS = Object.keys(KIND_ICON) as IntegrationKind[]
 
 /** Channel settings: General (rename, move, topic, delete) and Integrations (moderators). */
 export function ChannelSettingsDialog({
@@ -87,6 +88,7 @@ export function ChannelSettingsDialog({
   groupSlug: string
   canManage: boolean
 }) {
+  const { t } = useTranslation()
   const [tab, setTab] = useQueryState("settings", channelSettingsParser)
   const open = tab !== null
   const close = () => void setTab(null)
@@ -100,7 +102,7 @@ export function ChannelSettingsDialog({
             {channel.name}
           </DialogTitle>
           <DialogDescription>
-            {channel.topic || "Channel settings"}
+            {channel.topic || t("groups.channel.settings")}
           </DialogDescription>
         </DialogHeader>
         <Tabs
@@ -110,9 +112,13 @@ export function ChannelSettingsDialog({
         >
           <div className="px-6 pt-3">
             <TabsList variant="line">
-              <TabsTrigger value="general">General</TabsTrigger>
+              <TabsTrigger value="general">
+                {t("groups.channelSettings.general")}
+              </TabsTrigger>
               {canManage ? (
-                <TabsTrigger value="integrations">Integrations</TabsTrigger>
+                <TabsTrigger value="integrations">
+                  {t("groups.channelSettings.integrations")}
+                </TabsTrigger>
               ) : null}
             </TabsList>
           </div>
@@ -152,6 +158,7 @@ function GeneralTab({
   canManage: boolean
   onDeleted: () => void
 }) {
+  const { t } = useTranslation()
   const qc = useQueryClient()
   const navigate = useNavigate()
   const [editOpen, setEditOpen] = useState(false)
@@ -162,23 +169,31 @@ function GeneralTab({
       onDeleted()
       await navigate(`/groups/${groupSlug}`)
       await invalidateModels(qc, ["channel"])
-      toast.success(`Deleted #${channel.name}`)
+      toast.success(t("groups.channelSettings.deleted", { name: channel.name }))
     } catch (err) {
-      toast.error(errorText(err, "Could not delete the channel"))
+      toast.error(errorText(err, t("groups.channelSettings.deleteFailed")))
     }
   }
 
   return (
     <div className="flex flex-col gap-5">
       <dl className="grid grid-cols-[8rem_1fr] gap-y-3 text-sm">
-        <dt className="text-muted-foreground">Name</dt>
+        <dt className="text-muted-foreground">{t("groups.form.name")}</dt>
         <dd className="font-medium">#{channel.name}</dd>
-        <dt className="text-muted-foreground">Topic</dt>
+        <dt className="text-muted-foreground">
+          {t("groups.channelForm.topic")}
+        </dt>
         <dd>
-          {channel.topic || <span className="text-muted-foreground">None</span>}
+          {channel.topic || (
+            <span className="text-muted-foreground">
+              {t("groups.channelSettings.none")}
+            </span>
+          )}
         </dd>
-        <dt className="text-muted-foreground">Visibility</dt>
-        <dd>Every member of the group</dd>
+        <dt className="text-muted-foreground">
+          {t("groups.channelSettings.visibility")}
+        </dt>
+        <dd>{t("groups.channelSettings.everyMember")}</dd>
       </dl>
       {canManage ? (
         <>
@@ -195,7 +210,7 @@ function GeneralTab({
               size="sm"
               onClick={() => setEditOpen(true)}
             >
-              Edit name, topic or location
+              {t("groups.channelSettings.edit")}
             </Button>
           </div>
           {!channel.isDefault ? (
@@ -203,35 +218,39 @@ function GeneralTab({
               <Separator />
               <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-destructive/30 p-4">
                 <div>
-                  <p className="text-sm font-medium">Delete this channel</p>
+                  <p className="text-sm font-medium">
+                    {t("groups.channelSettings.deleteThis")}
+                  </p>
                   <p className="text-xs text-muted-foreground">
-                    Its sub-channels, messages and integrations are removed for
-                    everyone. This can't be undone.
+                    {t("groups.channelSettings.deleteThisBody")}
                   </p>
                 </div>
                 <AlertDialog>
                   <AlertDialogTrigger asChild>
                     <Button variant="destructive" size="sm">
-                      <Trash2Icon /> Delete
+                      <Trash2Icon /> {t("common.delete")}
                     </Button>
                   </AlertDialogTrigger>
                   <AlertDialogContent>
                     <AlertDialogHeader>
                       <AlertDialogTitle>
-                        Delete #{channel.name}?
+                        {t("groups.channelSettings.deleteTitle", {
+                          name: channel.name,
+                        })}
                       </AlertDialogTitle>
                       <AlertDialogDescription>
-                        All messages, sub-channels and integrations of this
-                        channel will be permanently removed.
+                        {t("groups.channelSettings.deleteBody")}
                       </AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogFooter>
-                      <AlertDialogCancel>Cancel</AlertDialogCancel>
+                      <AlertDialogCancel>
+                        {t("common.cancel")}
+                      </AlertDialogCancel>
                       <AlertDialogAction
                         variant="destructive"
                         onClick={() => void remove()}
                       >
-                        Delete channel
+                        {t("groups.channelSettings.deleteChannel")}
                       </AlertDialogAction>
                     </AlertDialogFooter>
                   </AlertDialogContent>
@@ -240,14 +259,13 @@ function GeneralTab({
             </>
           ) : (
             <p className="text-xs text-muted-foreground">
-              #general is the group's main channel: it can't be renamed, moved
-              or deleted.
+              {t("groups.channelSettings.generalLocked")}
             </p>
           )}
         </>
       ) : (
         <p className="text-xs text-muted-foreground">
-          Group admins and moderators manage channels.
+          {t("groups.channelSettings.moderatorsOnly")}
         </p>
       )}
     </div>
@@ -259,6 +277,7 @@ function GeneralTab({
 type Revealed = { integration: Integration; secret: string }
 
 function IntegrationsTab({ channelId }: { channelId: string }) {
+  const { t } = useTranslation()
   const { data, isPending, error } = useDbQuery(
     integrationsKey(channelId),
     () => fetchIntegrations(channelId)
@@ -271,17 +290,16 @@ function IntegrationsTab({ channelId }: { channelId: string }) {
     <div className="flex flex-col gap-4">
       <div className="flex items-start justify-between gap-3">
         <p className="text-sm text-muted-foreground">
-          Connect services and scripts to this channel. Secrets are shown once;
-          rotate them if they leak.
+          {t("groups.integrations.intro")}
         </p>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button size="sm" className="shrink-0">
-              <PlusIcon /> Add
+              <PlusIcon /> {t("common.add")}
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-72">
-            {(Object.keys(KIND_LABEL) as IntegrationKind[]).map((kind) => {
+            {KINDS.map((kind) => {
               const Icon = KIND_ICON[kind]
               return (
                 <DropdownMenuItem
@@ -294,9 +312,11 @@ function IntegrationsTab({ channelId }: { channelId: string }) {
                 >
                   <Icon className="mt-0.5" />
                   <span className="flex flex-col">
-                    <span className="font-medium">{KIND_LABEL[kind]}</span>
+                    <span className="font-medium">
+                      {t(`groups.integrations.kind.${kind}`)}
+                    </span>
                     <span className="text-xs text-muted-foreground">
-                      {KIND_DESCRIPTION[kind]}
+                      {t(`groups.integrations.kindDescription.${kind}`)}
                     </span>
                   </span>
                 </DropdownMenuItem>
@@ -326,11 +346,13 @@ function IntegrationsTab({ channelId }: { channelId: string }) {
       {isPending ? (
         <Spinner className="mx-auto my-6" />
       ) : error ? (
-        <p className="text-sm text-destructive">Could not load integrations.</p>
+        <p className="text-sm text-destructive">
+          {t("groups.integrations.loadFailed")}
+        </p>
       ) : data.length === 0 && !creating ? (
         <div className="flex flex-col items-center gap-2 rounded-lg border border-dashed py-10 text-center text-sm text-muted-foreground">
           <WebhookIcon className="size-5" />
-          No integrations yet.
+          {t("groups.integrations.empty")}
         </div>
       ) : (
         <ul className="flex flex-col gap-2">
@@ -365,6 +387,8 @@ function IntegrationCard({
   onToggle: () => void
   onRotated: (r: Revealed) => void
 }) {
+  const { t } = useTranslation()
+  const locale = useDateLocale()
   const qc = useQueryClient()
   const Icon = KIND_ICON[integration.kind]
   const toggleEnabled = async (enabled: boolean) => {
@@ -372,7 +396,7 @@ function IntegrationCard({
       await api.patch(`/api/integrations/${integration.id}`, { enabled })
       await invalidateModels(qc, ["channelIntegration"])
     } catch (err) {
-      toast.error(errorText(err, "Could not update the integration"))
+      toast.error(errorText(err, t("groups.integrations.updateFailed")))
     }
   }
 
@@ -392,16 +416,26 @@ function IntegrationCard({
             {integration.name}
           </span>
           <span className="block truncate text-xs text-muted-foreground">
-            {KIND_LABEL[integration.kind]} · ••••{integration.secretHint} ·{" "}
+            {t(`groups.integrations.kind.${integration.kind}`)} · ••••
+            {integration.secretHint} ·{" "}
             {integration.lastUsedAt
-              ? `used ${formatDistanceToNow(integration.lastUsedAt, { addSuffix: true })}`
-              : "never used"}
+              ? t("groups.integrations.used", {
+                  when: formatDistanceToNow(integration.lastUsedAt, {
+                    addSuffix: true,
+                    locale,
+                  }),
+                })
+              : t("groups.integrations.neverUsed")}
           </span>
         </button>
         <Switch
           checked={integration.enabled}
           onCheckedChange={(v) => void toggleEnabled(v)}
-          aria-label={integration.enabled ? "Disable" : "Enable"}
+          aria-label={
+            integration.enabled
+              ? t("groups.integrations.disable")
+              : t("groups.integrations.enable")
+          }
         />
       </div>
       {open ? (
@@ -439,8 +473,10 @@ function IntegrationEditor({
   onCreated?: (r: Revealed) => void
   onRotated?: (r: Revealed) => void
 }) {
+  const { t } = useTranslation()
   const qc = useQueryClient()
-  const [name, setName] = useState(integration?.name ?? KIND_LABEL[kind])
+  const kindLabel = t(`groups.integrations.kind.${kind}`)
+  const [name, setName] = useState(integration?.name ?? kindLabel)
   const [avatarUrl, setAvatarUrl] = useState(integration?.avatarUrl ?? "")
   const [targetUrl, setTargetUrl] = useState(integration?.targetUrl ?? "")
   const [ips, setIps] = useState(integration?.allowedIps.join("\n") ?? "")
@@ -453,7 +489,7 @@ function IntegrationEditor({
   const outgoing = kind === "OUTGOING_WEBHOOK"
 
   const settings = () => ({
-    name: name.trim() || KIND_LABEL[kind],
+    name: name.trim() || kindLabel,
     avatarUrl: avatarUrl.trim() || null,
     allowedIps: outgoing ? [] : lines(ips),
     allowedHosts: outgoing ? lines(hosts) : [],
@@ -468,7 +504,7 @@ function IntegrationEditor({
     try {
       if (integration) {
         await api.patch(`/api/integrations/${integration.id}`, settings())
-        toast.success("Integration saved")
+        toast.success(t("groups.integrations.saved"))
       } else {
         const created = await api.post<Revealed>(
           `/api/channels/${channelId}/integrations`,
@@ -478,7 +514,7 @@ function IntegrationEditor({
       }
       await invalidateModels(qc, ["channelIntegration"])
     } catch (err) {
-      toast.error(errorText(err, "Could not save the integration"))
+      toast.error(errorText(err, t("groups.integrations.saveFailed")))
     } finally {
       setBusy(false)
     }
@@ -493,7 +529,7 @@ function IntegrationEditor({
       onRotated?.(r)
       await invalidateModels(qc, ["channelIntegration"])
     } catch (err) {
-      toast.error(errorText(err, "Could not rotate the secret"))
+      toast.error(errorText(err, t("groups.integrations.rotateFailed")))
     }
   }
 
@@ -507,11 +543,21 @@ function IntegrationEditor({
         error?: string
       }>(`/api/integrations/${integration.id}/test`)
       if (r.ok)
-        toast.success(`Delivered (HTTP ${r.status}, ${r.durationMs} ms)`)
-      else toast.error(`Delivery failed: ${r.error ?? `HTTP ${r.status}`}`)
+        toast.success(
+          t("groups.integrations.delivered", {
+            status: r.status,
+            ms: r.durationMs,
+          })
+        )
+      else
+        toast.error(
+          t("groups.integrations.deliveryFailed", {
+            error: r.error ?? `HTTP ${r.status}`,
+          })
+        )
       await invalidateModels(qc, ["integrationDelivery"])
     } catch (err) {
-      toast.error(errorText(err, "Could not send the test"))
+      toast.error(errorText(err, t("groups.integrations.testFailed")))
     }
   }
 
@@ -520,9 +566,9 @@ function IntegrationEditor({
     try {
       await api.delete(`/api/integrations/${integration.id}`)
       await invalidateModels(qc, ["channelIntegration"])
-      toast.success("Integration removed")
+      toast.success(t("groups.integrations.removed"))
     } catch (err) {
-      toast.error(errorText(err, "Could not remove the integration"))
+      toast.error(errorText(err, t("groups.integrations.removeFailed")))
     }
   }
 
@@ -539,11 +585,14 @@ function IntegrationEditor({
     >
       {!integration ? (
         <p className="text-sm font-medium">
-          New {KIND_LABEL[kind].toLowerCase()}
+          {t(`groups.integrations.newKind.${kind}`)}
         </p>
       ) : null}
       <div className="grid gap-4 sm:grid-cols-2">
-        <Field label="Display name" htmlFor={`${kind}-name`}>
+        <Field
+          label={t("groups.integrations.displayName")}
+          htmlFor={`${kind}-name`}
+        >
           <Input
             id={`${kind}-name`}
             value={name}
@@ -551,7 +600,11 @@ function IntegrationEditor({
             maxLength={60}
           />
         </Field>
-        <Field label="Avatar URL" htmlFor={`${kind}-avatar`} hint="Optional">
+        <Field
+          label={t("groups.integrations.avatarUrl")}
+          htmlFor={`${kind}-avatar`}
+          hint={t("groups.integrations.optional")}
+        >
           <Input
             id={`${kind}-avatar`}
             value={avatarUrl}
@@ -563,7 +616,10 @@ function IntegrationEditor({
 
       {outgoing ? (
         <>
-          <Field label="Target URL" htmlFor={`${kind}-url`}>
+          <Field
+            label={t("groups.integrations.targetUrl")}
+            htmlFor={`${kind}-url`}
+          >
             <Input
               id={`${kind}-url`}
               value={targetUrl}
@@ -574,9 +630,9 @@ function IntegrationEditor({
           </Field>
           <div className="grid gap-4 sm:grid-cols-2">
             <Field
-              label="Trigger words"
+              label={t("groups.integrations.triggerWords")}
               htmlFor={`${kind}-triggers`}
-              hint="Comma-separated, e.g. /deploy, !bot. Empty: every message."
+              hint={t("groups.integrations.triggerWordsHint")}
             >
               <Input
                 id={`${kind}-triggers`}
@@ -585,9 +641,9 @@ function IntegrationEditor({
               />
             </Field>
             <Field
-              label="Allowed hosts"
+              label={t("groups.integrations.allowedHosts")}
               htmlFor={`${kind}-hosts`}
-              hint="One per line; *.example.com allowed. Empty: any public host."
+              hint={t("groups.integrations.allowedHostsHint")}
             >
               <Textarea
                 id={`${kind}-hosts`}
@@ -601,9 +657,9 @@ function IntegrationEditor({
         </>
       ) : (
         <Field
-          label="Allowed IPs"
+          label={t("groups.integrations.allowedIps")}
           htmlFor={`${kind}-ips`}
-          hint="One IP or CIDR per line (e.g. 203.0.113.0/24). Empty: any address."
+          hint={t("groups.integrations.allowedIpsHint")}
         >
           <Textarea
             id={`${kind}-ips`}
@@ -616,9 +672,9 @@ function IntegrationEditor({
       )}
 
       <Field
-        label="Rate limit"
+        label={t("groups.integrations.rateLimit")}
         htmlFor={`${kind}-rate`}
-        hint="Requests per minute (1–600)."
+        hint={t("groups.integrations.rateLimitHint")}
         className="sm:max-w-40"
       >
         <Input
@@ -634,11 +690,13 @@ function IntegrationEditor({
       <div className="flex flex-wrap items-center gap-2">
         <Button type="submit" size="sm" disabled={busy}>
           {busy ? <Spinner /> : null}
-          {integration ? "Save" : "Create and show secret"}
+          {integration
+            ? t("common.save")
+            : t("groups.integrations.createAndShow")}
         </Button>
         {onCancel ? (
           <Button type="button" variant="ghost" size="sm" onClick={onCancel}>
-            Cancel
+            {t("common.cancel")}
           </Button>
         ) : null}
         {integration ? (
@@ -650,30 +708,32 @@ function IntegrationEditor({
                 size="sm"
                 onClick={() => void test()}
               >
-                <SendIcon /> Send test
+                <SendIcon /> {t("groups.integrations.sendTest")}
               </Button>
             ) : null}
             <ConfirmButton
               label={
                 <>
-                  <RefreshCwIcon /> Rotate secret
+                  <RefreshCwIcon /> {t("groups.integrations.rotateSecret")}
                 </>
               }
-              title="Generate a new secret?"
-              description="The current secret stops working immediately. Update every caller with the new one."
-              action="Rotate"
+              title={t("groups.integrations.rotateTitle")}
+              description={t("groups.integrations.rotateBody")}
+              action={t("groups.integrations.rotate")}
               onConfirm={rotate}
             />
             <ConfirmButton
               destructive
               label={
                 <>
-                  <Trash2Icon /> Remove
+                  <Trash2Icon /> {t("common.remove")}
                 </>
               }
-              title={`Remove ${integration.name}?`}
-              description="Callers using it will be rejected. Messages it already posted stay."
-              action="Remove"
+              title={t("groups.integrations.removeTitle", {
+                name: integration.name,
+              })}
+              description={t("groups.integrations.removeBody")}
+              action={t("common.remove")}
               onConfirm={remove}
             />
           </>
@@ -724,6 +784,7 @@ function ConfirmButton({
   destructive?: boolean
   onConfirm: () => Promise<void>
 }) {
+  const { t } = useTranslation()
   return (
     <AlertDialog>
       <AlertDialogTrigger asChild>
@@ -744,7 +805,7 @@ function ConfirmButton({
           <AlertDialogDescription>{description}</AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
-          <AlertDialogCancel>Cancel</AlertDialogCancel>
+          <AlertDialogCancel>{t("common.cancel")}</AlertDialogCancel>
           <AlertDialogAction
             variant={destructive ? "destructive" : "default"}
             onClick={() => void onConfirm()}
@@ -758,6 +819,8 @@ function ConfirmButton({
 }
 
 function DeliveryLog({ integrationId }: { integrationId: string }) {
+  const { t } = useTranslation()
+  const locale = useDateLocale()
   const { data = [], isPending } = useDbQuery(
     deliveriesKey(integrationId),
     () => fetchDeliveries(integrationId)
@@ -765,12 +828,14 @@ function DeliveryLog({ integrationId }: { integrationId: string }) {
   return (
     <div className="flex flex-col gap-2">
       <p className="text-xs font-medium text-muted-foreground">
-        Recent deliveries
+        {t("groups.integrations.recentDeliveries")}
       </p>
       {isPending ? (
         <Spinner />
       ) : data.length === 0 ? (
-        <p className="text-xs text-muted-foreground">Nothing yet.</p>
+        <p className="text-xs text-muted-foreground">
+          {t("groups.integrations.nothingYet")}
+        </p>
       ) : (
         <ul className="max-h-48 divide-y overflow-y-auto rounded-md border text-xs">
           {data.map((d) => (
@@ -778,7 +843,7 @@ function DeliveryLog({ integrationId }: { integrationId: string }) {
               <span
                 className={cn(
                   "size-1.5 shrink-0 rounded-full",
-                  d.ok ? "bg-emerald-500" : "bg-destructive"
+                  d.ok ? "bg-success" : "bg-destructive"
                 )}
               />
               <span className="w-8 shrink-0 text-muted-foreground uppercase">
@@ -794,7 +859,7 @@ function DeliveryLog({ integrationId }: { integrationId: string }) {
                 {d.durationMs} ms
               </span>
               <span className="w-24 shrink-0 text-right text-muted-foreground">
-                {formatDistanceToNow(d.createdAt, { addSuffix: true })}
+                {formatDistanceToNow(d.createdAt, { addSuffix: true, locale })}
               </span>
             </li>
           ))}
@@ -810,6 +875,7 @@ function SecretReveal({
   secret,
   onDone,
 }: Revealed & { onDone: () => void }) {
+  const { t } = useTranslation()
   const origin = window.location.origin
   const hookUrl = `${origin}/api/hooks/${integration.id}`
   const example =
@@ -840,31 +906,34 @@ const expected = "v1=" + crypto
 // and |now - ts| < 5 min. Reply with { "text": "…" } to answer in the channel.`
 
   return (
-    <div className="flex flex-col gap-3 rounded-lg border border-amber-500/40 bg-amber-500/5 p-4">
+    <div className="flex flex-col gap-3 rounded-lg border border-warning/40 bg-warning-subtle p-4">
       <div className="flex items-start gap-2">
-        <KeyRoundIcon className="mt-0.5 size-4 text-amber-600" />
+        <KeyRoundIcon className="mt-0.5 size-4 text-warning" />
         <div className="flex-1">
           <p className="text-sm font-medium">
-            Copy the secret for {integration.name} now
+            {t("groups.integrations.copySecret", { name: integration.name })}
           </p>
           <p className="text-xs text-muted-foreground">
-            It won't be shown again. Rotate it to get a new one.
+            {t("groups.integrations.copySecretBody")}
           </p>
         </div>
       </div>
-      <CopyField value={secret} label="Secret" />
+      <CopyField value={secret} label={t("groups.integrations.secret")} />
       {integration.kind === "INCOMING_WEBHOOK" ? (
-        <CopyField value={hookUrl} label="Webhook URL" />
+        <CopyField
+          value={hookUrl}
+          label={t("groups.integrations.webhookUrl")}
+        />
       ) : null}
       <div className="relative">
-        <pre className="overflow-x-auto rounded-md border bg-background p-3 font-mono text-[11px] leading-relaxed">
+        <pre className="overflow-x-auto rounded-md border bg-background p-3 font-mono text-2xs leading-relaxed">
           {example}
         </pre>
         <CopyButton value={example} className="absolute top-1.5 right-1.5" />
       </div>
       <div>
         <Button size="sm" variant="outline" onClick={onDone}>
-          I've stored it
+          {t("groups.integrations.stored")}
         </Button>
       </div>
     </div>
@@ -893,6 +962,7 @@ function CopyButton({
   value: string
   className?: string
 }) {
+  const { t } = useTranslation()
   const [copied, setCopied] = useState(false)
   return (
     <Button
@@ -900,7 +970,7 @@ function CopyButton({
       variant="outline"
       size="icon-sm"
       className={cn("shrink-0 bg-background", className)}
-      aria-label="Copy"
+      aria-label={t("groups.integrations.copy")}
       onClick={() => {
         navigator.clipboard
           .writeText(value)
@@ -908,7 +978,7 @@ function CopyButton({
             setCopied(true)
             setTimeout(() => setCopied(false), 1500)
           })
-          .catch(() => toast.error("Could not copy"))
+          .catch(() => toast.error(t("common.copyFailed")))
       }}
     >
       {copied ? <CheckIcon /> : <CopyIcon />}

@@ -68,6 +68,8 @@ export const fetchMyGroups = (meId: string) =>
           slug: true,
           isDefault: true,
           coverUrl: true,
+          wikiEnabled: true,
+          channelsEnabled: true,
         },
       },
     },
@@ -118,17 +120,3 @@ export const fetchDeliveries = (integrationId: string) =>
     orderBy: { createdAt: "desc" },
     take: 50,
   })
-
-export const KIND_LABEL: Record<IntegrationKind, string> = {
-  INCOMING_WEBHOOK: "Incoming webhook",
-  OUTGOING_WEBHOOK: "Outgoing webhook",
-  BOT_TOKEN: "Bot token",
-}
-
-export const KIND_DESCRIPTION: Record<IntegrationKind, string> = {
-  INCOMING_WEBHOOK: "Post messages into this channel from another service.",
-  OUTGOING_WEBHOOK:
-    "Send new messages (or ones starting with a trigger word) to your URL; reply with { text } to answer.",
-  BOT_TOKEN:
-    "A token scripts use to read and post in this channel through the bot API.",
-}

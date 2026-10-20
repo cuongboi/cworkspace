@@ -7,10 +7,12 @@ import {
   SquareIcon,
 } from "lucide-react"
 import { useState } from "react"
+import { useTranslation } from "react-i18next"
 import { toast } from "sonner"
 import { useNow } from "@/hooks/use-now"
 import { useApp } from "@/hooks/use-app"
 import { db } from "@/lib/api-client"
+import { errorMessage, useDateLocale } from "@/lib/i18n"
 import { useDbMutation } from "@/lib/query"
 import type { FeedPost } from "./post-query"
 
@@ -18,6 +20,8 @@ type PollData = NonNullable<FeedPost["poll"]>
 
 /** Live poll results; click an option to vote (single choice switches, multiple toggles). */
 export function PollWidget({ poll }: { poll: PollData }) {
+  const { t } = useTranslation()
+  const locale = useDateLocale()
   const { me } = useApp()
   const serverMine = poll.votes
     .filter((v) => v.userId === me.id)
@@ -80,7 +84,7 @@ export function PollWidget({ poll }: { poll: PollData }) {
           : [optionId]
     )
     vote.mutate(optionId, {
-      onError: (err) => toast.error(err.message),
+      onError: (err) => toast.error(errorMessage(err)),
       onSettled: () => setPending(null),
     })
   }
@@ -93,12 +97,18 @@ export function PollWidget({ poll }: { poll: PollData }) {
       <div>
         <p className="font-semibold">{poll.question}</p>
         <p className="text-xs text-muted-foreground">
-          {poll.allowMultiple ? "Choose one or more" : "Choose one"} ·{" "}
-          {voters.size} {voters.size === 1 ? "person" : "people"} voted
+          {poll.allowMultiple
+            ? t("feed.poll.chooseMany")
+            : t("feed.poll.chooseOne")}{" "}
+          · {t("feed.poll.voters", { count: voters.size })}
           {poll.closesAt
-            ? closed
-              ? ` · Closed ${format(poll.closesAt, "MMM d, HH:mm")}`
-              : ` · Closes ${format(poll.closesAt, "MMM d, HH:mm")}`
+            ? ` · ${t(closed ? "feed.poll.closed" : "feed.poll.closes", {
+                date: format(
+                  poll.closesAt,
+                  `${t("feed.dateFormat.monthDay")} HH:mm`,
+                  { locale }
+                ),
+              })}`
             : ""}
         </p>
       </div>

@@ -1,6 +1,6 @@
-import { cn } from "cn"
 import { PhoneIcon, VideoIcon } from "lucide-react"
 import { useState } from "react"
+import { useTranslation } from "react-i18next"
 import { useCalls } from "@/components/call/call-provider"
 import { UserAvatar } from "@/components/common/user-avatar"
 import { Button } from "@/components/ui/button"
@@ -33,6 +33,7 @@ export function GroupCallButton({
   groupId: string
   live: GroupCallState | null
 }) {
+  const { t } = useTranslation()
   const { startCall, joinCall } = useCalls()
   const [busy, setBusy] = useState(false)
 
@@ -53,15 +54,15 @@ export function GroupCallButton({
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <Button variant="secondary" disabled={busy}>
-          <VideoIcon /> Call
+          <VideoIcon /> {t("groups.call.call")}
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
         <DropdownMenuItem onSelect={() => void start("VIDEO")}>
-          <VideoIcon /> Start video call
+          <VideoIcon /> {t("groups.call.startVideo")}
         </DropdownMenuItem>
         <DropdownMenuItem onSelect={() => void start("AUDIO")}>
-          <PhoneIcon /> Start audio call
+          <PhoneIcon /> {t("groups.call.startAudio")}
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
@@ -70,6 +71,7 @@ export function GroupCallButton({
 
 /** Banner shown to members while the group's call is live: who's in it, and a Join button. */
 export function GroupLiveCallBanner({ live }: { live: GroupCallState }) {
+  const { t } = useTranslation()
   const { joinCall } = useCalls()
   const { me } = useApp()
   if (!live.call) return null
@@ -81,19 +83,21 @@ export function GroupLiveCallBanner({ live }: { live: GroupCallState }) {
   return (
     <div
       role="status"
-      className="flex items-center gap-3 rounded-xl border bg-card p-3"
+      className="flex items-center gap-3 rounded-xl border border-success/30 bg-success-subtle p-3"
     >
-      <span className="relative flex size-9 shrink-0 items-center justify-center rounded-full bg-red-500/10 text-red-600">
+      <span className="relative flex size-9 shrink-0 items-center justify-center rounded-full bg-success text-success-foreground">
         <Icon className="size-4" aria-hidden />
-        <span className="absolute top-0 right-0 size-2.5 animate-pulse rounded-full bg-red-500 ring-2 ring-card" />
+        <span className="absolute top-0 right-0 size-2.5 animate-pulse rounded-full bg-destructive ring-2 ring-background" />
       </span>
       <div className="min-w-0 flex-1">
         <p className="text-sm font-medium">
-          Live {live.call.type === "VIDEO" ? "video" : "audio"} call
+          {live.call.type === "VIDEO"
+            ? t("groups.call.liveVideo")
+            : t("groups.call.liveAudio")}
         </p>
         <p className="truncate text-xs text-muted-foreground">
           {count === 0
-            ? "Starting…"
+            ? t("groups.call.starting")
             : `${names} · ${count}/${MAX_MESH_PARTICIPANTS}`}
         </p>
       </div>
@@ -109,7 +113,7 @@ export function GroupLiveCallBanner({ live }: { live: GroupCallState }) {
       </div>
       {inIt ? (
         <Button variant="secondary" onClick={() => joinCall(live.call!.id)}>
-          Return to call
+          {t("groups.call.return")}
         </Button>
       ) : (
         <JoinButton live={live} onJoin={() => joinCall(live.call!.id)} />
@@ -125,17 +129,16 @@ function JoinButton({
   live: GroupCallState
   onJoin: () => void
 }) {
+  const { t } = useTranslation()
   const full = live.participants.length >= MAX_MESH_PARTICIPANTS
   const button = (
     <Button
+      variant={full ? "secondary" : "success"}
       onClick={onJoin}
       disabled={full}
-      className={cn(
-        !full && "bg-emerald-600 text-white hover:bg-emerald-600/90"
-      )}
     >
       {live.call?.type === "AUDIO" ? <PhoneIcon /> : <VideoIcon />}
-      Join call
+      {t("groups.call.join")}
     </Button>
   )
   if (!full) return button
@@ -146,7 +149,7 @@ function JoinButton({
         <span tabIndex={0}>{button}</span>
       </TooltipTrigger>
       <TooltipContent>
-        The call is full ({MAX_MESH_PARTICIPANTS} people max)
+        {t("groups.call.full", { max: MAX_MESH_PARTICIPANTS })}
       </TooltipContent>
     </Tooltip>
   )

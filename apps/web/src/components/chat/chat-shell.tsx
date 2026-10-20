@@ -1,6 +1,7 @@
 import { MessagesSquareIcon } from "lucide-react"
 import { useNavigate, useSearchParams } from "react-router-dom"
 import { useEffect, useRef } from "react"
+import { useTranslation } from "react-i18next"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import {
@@ -57,20 +58,19 @@ export function ChatShell({ conversationId }: { conversationId?: string }) {
 }
 
 function NoConversationSelected() {
+  const { t } = useTranslation()
   return (
     <Empty className="h-full border-0">
       <EmptyHeader>
         <EmptyMedia variant="icon">
           <MessagesSquareIcon />
         </EmptyMedia>
-        <EmptyTitle>Choose a conversation</EmptyTitle>
-        <EmptyDescription>
-          Pick a chat from the list, or start a new one.
-        </EmptyDescription>
+        <EmptyTitle>{t("chat.shell.chooseTitle")}</EmptyTitle>
+        <EmptyDescription>{t("chat.shell.chooseBody")}</EmptyDescription>
       </EmptyHeader>
       <EmptyContent>
         <NewConversationDialog>
-          <Button>New message</Button>
+          <Button>{t("chat.shell.newMessage")}</Button>
         </NewConversationDialog>
       </EmptyContent>
     </Empty>
@@ -79,6 +79,7 @@ function NoConversationSelected() {
 
 /** `/chat?with=<userId>`: find-or-create the DM with that person, then open it. */
 function useOpenDirectFromQuery() {
+  const { t } = useTranslation()
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const withUser = searchParams.get("with") ?? undefined
@@ -94,16 +95,14 @@ function useOpenDirectFromQuery() {
       .then(({ id }) => navigate(`/chat/${id}`, { replace: true }))
       .catch((err: unknown) => {
         toast.error(
-          err instanceof ApiError
-            ? err.message
-            : "Could not open the conversation"
+          err instanceof ApiError ? err.message : t("chat.shell.openFailed")
         )
         void navigate("/chat", { replace: true })
       })
       .finally(() => {
         startedRef.current = null
       })
-  }, [withUser, navigate])
+  }, [withUser, navigate, t])
 
   return Boolean(withUser)
 }

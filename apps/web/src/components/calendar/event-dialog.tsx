@@ -1,6 +1,7 @@
 import { useQueryClient } from "@tanstack/react-query"
 import { addHours, endOfDay, format, parse, startOfDay } from "date-fns"
 import { useState } from "react"
+import { useTranslation } from "react-i18next"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import {
@@ -25,6 +26,7 @@ import { Switch } from "@/components/ui/switch"
 import { Textarea } from "@/components/ui/textarea"
 import { useApp } from "@/hooks/use-app"
 import { db } from "@/lib/api-client"
+import { errorMessage } from "@/lib/i18n"
 import { invalidateModels, useDbQuery } from "@/lib/query"
 import type { EventType } from "@app/api/zenstack/models"
 import {
@@ -34,7 +36,11 @@ import {
   type RepeatOption,
   repeatLabel,
 } from "./calendar-utils"
-import { EVENT_TYPE_STYLES, EVENT_TYPES } from "./event-colors"
+import {
+  EVENT_TYPE_STYLES,
+  EVENT_TYPES,
+  eventTypeLabelKey,
+} from "./event-colors"
 import { PeoplePicker, type PickedUser } from "./people-picker"
 import { ScrollArea } from "@/components/ui/scroll-area"
 
@@ -97,6 +103,7 @@ export function EventDialog({
   defaults,
   onSaved,
 }: Props) {
+  const { t } = useTranslation()
   const { me } = useApp()
   const queryClient = useQueryClient()
   const isEdit = Boolean(event)
@@ -119,23 +126,54 @@ export function EventDialog({
     { enabled: open && !isEdit && !defaults?.group, staleTime: 60_000 }
   )
 
+  // new group events invite the whole group by default
+  const { data: groupMembers } = useDbQuery(
+    ["groupMember", "findMany", "event-dialog", form.groupId],
+    () =>
+      db.groupMember.findMany({
+        where: {
+          groupId: form.groupId,
+          status: "ACTIVE",
+          userId: { not: me.id },
+        },
+        select: { user: { select: { id: true, name: true, image: true } } },
+      }),
+    { enabled: open && !isEdit && Boolean(form.groupId), staleTime: 60_000 }
+  )
+  const [seededGroupId, setSeededGroupId] = useState("")
+  if (!isEdit && groupMembers && seededGroupId !== form.groupId) {
+    setSeededGroupId(form.groupId)
+    setForm((f) => ({
+      ...f,
+      attendees: groupMembers.map((m) => m.user as PickedUser),
+    }))
+  }
+  const memberIds = new Set(groupMembers?.map((m) => m.user.id))
+  const allMembersInvited =
+    !isEdit &&
+    Boolean(form.groupId) &&
+    memberIds.size > 0 &&
+    form.attendees.filter((a) => memberIds.has(a.id)).length >= memberIds.size
+
   const startAt = form.allDay
     ? startOfDay(parse(form.startDate, DATE, new Date()))
     : parse(
-      `${form.startDate} ${form.startTime}`,
-      `${DATE} ${TIME}`,
-      new Date()
-    )
+        `${form.startDate} ${form.startTime}`,
+        `${DATE} ${TIME}`,
+        new Date()
+      )
   const endAt = form.allDay
     ? endOfDay(parse(form.endDate, DATE, new Date()))
     : parse(`${form.endDate} ${form.endTime}`, `${DATE} ${TIME}`, new Date())
   const validDates =
     !Number.isNaN(startAt.getTime()) && !Number.isNaN(endAt.getTime())
-  const titleError = form.title.trim() ? null : "Add a title"
+  const titleError = form.title.trim()
+    ? null
+    : t("calendar.dialog.titleRequired")
   const rangeError = !validDates
-    ? "Pick a valid start and end"
+    ? t("calendar.dialog.invalidRange")
     : endAt < startAt
-      ? "The event must end after it starts"
+      ? t("calendar.dialog.endBeforeStart")
       : null
 
   // moving the start keeps the duration (like Google Calendar)
@@ -206,24 +244,24 @@ export function EventDialog({
         // group events are announced in the group's feed as a Post(type EVENT)
         const created = groupId
           ? await db.event.create({
-            data: {
-              ...fields,
-              group: { connect: { id: groupId } },
-              post: {
-                create: {
-                  group: { connect: { id: groupId } },
-                  type: "EVENT",
-                  content: fields.description ?? "",
+              data: {
+                ...fields,
+                group: { connect: { id: groupId } },
+                post: {
+                  create: {
+                    group: { connect: { id: groupId } },
+                    type: "EVENT",
+                    content: fields.description ?? "",
+                  },
                 },
+                attendees,
               },
-              attendees,
-            },
-            select: { id: true },
-          })
+              select: { id: true },
+            })
           : await db.event.create({
-            data: { ...fields, attendees },
-            select: { id: true },
-          })
+              data: { ...fields, attendees },
+              select: { id: true },
+            })
         id = created.id
       }
       await invalidateModels(queryClient, [
@@ -231,13 +269,15 @@ export function EventDialog({
         "eventAttendee",
         ...(form.groupId ? (["post"] as const) : []),
       ])
-      toast.success(isEdit ? "Event updated" : "Event created")
+      toast.success(
+        isEdit ? t("calendar.dialog.updated") : t("calendar.dialog.created")
+      )
       onSaved?.(id)
       onOpenChange(false)
     } catch (err) {
-      toast.error(
-        err instanceof Error ? err.message : "Couldn't save the event"
-      )
+      toast.error(t("calendar.dialog.saveFailed"), {
+        description: errorMessage(err),
+      })
     } finally {
       setSaving(false)
     }
@@ -252,11 +292,15 @@ export function EventDialog({
         >
           <div className="grid gap-6 p-6">
             <DialogHeader>
-              <DialogTitle>{isEdit ? "Edit event" : "New event"}</DialogTitle>
+              <DialogTitle>
+                {isEdit
+                  ? t("calendar.dialog.editTitle")
+                  : t("calendar.dialog.newTitle")}
+              </DialogTitle>
               <DialogDescription className="sr-only">
                 {isEdit
-                  ? "Change the details of this event"
-                  : "Schedule a meeting, event, reminder or time off"}
+                  ? t("calendar.dialog.editDescription")
+                  : t("calendar.dialog.newDescription")}
               </DialogDescription>
             </DialogHeader>
             <form
@@ -268,13 +312,15 @@ export function EventDialog({
             >
               <FieldGroup className="gap-4">
                 <Field data-invalid={submitted && Boolean(titleError)}>
-                  <FieldLabel htmlFor="event-title">Title</FieldLabel>
+                  <FieldLabel htmlFor="event-title">
+                    {t("calendar.dialog.title")}
+                  </FieldLabel>
                   <Input
                     id="event-title"
                     autoFocus
                     value={form.title}
                     onChange={(e) => set("title", e.target.value)}
-                    placeholder="Add title"
+                    placeholder={t("calendar.dialog.titlePlaceholder")}
                     maxLength={200}
                     aria-invalid={submitted && Boolean(titleError)}
                   />
@@ -284,11 +330,11 @@ export function EventDialog({
                 </Field>
 
                 <Field>
-                  <FieldLabel>Type</FieldLabel>
+                  <FieldLabel>{t("calendar.dialog.type")}</FieldLabel>
                   <div
                     className="flex flex-wrap gap-1.5"
                     role="radiogroup"
-                    aria-label="Event type"
+                    aria-label={t("calendar.dialog.eventType")}
                   >
                     {EVENT_TYPES.map((type) => {
                       const style = EVENT_TYPE_STYLES[type]
@@ -310,7 +356,7 @@ export function EventDialog({
                             aria-hidden
                           />
                           <Icon />
-                          {style.label}
+                          {t(eventTypeLabelKey(type))}
                         </Button>
                       )
                     })}
@@ -324,14 +370,16 @@ export function EventDialog({
                     onCheckedChange={(v) => set("allDay", v)}
                   />
                   <Label htmlFor="event-all-day" className="font-normal">
-                    All day
+                    {t("calendar.allDay")}
                   </Label>
                 </div>
 
                 <Field data-invalid={submitted && Boolean(rangeError)}>
                   <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                     <div className="flex flex-col gap-1.5">
-                      <FieldLabel htmlFor="event-start-date">Starts</FieldLabel>
+                      <FieldLabel htmlFor="event-start-date">
+                        {t("calendar.dialog.starts")}
+                      </FieldLabel>
                       <div className="flex gap-2">
                         <Input
                           id="event-start-date"
@@ -345,7 +393,7 @@ export function EventDialog({
                         {form.allDay ? null : (
                           <Input
                             type="time"
-                            aria-label="Start time"
+                            aria-label={t("calendar.dialog.startTime")}
                             value={form.startTime}
                             onChange={(e) =>
                               changeStart(form.startDate, e.target.value)
@@ -358,7 +406,9 @@ export function EventDialog({
                       </div>
                     </div>
                     <div className="flex flex-col gap-1.5">
-                      <FieldLabel htmlFor="event-end-date">Ends</FieldLabel>
+                      <FieldLabel htmlFor="event-end-date">
+                        {t("calendar.dialog.ends")}
+                      </FieldLabel>
                       <div className="flex gap-2">
                         <Input
                           id="event-end-date"
@@ -372,7 +422,7 @@ export function EventDialog({
                         {form.allDay ? null : (
                           <Input
                             type="time"
-                            aria-label="End time"
+                            aria-label={t("calendar.dialog.endTime")}
                             value={form.endTime}
                             onChange={(e) => set("endTime", e.target.value)}
                             className="w-40"
@@ -390,7 +440,9 @@ export function EventDialog({
                 </Field>
 
                 <Field>
-                  <FieldLabel htmlFor="event-repeat">Repeat</FieldLabel>
+                  <FieldLabel htmlFor="event-repeat">
+                    {t("calendar.dialog.repeat")}
+                  </FieldLabel>
                   <NativeSelect
                     id="event-repeat"
                     value={form.repeat}
@@ -408,21 +460,25 @@ export function EventDialog({
                 </Field>
 
                 <Field>
-                  <FieldLabel htmlFor="event-location">Location</FieldLabel>
+                  <FieldLabel htmlFor="event-location">
+                    {t("calendar.dialog.location")}
+                  </FieldLabel>
                   <Input
                     id="event-location"
                     value={form.location}
                     onChange={(e) => set("location", e.target.value)}
-                    placeholder="Add a room or address"
+                    placeholder={t("calendar.dialog.locationPlaceholder")}
                     maxLength={300}
                   />
                 </Field>
 
                 <div className="flex items-center justify-between gap-3 rounded-lg border p-3">
                   <div className="flex flex-col">
-                    <Label htmlFor="event-video">Add video call</Label>
+                    <Label htmlFor="event-video">
+                      {t("calendar.dialog.addVideo")}
+                    </Label>
                     <span className="text-xs text-muted-foreground">
-                      Attendees can join from the event.
+                      {t("calendar.dialog.addVideoHint")}
                     </span>
                   </div>
                   <Switch
@@ -433,23 +489,28 @@ export function EventDialog({
                 </div>
 
                 <Field>
-                  <FieldLabel>Guests</FieldLabel>
+                  <FieldLabel>{t("calendar.dialog.guests")}</FieldLabel>
                   <PeoplePicker
                     value={form.attendees}
                     onChange={(users) => set("attendees", users)}
                     excludeIds={[event?.creatorId ?? me.id]}
+                    hideAdd={allMembersInvited}
                   />
                 </Field>
 
                 {isEdit || defaults?.group ? (
                   (event?.group ?? defaults?.group) ? (
                     <p className="text-sm text-muted-foreground">
-                      Posted in {(event?.group ?? defaults?.group)?.name}
+                      {t("calendar.dialog.postedIn", {
+                        name: (event?.group ?? defaults?.group)?.name,
+                      })}
                     </p>
                   ) : null
                 ) : (
                   <Field>
-                    <FieldLabel htmlFor="event-group">Group</FieldLabel>
+                    <FieldLabel htmlFor="event-group">
+                      {t("calendar.dialog.group")}
+                    </FieldLabel>
                     <NativeSelect
                       id="event-group"
                       value={form.groupId}
@@ -457,7 +518,7 @@ export function EventDialog({
                       className="w-full sm:w-72"
                     >
                       <NativeSelectOption value="">
-                        No group (private)
+                        {t("calendar.dialog.noGroup")}
                       </NativeSelectOption>
                       {groups.map((g) => (
                         <NativeSelectOption key={g.id} value={g.id}>
@@ -467,8 +528,7 @@ export function EventDialog({
                     </NativeSelect>
                     {form.groupId ? (
                       <span className="text-xs text-muted-foreground">
-                        The event will be announced in the group's feed and
-                        visible to its members.
+                        {t("calendar.dialog.groupHint")}
                       </span>
                     ) : null}
                   </Field>
@@ -476,13 +536,13 @@ export function EventDialog({
 
                 <Field>
                   <FieldLabel htmlFor="event-description">
-                    Description
+                    {t("calendar.dialog.description")}
                   </FieldLabel>
                   <Textarea
                     id="event-description"
                     value={form.description}
                     onChange={(e) => set("description", e.target.value)}
-                    placeholder="Add a description"
+                    placeholder={t("calendar.dialog.descriptionPlaceholder")}
                     rows={4}
                     maxLength={5000}
                   />
@@ -496,11 +556,11 @@ export function EventDialog({
                 onClick={() => onOpenChange(false)}
                 disabled={saving}
               >
-                Cancel
+                {t("common.cancel")}
               </Button>
               <Button type="submit" form="event-form" disabled={saving}>
                 {saving ? <Spinner /> : null}
-                {isEdit ? "Save" : "Create"}
+                {isEdit ? t("common.save") : t("common.create")}
               </Button>
             </DialogFooter>
           </div>

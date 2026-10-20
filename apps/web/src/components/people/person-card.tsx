@@ -1,4 +1,5 @@
 import { MessageCircleIcon } from "lucide-react"
+import { useTranslation } from "react-i18next"
 import { Link } from "react-router-dom"
 import { UserAvatar } from "@/components/common/user-avatar"
 import { Button } from "@/components/ui/button"
@@ -15,6 +16,7 @@ export type PersonSummary = {
 }
 
 export function PersonCard({ person }: { person: PersonSummary }) {
+  const { t } = useTranslation()
   const { me } = useApp()
   const profile = `/people/${person.id}`
   return (
@@ -35,13 +37,13 @@ export function PersonCard({ person }: { person: PersonSummary }) {
       </div>
       {person.id === me.id ? (
         <Button asChild variant="outline" size="sm" className="w-full">
-          <Link to={profile}>View profile</Link>
+          <Link to={profile}>{t("people.viewProfile")}</Link>
         </Button>
       ) : (
         <Button asChild variant="secondary" size="sm" className="w-full">
           <Link to={`/chat?with=${person.id}`}>
             <MessageCircleIcon />
-            Message
+            {t("people.message")}
           </Link>
         </Button>
       )}

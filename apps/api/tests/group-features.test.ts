@@ -297,6 +297,38 @@ describe("knowledge (wiki)", () => {
   });
 });
 
+describe("knowledge images", () => {
+  const image = (u: keyof typeof users, name: string, wikiPageId?: string) =>
+    as(u).attachment.create({
+      data: { key: `test/${run}/wiki/${name}`, name, mimeType: "image/png", size: 1, wikiPageId },
+    });
+
+  it("follow the page's visibility", async () => {
+    const page = await as("bob").wikiPage.create({ data: { groupId: closed, title: "Diagrams" } });
+    const img = await image("bob", "arch.png", page.id);
+    expect(await as("alice").attachment.findUnique({ where: { id: img.id } })).not.toBeNull();
+    // dave only has a PENDING request to the CLOSED group
+    expect(await as("dave").attachment.findUnique({ where: { id: img.id } })).toBeNull();
+  });
+
+  it("can only be attached by someone who may edit the page", async () => {
+    const page = await as("alice").wikiPage.create({ data: { groupId: pub, title: "Public doc" } });
+    // dave can read the PUBLIC page but is not a member
+    await rejected(image("dave", "drive-by.png", page.id));
+    const own = await image("dave", "later.png");
+    await rejected(
+      as("dave").attachment.update({ where: { id: own.id }, data: { wikiPageId: page.id } }),
+    );
+    // a member links an earlier upload when creating a page
+    const draft = await image("bob", "draft.png");
+    const created = await as("bob").wikiPage.create({
+      data: { groupId: pub, title: "With image", attachments: { connect: [{ id: draft.id }] } },
+      include: { attachments: true },
+    });
+    expect(created.attachments.map((a) => a.id)).toEqual([draft.id]);
+  });
+});
+
 describe("group events", () => {
   let eventId: string;
 

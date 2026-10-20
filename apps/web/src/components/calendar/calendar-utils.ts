@@ -20,15 +20,17 @@ import {
 } from "date-fns"
 import { RRule, type Weekday } from "rrule"
 import type { db } from "@/lib/api-client"
+import i18n, { currentLanguage, dateLocale } from "@/lib/i18n"
 
 export type CalendarView = "month" | "week" | "day" | "agenda"
 
-export const CALENDAR_VIEWS: { value: CalendarView; label: string }[] = [
-  { value: "month", label: "Month" },
-  { value: "week", label: "Week" },
-  { value: "day", label: "Day" },
-  { value: "agenda", label: "Agenda" },
-]
+export const CALENDAR_VIEWS: CalendarView[] = ["month", "week", "day", "agenda"]
+
+type FormatKey = keyof typeof import("@/locales/en/calendar").calendar.formats
+
+/** `format` with the active date-fns locale and a per-language pattern from `calendar.formats`. */
+const fmt = (d: Date, key: FormatKey) =>
+  format(d, i18n.t(`calendar.formats.${key}`), { locale: dateLocale() })
 
 export const AGENDA_DAYS = 30
 
@@ -89,13 +91,13 @@ export function stepDate(view: CalendarView, date: Date, dir: 1 | -1) {
 }
 
 export function viewTitle(view: CalendarView, date: Date) {
-  if (view === "month") return format(date, "MMMM yyyy")
-  if (view === "day") return format(date, "EEEE, MMMM d, yyyy")
+  if (view === "month") return fmt(date, "monthYear")
+  if (view === "day") return fmt(date, "dayTitle")
   const { start, end } = viewRange(view, date)
-  if (isSameMonth(start, end)) return format(start, "MMMM yyyy")
+  if (isSameMonth(start, end)) return fmt(start, "monthYear")
   if (isSameYear(start, end))
-    return `${format(start, "MMM")} – ${format(end, "MMM yyyy")}`
-  return `${format(start, "MMM yyyy")} – ${format(end, "MMM yyyy")}`
+    return `${fmt(start, currentLanguage() === "ja" ? "shortMonthYear" : "shortMonth")} – ${fmt(end, "shortMonthYear")}`
+  return `${fmt(start, "shortMonthYear")} – ${fmt(end, "shortMonthYear")}`
 }
 
 export function daysOf(start: Date, end: Date) {
@@ -233,16 +235,14 @@ const WEEKDAYS = [
 
 export function repeatLabel(option: RepeatOption, start: Date) {
   switch (option) {
-    case "none":
-      return "Does not repeat"
-    case "daily":
-      return "Daily"
     case "weekly":
-      return `Weekly on ${format(start, "EEEE")}`
-    case "weekdays":
-      return "Every weekday (Mon–Fri)"
+      return i18n.t("calendar.repeat.weekly", {
+        weekday: format(start, "EEEE", { locale: dateLocale() }),
+      })
     case "monthly":
-      return `Monthly on day ${format(start, "d")}`
+      return i18n.t("calendar.repeat.monthly", { day: start.getDate() })
+    default:
+      return i18n.t(`calendar.repeat.${option}`)
   }
 }
 
@@ -272,11 +272,19 @@ export function parseRepeat(rrule: string | null | undefined): RepeatOption {
   return "daily"
 }
 
-export function describeRrule(rrule: string) {
+const KNOWN_RULE =
+  /^(FREQ=DAILY|FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR|FREQ=WEEKLY;BYDAY=(SU|MO|TU|WE|TH|FR|SA)|FREQ=MONTHLY;BYMONTHDAY=\d+)$/
+
+/** Human description of a rule; the rules this app writes get translated labels. */
+export function describeRrule(rrule: string, start: Date) {
+  const rule = rrule.replace(/^RRULE:/, "").toUpperCase()
+  if (KNOWN_RULE.test(rule)) return repeatLabel(parseRepeat(rule), start)
+  // rrule's toText() only speaks English
+  if (currentLanguage() !== "en") return i18n.t("calendar.repeats")
   try {
     return RRule.fromString(rrule).toText()
   } catch {
-    return "Repeats"
+    return i18n.t("calendar.repeats")
   }
 }
 
@@ -351,17 +359,28 @@ export function formatTimeRange(o: {
   end: Date
   allDay: boolean
 }) {
+  const allDay = i18n.t("calendar.allDay")
   if (o.allDay) {
     const last = addMilliseconds(o.end, -1)
     return isSameDay(o.start, last) || o.end <= o.start
-      ? `${format(o.start, "EEEE, MMMM d")} · All day`
-      : `${format(o.start, "MMM d")} – ${format(last, "MMM d")} · All day`
+      ? `${fmt(o.start, "longDay")} · ${allDay}`
+      : `${fmt(o.start, "shortDay")} – ${fmt(last, "shortDay")} · ${allDay}`
   }
+  const locale = dateLocale()
   if (isSameDay(o.start, o.end))
-    return `${format(o.start, "EEEE, MMMM d")} · ${format(o.start, "p")} – ${format(o.end, "p")}`
-  return `${format(o.start, "MMM d, p")} – ${format(o.end, "MMM d, p")}`
+    return `${fmt(o.start, "longDay")} · ${format(o.start, "p", { locale })} – ${format(o.end, "p", { locale })}`
+  return `${fmt(o.start, "shortDayTime")} – ${fmt(o.end, "shortDayTime")}`
 }
 
 export function shortTimeLabel(d: Date) {
-  return format(d, d.getMinutes() === 0 ? "h a" : "h:mm a")
+  return fmt(d, d.getMinutes() === 0 ? "hour" : "hourMinute")
+}
+
+/** Short date for labels inside the calendar (agenda range, headers). */
+export function shortDayLabel(d: Date) {
+  return fmt(d, "shortDay")
+}
+
+export function agendaDayLabel(d: Date) {
+  return fmt(d, "agendaDay")
 }

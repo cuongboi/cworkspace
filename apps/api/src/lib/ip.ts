@@ -1,3 +1,4 @@
+import { env } from "@/env";
 import { isIP } from "node:net";
 
 /** IPv4 and IPv6 addresses as bigints, for CIDR checks (IPv4-mapped IPv6 is treated as IPv4). */
@@ -84,3 +85,17 @@ export function hostAllowed(host: string, allowlist: string[]) {
 
 const HOST_RE = /^(\*\.)?([a-z0-9-]+\.)*[a-z0-9-]+$/i;
 export const isValidHostRule = (value: string) => value.length <= 253 && HOST_RE.test(value);
+
+type IpContext = {
+  request: Request;
+  server: { requestIP(r: Request): { address: string } | null } | null;
+};
+
+/** The caller's address: the first `X-Forwarded-For` hop behind a trusted proxy, else the socket. */
+export function clientIp({ request, server }: IpContext) {
+  if (env.TRUST_PROXY) {
+    const forwarded = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim();
+    if (forwarded) return forwarded;
+  }
+  return server?.requestIP(request)?.address ?? null;
+}

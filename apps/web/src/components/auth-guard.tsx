@@ -1,11 +1,13 @@
+import { useTranslation } from "react-i18next"
 import { Navigate, Outlet, useLocation } from "react-router-dom"
 
 import { authClient } from "@/lib/auth-client"
 
 function FullPageSpinner() {
+  const { t } = useTranslation()
   return (
     <div className="flex min-h-svh items-center justify-center text-sm text-muted-foreground">
-      Loading…
+      {t("common.loading")}
     </div>
   )
 }

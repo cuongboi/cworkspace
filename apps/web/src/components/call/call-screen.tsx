@@ -63,6 +63,7 @@ import { RemoteAudio, StreamVideo } from "./media-elements"
 import { ParticipantTile, type TileProps } from "./participant-tile"
 import { TranscriptPanel } from "./transcript-panel"
 import { ScrollArea } from "@/components/ui/scroll-area"
+import { useTranslation } from "react-i18next"
 
 /**
  * The call page body: pre-join lobby (camera preview + toggles; the "Join" click also unlocks
@@ -71,6 +72,7 @@ import { ScrollArea } from "@/components/ui/scroll-area"
  */
 export function CallScreen({ callId }: { callId: string }) {
   const { me } = useApp()
+  const { t } = useTranslation()
   const info = useDbQuery(["call", "findUnique", callId, "lobby"], () =>
     db.call.findUnique({
       where: { id: callId },
@@ -100,11 +102,13 @@ export function CallScreen({ callId }: { callId: string }) {
       {unavailable ? (
         <CallEnded
           reason={
-            info.isError ? "This call isn't available" : "This call has ended"
+            info.isError
+              ? t("call.ended.unavailable")
+              : t("call.ended.thisEnded")
           }
         />
       ) : call.phase === "ended" ? (
-        <CallEnded reason={call.endedReason ?? "The call has ended"} />
+        <CallEnded reason={call.endedReason ?? t("call.ended.default")} />
       ) : info.isPending ? (
         <div className="flex flex-1 items-center justify-center">
           <Spinner className="size-6" />
@@ -146,6 +150,7 @@ function Lobby({
   inCall: UserSummary[]
 }) {
   const goBack = useGoBack()
+  const { t } = useTranslation()
   const isVideo = call.kind === "VIDEO"
   const others = inCall.filter((u) => u.id !== self.id)
   const joining = call.phase === "joining"
@@ -166,12 +171,12 @@ function Lobby({
                 {call.mediaReady ? (
                   <>
                     <UserAvatar user={self} size="xl" />
-                    {isVideo ? "Your camera is off" : "Audio call"}
+                    {isVideo ? t("call.lobby.cameraOff") : t("call.audioCall")}
                   </>
                 ) : (
                   <>
                     <Spinner className="size-5" />
-                    Starting your camera and microphone…
+                    {t("call.lobby.startingMedia")}
                   </>
                 )}
               </div>
@@ -210,9 +215,9 @@ function Lobby({
               ) : (
                 <PhoneIcon className="size-4" aria-hidden />
               )}
-              {isVideo ? "Video call" : "Audio call"}
+              {isVideo ? t("call.videoCall") : t("call.audioCall")}
             </div>
-            <h1 className="text-2xl font-semibold">Ready to join?</h1>
+            <h1 className="text-2xl font-semibold">{t("call.lobby.ready")}</h1>
             {others.length ? (
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
                 <div className="flex -space-x-2">
@@ -226,12 +231,12 @@ function Lobby({
                   ))}
                 </div>
                 {others.length === 1
-                  ? `${others[0]?.name} is in the call`
-                  : `${others.length} people are in the call`}
+                  ? t("call.lobby.oneInCall", { name: others[0]?.name })
+                  : t("call.lobby.peopleInCall", { count: others.length })}
               </div>
             ) : (
               <p className="text-sm text-muted-foreground">
-                No one else is here yet.
+                {t("call.lobby.nobody")}
               </p>
             )}
             <div className="flex gap-2">
@@ -242,7 +247,7 @@ function Lobby({
                 disabled={!call.connected || joining}
               >
                 {joining ? <Spinner /> : null}
-                {joining ? "Joining…" : "Join now"}
+                {joining ? t("call.lobby.joining") : t("call.lobby.join")}
               </Button>
               <Button
                 size="lg"
@@ -250,12 +255,12 @@ function Lobby({
                 onClick={goBack}
                 disabled={joining}
               >
-                Cancel
+                {t("common.cancel")}
               </Button>
             </div>
             {!call.connected ? (
               <p className="text-xs text-muted-foreground">
-                Connecting to the server…
+                {t("call.lobby.connecting")}
               </p>
             ) : null}
           </div>
@@ -293,6 +298,7 @@ function InCall({
   conversationId: string | null
 }) {
   const goBack = useGoBack()
+  const { t } = useTranslation()
   const isMobile = useIsMobile()
   const chat = useCallChat(conversationId, self.id)
   const transcript = useTranscriptPanel()
@@ -345,22 +351,24 @@ function InCall({
   const secondary: SecondaryControl[] = [
     ...(canShare
       ? [
-        {
-          key: "screen",
-          label: call.screen ? "Stop presenting" : "Share screen",
-          control: (
-            <ScreenButton
-              key="screen"
-              on={call.screen}
-              onToggle={call.toggleScreen}
-            />
-          ),
-        },
-      ]
+          {
+            key: "screen",
+            label: call.screen
+              ? t("call.room.stopPresenting")
+              : t("call.room.shareScreen"),
+            control: (
+              <ScreenButton
+                key="screen"
+                on={call.screen}
+                onToggle={call.toggleScreen}
+              />
+            ),
+          },
+        ]
       : []),
     {
       key: "devices",
-      label: "Audio and video",
+      label: t("call.room.audioVideo"),
       control: (
         <DeviceMenu
           key="devices"
@@ -373,7 +381,7 @@ function InCall({
     },
     {
       key: "captions",
-      label: "Captions",
+      label: t("call.room.captions"),
       control: (
         <CaptionsButton
           key="captions"
@@ -388,11 +396,17 @@ function InCall({
     },
     {
       key: "transcript",
-      label: transcript.open ? "Hide transcript" : "Transcript",
+      label: transcript.open
+        ? t("call.room.hideTranscript")
+        : t("call.room.transcript"),
       control: (
         <ControlButton
           key="transcript"
-          label={transcript.open ? "Hide transcript" : "Show transcript"}
+          label={
+            transcript.open
+              ? t("call.room.hideTranscript")
+              : t("call.room.showTranscript")
+          }
           aria-pressed={transcript.open}
           onClick={transcript.toggle}
         >
@@ -402,23 +416,25 @@ function InCall({
     },
     ...(conversationId
       ? [
-        {
-          key: "chat",
-          label: chat.open ? "Hide chat" : "Chat",
-          control: (
-            <ControlButton
-              key="chat"
-              label={chat.open ? "Hide chat" : "Show chat"}
-              aria-pressed={chat.open}
-              className="relative"
-              onClick={chat.toggle}
-            >
-              <MessageSquareIcon />
-              {chat.unread ? <UnreadDot /> : null}
-            </ControlButton>
-          ),
-        },
-      ]
+          {
+            key: "chat",
+            label: chat.open ? t("call.room.hideChat") : t("call.room.chat"),
+            control: (
+              <ControlButton
+                key="chat"
+                label={
+                  chat.open ? t("call.room.hideChat") : t("call.room.showChat")
+                }
+                aria-pressed={chat.open}
+                className="relative"
+                onClick={chat.toggle}
+              >
+                <MessageSquareIcon />
+                {chat.unread ? <UnreadDot /> : null}
+              </ControlButton>
+            ),
+          },
+        ]
       : []),
   ]
 
@@ -431,19 +447,24 @@ function InCall({
 
         <header className="flex shrink-0 items-center gap-3 px-4 pt-3 pb-2">
           <h1 className="min-w-0 truncate text-sm font-medium">
-            {call.title ?? "Call"}
+            {call.title ?? t("call.title")}
           </h1>
           {call.phase === "reconnecting" ? (
             <Badge variant="secondary" className="gap-1">
               <WifiOffIcon className="size-3" aria-hidden />
-              Reconnecting…
+              {t("call.room.reconnecting")}
             </Badge>
           ) : null}
           <div className="ml-auto flex items-center gap-3 text-xs text-muted-foreground">
-            <span className="flex items-center gap-1" title="Participants">
+            <span
+              className="flex items-center gap-1"
+              title={t("call.room.participants")}
+            >
               <UsersIcon className="size-3.5" aria-hidden />
-              {tiles.length}
-              <span className="sr-only"> participants</span>
+              <span aria-hidden>{tiles.length}</span>
+              <span className="sr-only">
+                {t("call.room.participantCount", { count: tiles.length })}
+              </span>
             </span>
             <Elapsed since={call.joinedAt} />
           </div>
@@ -464,8 +485,10 @@ function InCall({
                 />
                 <div className="absolute top-2 left-2 rounded-md bg-background/70 px-2 py-1 text-xs backdrop-blur-sm">
                   {presenting === SELF_ID
-                    ? "You are presenting"
-                    : `${remotePresenter?.user.name} is presenting`}
+                    ? t("call.room.youPresenting")
+                    : t("call.room.presenting", {
+                        name: remotePresenter?.user.name,
+                      })}
                 </div>
               </div>
               <ScrollArea orientation="horizontal" className="shrink-0">
@@ -505,16 +528,13 @@ function InCall({
           )}
           {call.participants.length === 0 && call.phase === "in-call" ? (
             <output className="pointer-events-none absolute inset-x-0 top-4 mx-auto w-fit rounded-full bg-background/70 px-3 py-1 text-sm text-muted-foreground backdrop-blur-sm">
-              Waiting for others to join…
+              {t("call.room.waiting")}
             </output>
           ) : null}
           {call.captionsActive ? (
             <output className="pointer-events-none absolute top-4 left-4 z-10 flex max-w-[calc(100%-2rem)] items-center gap-1.5 rounded-full bg-background/70 px-3 py-1 text-xs text-muted-foreground backdrop-blur-sm">
               <CaptionsIcon className="size-3.5 shrink-0" />
-              <span>
-                Live captions on: speech is transcribed and translated by Google
-                Gemini, nothing is kept after the call
-              </span>
+              <span>{t("call.room.captionsNotice")}</span>
             </output>
           ) : null}
           {call.captions.enabled ? (
@@ -564,7 +584,7 @@ type SecondaryControl = { key: string; label: string; control: ReactNode }
 
 function UnreadDot() {
   return (
-    <span className="absolute top-1 right-1 size-2.5 rounded-full bg-red-500 ring-2 ring-background" />
+    <span className="absolute top-1 right-1 size-2.5 rounded-full bg-destructive ring-2 ring-background" />
   )
 }
 
@@ -580,12 +600,15 @@ function MoreControls({
   items: SecondaryControl[]
   unread: boolean
 }) {
+  const { t } = useTranslation()
   const [open, setOpen] = useState(false)
   return (
     <SpeedDial open={open} onOpenChange={setOpen}>
       <SpeedDialTrigger
         variant="secondary"
-        aria-label={open ? "Close more controls" : "More controls"}
+        aria-label={
+          open ? t("call.room.closeMoreControls") : t("call.room.moreControls")
+        }
         className="relative size-12 [&_svg:not([class*='size-'])]:size-5"
       >
         {open ? <XIcon /> : <EllipsisIcon />}
@@ -651,12 +674,13 @@ function CallChat({
   open: boolean
   onClose: () => void
 }) {
+  const { t } = useTranslation()
   const isMobile = useIsMobile()
   const close = (
     <Button
       variant="ghost"
       size="icon-sm"
-      aria-label="Close chat"
+      aria-label={t("call.room.closeChat")}
       onClick={onClose}
     >
       <XIcon />
@@ -671,9 +695,9 @@ function CallChat({
           showCloseButton={false}
           className="dark gap-0 bg-background p-0 text-foreground data-[side=bottom]:h-[80svh]"
         >
-          <SheetTitle className="sr-only">Chat</SheetTitle>
+          <SheetTitle className="sr-only">{t("call.room.chat")}</SheetTitle>
           <SheetDescription className="sr-only">
-            Messages of this call's conversation
+            {t("call.room.chatDescription")}
           </SheetDescription>
           <ChatThread
             conversationId={conversationId}
@@ -687,7 +711,7 @@ function CallChat({
   if (!open) return null
   return (
     <aside
-      aria-label="Chat"
+      aria-label={t("call.room.chat")}
       className="flex w-80 shrink-0 flex-col border-l lg:w-96"
     >
       <ChatThread
@@ -700,6 +724,7 @@ function CallChat({
 }
 
 function Elapsed({ since }: { since: number | null }) {
+  const { t } = useTranslation()
   const [now, setNow] = useState(() => Date.now())
   useEffect(() => {
     if (!since) return
@@ -713,7 +738,7 @@ function Elapsed({ since }: { since: number | null }) {
   const s = total % 60
   const pad = (n: number) => String(n).padStart(2, "0")
   return (
-    <time className="tabular-nums" title="Call duration">
+    <time className="tabular-nums" title={t("call.room.duration")}>
       {h ? `${h}:${pad(m)}:${pad(s)}` : `${pad(m)}:${pad(s)}`}
     </time>
   )
@@ -723,6 +748,7 @@ function Elapsed({ since }: { since: number | null }) {
 
 function CallEnded({ reason }: { reason: string }) {
   const goBack = useGoBack()
+  const { t } = useTranslation()
   return (
     <div className="flex flex-1 items-center justify-center p-6">
       <Empty>
@@ -730,13 +756,13 @@ function CallEnded({ reason }: { reason: string }) {
           <EmptyMedia variant="icon">
             <PhoneOffIcon />
           </EmptyMedia>
-          <EmptyTitle>Call ended</EmptyTitle>
+          <EmptyTitle>{t("call.ended.title")}</EmptyTitle>
           <EmptyDescription>{reason}</EmptyDescription>
         </EmptyHeader>
         <EmptyContent>
           <Button onClick={goBack}>
             <ArrowLeftIcon data-icon="inline-start" />
-            Back
+            {t("common.back")}
           </Button>
         </EmptyContent>
       </Empty>

@@ -1,6 +1,7 @@
 import { cn } from "cn"
 import { FileIcon, XIcon } from "lucide-react"
 import { useState } from "react"
+import { useTranslation } from "react-i18next"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog"
 import { fileUrl } from "@/lib/upload"
@@ -38,6 +39,7 @@ export function AttachmentList({
   onRemove?: (id: string) => void
   className?: string
 }) {
+  const { t } = useTranslation()
   const [open, setOpen] = useState<AttachmentLike | null>(null)
   if (attachments.length === 0) return null
   const images = attachments.filter(isImage)
@@ -58,7 +60,7 @@ export function AttachmentList({
                 type="button"
                 className="block w-full"
                 onClick={() => setOpen(img)}
-                aria-label={`Open ${img.name}`}
+                aria-label={t("feed.attachments.open", { name: img.name })}
               >
                 {/* biome-ignore lint/performance/noImgElement: authenticated redirect URLs can't go through next/image */}
                 <img
@@ -93,14 +95,16 @@ export function AttachmentList({
           </span>
           <span className="flex min-w-0 flex-1 flex-col">
             <span className="truncate text-xs font-semibold">{f.name}</span>
-            <span className="truncate text-[10px] text-muted-foreground">
+            <span className="truncate text-2xs text-muted-foreground">
               {formatBytes(f.size)}
               {f.mimeType ? ` · ${fileKind(f)}` : ""}
             </span>
           </span>
           {onRemove ? null : (
-            <Button asChild variant="outline" size="sm" className="h-7 text-xs">
-              <a href={fileUrl(f.id, { download: true })}>Download</a>
+            <Button asChild variant="outline" size="xs">
+              <a href={fileUrl(f.id, { download: true })}>
+                {t("feed.attachments.download")}
+              </a>
             </Button>
           )}
           {onRemove ? (
@@ -109,7 +113,7 @@ export function AttachmentList({
               size="icon"
               className="size-7"
               onClick={() => onRemove(f.id)}
-              aria-label="Remove"
+              aria-label={t("common.remove")}
             >
               <XIcon />
             </Button>
@@ -134,13 +138,14 @@ export function AttachmentList({
 }
 
 function RemoveButton({ onClick }: { onClick: () => void }) {
+  const { t } = useTranslation()
   return (
     <Button
       variant="secondary"
       size="icon"
       className="absolute top-1 right-1 size-7 rounded-full opacity-90"
       onClick={onClick}
-      aria-label="Remove"
+      aria-label={t("common.remove")}
     >
       <XIcon />
     </Button>

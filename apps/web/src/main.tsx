@@ -4,10 +4,12 @@ import { createRoot } from "react-dom/client"
 import { RouterProvider } from "react-router-dom"
 
 import "./index.css"
+import "@/lib/i18n"
 import { ThemeProvider } from "@/components/theme-provider.tsx"
 import { Toaster } from "@/components/ui/sonner"
 import { TooltipProvider } from "@/components/ui/tooltip"
 import { SocketProvider } from "@/hooks/use-socket"
+import { registerServiceWorker } from "@/lib/pwa"
 import { createQueryClient } from "@/lib/query"
 import { router } from "@/router.tsx"
 
@@ -21,11 +23,13 @@ function App() {
             <RouterProvider router={router} />
           </TooltipProvider>
         </SocketProvider>
-        <Toaster richColors position="top-right" />
+        <Toaster richColors position="top-center" />
       </QueryClientProvider>
     </ThemeProvider>
   )
 }
+
+registerServiceWorker()
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>

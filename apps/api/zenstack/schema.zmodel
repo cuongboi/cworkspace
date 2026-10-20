@@ -175,6 +175,12 @@ enum WikiEditPolicy {
     ADMINS  // group admins and moderators
 }
 
+// who may start posts in a group (ADMINS = announcement group)
+enum GroupPostPolicy {
+    MEMBERS // every active member
+    ADMINS  // group admins and moderators
+}
+
 enum GroupPrivacy {
     PUBLIC  // anyone in the company can see the group and its posts, and join
     CLOSED  // anyone in the company can see the group; posts are members-only; joining needs approval
@@ -214,6 +220,11 @@ model Group {
     wikiPages      WikiPage[]
     wikiEditPolicy WikiEditPolicy @default(MEMBERS)
     channels       Channel[]
+    // optional features; switching one off hides it and freezes its data (nothing is deleted)
+    wikiEnabled     Boolean         @default(true)
+    channelsEnabled Boolean         @default(true)
+    calendarEnabled Boolean         @default(true)
+    postPolicy      GroupPostPolicy @default(MEMBERS)
 
     @@deny('all', auth() == null)
     @@allow('read', privacy != SECRET || members?[userId == auth().id && status == ACTIVE])
@@ -295,6 +306,7 @@ model Post {
     @@allow('update', authorId == auth().id)
     @@allow('update,delete', group.members?[userId == auth().id && status == ACTIVE && role in [ADMIN, MODERATOR]] || (auth().role == 'admin' || auth().permissions?[model == currentModel() && currentOperation() in actions]))
     @@allow('delete', authorId == auth().id)
+    @@deny('create', group.postPolicy == ADMINS && !(group.members?[userId == auth().id && status == ACTIVE && role in [ADMIN, MODERATOR]]) && !(auth().role == 'admin'))
     @@deny('post-update', groupId != before().groupId || authorId != before().authorId)
 
     @@index([groupId, createdAt])
@@ -442,17 +454,23 @@ model Attachment {
     comment        Comment?      @relation(fields: [commentId], references: [id], onDelete: Cascade)
     messageId      String?
     message        Message?      @relation(fields: [messageId], references: [id], onDelete: Cascade)
+    // images embedded in a Knowledge page
+    wikiPageId     String?
+    wikiPage       WikiPage?     @relation(fields: [wikiPageId], references: [id], onDelete: SetNull)
     createdAt      DateTime      @default(now())
 
     @@deny('all', auth() == null)
-    @@allow('read', uploaderId == auth().id || isPublic || check(post, 'read') || check(comment, 'read') || check(message, 'read'))
+    @@allow('read', uploaderId == auth().id || isPublic || check(post, 'read') || check(comment, 'read') || check(message, 'read') || check(wikiPage, 'read'))
     // created by POST /api/uploads; the uploader attaches it to their own post/comment/message
     @@allow('create,update,delete', uploaderId == auth().id)
     @@deny('post-update', uploaderId != before().uploaderId || key != before().key || mimeType != before().mimeType)
+    // only someone who may edit a page can attach files to it
+    @@deny('create,post-update', wikiPageId != null && !check(wikiPage, 'update'))
 
     @@index([postId])
     @@index([commentId])
     @@index([messageId])
+    @@index([wikiPageId])
     @@map('attachment')
 }
 
@@ -688,6 +706,7 @@ model Event {
     @@deny('post-update', creatorId != before().creatorId)
     @@deny('post-update', endAt < startAt)
     @@deny('create', endAt < startAt)
+    @@deny('create', groupId != null && !group.calendarEnabled)
 
     @@index([startAt])
     @@index([groupId])
@@ -788,12 +807,15 @@ model WikiPage {
     updatedAt   DateTime       @updatedAt
     // who edited what and when lives here (authorId is enforced), not on the page
     revisions   WikiRevision[]
+    attachments Attachment[]
 
     @@allow('read', check(group, 'read') && (group.privacy == PUBLIC || group.members?[userId == auth().id && status == ACTIVE]))
     @@allow('create,update', group.members?[userId == auth().id && status == ACTIVE && (group.wikiEditPolicy == MEMBERS || role in [ADMIN, MODERATOR])] || (auth().role == 'admin' || auth().permissions?[model == currentModel() && currentOperation() in actions]))
     @@allow('delete', group.members?[userId == auth().id && status == ACTIVE && role in [ADMIN, MODERATOR]] || (auth().role == 'admin' || auth().permissions?[model == currentModel() && currentOperation() in actions]))
     @@allow('delete', createdById == auth().id && group.members?[userId == auth().id && status == ACTIVE && group.wikiEditPolicy == MEMBERS])
     @@deny('create', createdById != auth().id)
+    // a disabled wiki is read-only
+    @@deny('create,update', !group.wikiEnabled)
     // the tree never spans groups (cycles are prevented by POST /api/groups/:id/wiki/:pageId/move)
     @@deny('create,post-update', parentId != null && parent.groupId != groupId)
     @@deny('post-update', groupId != before().groupId || createdById != before().createdById)

@@ -1,55 +1,47 @@
-import {
-  BarChart3Icon,
-  ImageIcon,
-  PaperclipIcon,
-  UsersIcon,
-} from "lucide-react"
-import { type ClipboardEvent, useRef, useState } from "react"
-import { toast } from "sonner"
-import { AttachmentList } from "@/components/common/attachment-list"
-import { MentionTextarea } from "@/components/common/mention-textarea"
-import { UserAvatar } from "@/components/common/user-avatar"
-import { Button } from "@/components/ui/button"
-import { Card } from "@/components/ui/card"
+import { BarChart3Icon, ImageIcon, PaperclipIcon, UsersIcon } from "lucide-react";
+import { type ClipboardEvent, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
+import { toast } from "sonner";
+import { AttachmentList } from "@/components/common/attachment-list";
+import { MentionTextarea } from "@/components/common/mention-textarea";
+import { UserAvatar } from "@/components/common/user-avatar";
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select"
-import { Spinner } from "@/components/ui/spinner"
-import { useApp } from "@/hooks/use-app"
-import { useUploads } from "@/hooks/use-uploads"
-import { db } from "@/lib/api-client"
-import { useDbMutation, useDbQuery } from "@/lib/query"
+} from "@/components/ui/select";
+import { Spinner } from "@/components/ui/spinner";
+import { useApp } from "@/hooks/use-app";
+import { useUploads } from "@/hooks/use-uploads";
+import { db } from "@/lib/api-client";
+import { errorMessage } from "@/lib/i18n";
+import { useDbMutation, useDbQuery } from "@/lib/query";
 import {
   emptyPoll,
   PollBuilder,
   type PollDraft,
   pollCreateInput,
   pollIsValid,
-} from "./poll-builder"
+} from "./poll-builder";
 
 /**
  * "What's on your mind?" composer. With `groupId` it posts to that group; otherwise the author
  * picks one of their groups (defaults to "All company").
  */
-export function PostComposer({
-  groupId,
-  groupName,
-}: {
-  groupId?: string
-  groupName?: string
-}) {
-  const { me } = useApp()
-  const [content, setContent] = useState("")
-  const [poll, setPoll] = useState<PollDraft | null>(null)
-  const [picked, setPicked] = useState<string | null>(null)
-  const [expanded, setExpanded] = useState(false)
-  const uploads = useUploads()
-  const fileRef = useRef<HTMLInputElement>(null)
-  const imageRef = useRef<HTMLInputElement>(null)
+export function PostComposer({ groupId, groupName }: { groupId?: string; groupName?: string }) {
+  const { t } = useTranslation();
+  const { me } = useApp();
+  const [content, setContent] = useState("");
+  const [poll, setPoll] = useState<PollDraft | null>(null);
+  const [picked, setPicked] = useState<string | null>(null);
+  const [expanded, setExpanded] = useState(false);
+  const uploads = useUploads();
+  const fileRef = useRef<HTMLInputElement>(null);
+  const imageRef = useRef<HTMLInputElement>(null);
 
   const { data: myGroups = [] } = useDbQuery(
     ["groupMember", "findMany", "composer", me.id],
@@ -64,11 +56,10 @@ export function PostComposer({
         },
         orderBy: { createdAt: "asc" },
       }),
-    { enabled: !groupId }
-  )
-  const defaultGroup =
-    myGroups.find((m) => m.group.isDefault)?.group ?? myGroups[0]?.group
-  const targetId = groupId ?? picked ?? defaultGroup?.id ?? null
+    { enabled: !groupId },
+  );
+  const defaultGroup = myGroups.find((m) => m.group.isDefault)?.group ?? myGroups[0]?.group;
+  const targetId = groupId ?? picked ?? defaultGroup?.id ?? null;
 
   const create = useDbMutation(
     (vars: { groupId: string; content: string; poll: PollDraft | null }) =>
@@ -81,42 +72,42 @@ export function PostComposer({
           ...(vars.poll ? { poll: pollCreateInput(vars.poll) } : {}),
         },
       }),
-    { invalidates: ["post"] }
-  )
+    { invalidates: ["post"] },
+  );
 
-  const hasBody = content.trim().length > 0 || uploads.attachments.length > 0
+  const hasBody = content.trim().length > 0 || uploads.attachments.length > 0;
   const canPost =
     Boolean(targetId) &&
     !uploads.uploading &&
     (poll ? pollIsValid(poll) : hasBody) &&
-    !create.isPending
+    !create.isPending;
 
   const submit = () => {
-    if (!canPost || !targetId) return
+    if (!canPost || !targetId) return;
     create.mutate(
       { groupId: targetId, content: content.trim(), poll },
       {
         onSuccess: () => {
-          setContent("")
-          setPoll(null)
-          uploads.reset()
-          setExpanded(false)
-          toast.success("Posted")
+          setContent("");
+          setPoll(null);
+          uploads.reset();
+          setExpanded(false);
+          toast.success(t("feed.composer.posted"));
         },
-        onError: (err) => toast.error(err.message),
-      }
-    )
-  }
+        onError: (err) => toast.error(errorMessage(err)),
+      },
+    );
+  };
 
   const onPaste = (e: ClipboardEvent) => {
     if (e.clipboardData.files.length) {
-      e.preventDefault()
-      setExpanded(true)
-      void uploads.add(e.clipboardData.files)
+      e.preventDefault();
+      setExpanded(true);
+      void uploads.add(e.clipboardData.files);
     }
-  }
+  };
 
-  const open = expanded || hasBody || poll !== null || uploads.uploading
+  const open = expanded || hasBody || poll !== null || uploads.uploading;
 
   return (
     <Card className="gap-3 py-4" onPaste={onPaste}>
@@ -129,17 +120,19 @@ export function PostComposer({
             onFocus={() => setExpanded(true)}
             onKeyDown={(e) => {
               if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
-                e.preventDefault()
-                submit()
+                e.preventDefault();
+                submit();
               }
             }}
             rows={open ? 3 : 1}
             placeholder={
               groupName
-                ? `Write something to ${groupName}…`
-                : `What's on your mind, ${me.name.split(" ")[0]}?`
+                ? t("feed.composer.placeholderGroup", { group: groupName })
+                : t("feed.composer.placeholder", {
+                    name: me.name.split(" ")[0],
+                  })
             }
-            aria-label="Write a post"
+            aria-label={t("feed.composer.label")}
             className="min-h-10 rounded-2xl border-0 bg-muted px-4 py-2.5 shadow-none focus-visible:ring-1 dark:bg-muted"
           />
         </div>
@@ -147,17 +140,11 @@ export function PostComposer({
 
       {uploads.attachments.length > 0 || uploads.pending.length > 0 ? (
         <div className="flex flex-col gap-2 px-4">
-          <AttachmentList
-            attachments={uploads.attachments}
-            onRemove={uploads.remove}
-          />
+          <AttachmentList attachments={uploads.attachments} onRemove={uploads.remove} />
           {uploads.pending.map((p) => (
-            <div
-              key={p.key}
-              className="flex items-center gap-2 text-sm text-muted-foreground"
-            >
+            <div key={p.key} className="flex items-center gap-2 text-sm text-muted-foreground">
               <Spinner className="size-3.5" />
-              Uploading {p.name}…
+              {t("feed.composer.uploading", { name: p.name })}
             </div>
           ))}
         </div>
@@ -165,15 +152,11 @@ export function PostComposer({
 
       {poll ? (
         <div className="px-4">
-          <PollBuilder
-            value={poll}
-            onChange={setPoll}
-            onRemove={() => setPoll(null)}
-          />
+          <PollBuilder value={poll} onChange={setPoll} onRemove={() => setPoll(null)} />
         </div>
       ) : null}
 
-      <div className="flex flex-wrap items-center gap-1 border-t px-3 pt-3">
+      <div className="flex flex-wrap items-center gap-1 border-t px-0 md:px-3 pt-3">
         <input
           ref={imageRef}
           type="file"
@@ -181,9 +164,9 @@ export function PostComposer({
           multiple
           hidden
           onChange={(e) => {
-            if (e.target.files) void uploads.add(e.target.files)
-            e.target.value = ""
-            setExpanded(true)
+            if (e.target.files) void uploads.add(e.target.files);
+            e.target.value = "";
+            setExpanded(true);
           }}
         />
         <input
@@ -192,9 +175,9 @@ export function PostComposer({
           multiple
           hidden
           onChange={(e) => {
-            if (e.target.files) void uploads.add(e.target.files)
-            e.target.value = ""
-            setExpanded(true)
+            if (e.target.files) void uploads.add(e.target.files);
+            e.target.value = "";
+            setExpanded(true);
           }}
         />
         <Button
@@ -204,7 +187,7 @@ export function PostComposer({
           onClick={() => imageRef.current?.click()}
         >
           <ImageIcon />
-          Photo/video
+          {t("feed.composer.photoVideo")}
         </Button>
         <Button
           variant="ghost"
@@ -213,7 +196,7 @@ export function PostComposer({
           onClick={() => fileRef.current?.click()}
         >
           <PaperclipIcon />
-          File
+          {t("feed.composer.file")}
         </Button>
         <Button
           variant="ghost"
@@ -221,12 +204,12 @@ export function PostComposer({
           className="text-muted-foreground"
           aria-pressed={poll !== null}
           onClick={() => {
-            setPoll((p) => (p ? null : emptyPoll()))
-            setExpanded(true)
+            setPoll((p) => (p ? null : emptyPoll()));
+            setExpanded(true);
           }}
         >
           <BarChart3Icon />
-          Poll
+          {t("feed.poll.title")}
         </Button>
 
         <div className="ml-auto flex items-center gap-2">
@@ -235,10 +218,10 @@ export function PostComposer({
               <SelectTrigger
                 size="sm"
                 className="max-w-44"
-                aria-label="Post to group"
+                aria-label={t("feed.composer.postToGroup")}
               >
                 <UsersIcon />
-                <SelectValue placeholder="Choose a group" />
+                <SelectValue placeholder={t("feed.composer.chooseGroup")} />
               </SelectTrigger>
               <SelectContent align="end">
                 {myGroups.map(({ group }) => (
@@ -252,11 +235,11 @@ export function PostComposer({
           {open ? (
             <Button size="sm" onClick={submit} disabled={!canPost}>
               {create.isPending ? <Spinner /> : null}
-              Post
+              {t("feed.composer.post")}
             </Button>
           ) : null}
         </div>
       </div>
     </Card>
-  )
+  );
 }

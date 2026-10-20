@@ -1,4 +1,5 @@
 import { FileTextIcon, SearchIcon, UserIcon, UsersIcon } from "lucide-react"
+import { useTranslation } from "react-i18next"
 import { Link, useNavigate, useSearchParams } from "react-router-dom"
 import { type FormEvent, type ReactNode, useState } from "react"
 import { UserAvatar } from "@/components/common/user-avatar"
@@ -33,6 +34,7 @@ import { db } from "@/lib/api-client"
 import { useDbQuery } from "@/lib/query"
 
 const SearchPage = () => {
+  const { t } = useTranslation()
   const [searchParams] = useSearchParams()
   const q = (searchParams.get("q") ?? "").trim()
 
@@ -41,7 +43,9 @@ const SearchPage = () => {
       <SearchBox key={q} initial={q} />
       {q ? (
         <>
-          <h1 className="text-lg font-semibold">Results for “{q}”</h1>
+          <h1 className="text-lg font-semibold">
+            {t("shell.searchPage.resultsFor", { q })}
+          </h1>
           <PeopleResults q={q} />
           <GroupResults q={q} />
           <PostResults q={q} />
@@ -52,9 +56,9 @@ const SearchPage = () => {
             <EmptyMedia variant="icon">
               <SearchIcon />
             </EmptyMedia>
-            <EmptyTitle>Search your workplace</EmptyTitle>
+            <EmptyTitle>{t("shell.searchPage.emptyTitle")}</EmptyTitle>
             <EmptyDescription>
-              Find people, groups and posts across the company.
+              {t("shell.searchPage.emptyDescription")}
             </EmptyDescription>
           </EmptyHeader>
         </Empty>
@@ -64,6 +68,7 @@ const SearchPage = () => {
 }
 
 function SearchBox({ initial }: { initial: string }) {
+  const { t } = useTranslation()
   const navigate = useNavigate()
   const [value, setValue] = useState(initial)
   const submit = (e: FormEvent) => {
@@ -80,14 +85,14 @@ function SearchBox({ initial }: { initial: string }) {
             type="search"
             value={value}
             onChange={(e) => setValue(e.target.value)}
-            placeholder="Search people, groups and posts"
-            aria-label="Search"
+            placeholder={t("shell.searchPage.placeholder")}
+            aria-label={t("common.search")}
             className="h-10 bg-card pl-9"
             autoFocus={!initial}
           />
         </div>
-        <Button type="submit" className="h-10">
-          Search
+        <Button type="submit" size="lg">
+          {t("common.search")}
         </Button>
       </form>
     </search>
@@ -139,6 +144,7 @@ function NoResults({ children }: { children: ReactNode }) {
 }
 
 function PeopleResults({ q }: { q: string }) {
+  const { t } = useTranslation()
   const { data, isPending } = useDbQuery(
     ["user", "findMany", "search", q],
     () =>
@@ -162,11 +168,15 @@ function PeopleResults({ q }: { q: string }) {
       })
   )
   return (
-    <Section icon={<UserIcon />} title="People" count={data?.length}>
+    <Section
+      icon={<UserIcon />}
+      title={t("shell.search.tabs.user")}
+      count={data?.length}
+    >
       {isPending ? (
         <ListSkeleton />
       ) : !data?.length ? (
-        <NoResults>No people found.</NoResults>
+        <NoResults>{t("shell.searchPage.noPeople")}</NoResults>
       ) : (
         <ItemGroup>
           {data.map((p) => (
@@ -193,6 +203,7 @@ function PeopleResults({ q }: { q: string }) {
 }
 
 function GroupResults({ q }: { q: string }) {
+  const { t } = useTranslation()
   const { me } = useApp()
   const { data, isPending } = useDbQuery(
     ["group", "findMany", "search", q, me.id],
@@ -210,11 +221,15 @@ function GroupResults({ q }: { q: string }) {
       })
   )
   return (
-    <Section icon={<UsersIcon />} title="Groups" count={data?.length}>
+    <Section
+      icon={<UsersIcon />}
+      title={t("shell.search.tabs.group")}
+      count={data?.length}
+    >
       {isPending ? (
         <ListSkeleton />
       ) : !data?.length ? (
-        <NoResults>No groups found.</NoResults>
+        <NoResults>{t("shell.searchPage.noGroups")}</NoResults>
       ) : (
         <ItemGroup>
           {data.map((g) => (
@@ -234,7 +249,7 @@ function GroupResults({ q }: { q: string }) {
                 <ItemDescription className="flex flex-wrap items-center gap-x-1.5">
                   <PrivacyLabel privacy={g.privacy} />
                   <span aria-hidden>·</span>
-                  {g._count.members} member{g._count.members === 1 ? "" : "s"}
+                  {t("groups.memberCount", { count: g._count.members })}
                 </ItemDescription>
               </ItemContent>
               <ItemActions>
@@ -253,6 +268,7 @@ function GroupResults({ q }: { q: string }) {
 }
 
 function PostResults({ q }: { q: string }) {
+  const { t } = useTranslation()
   const { me } = useApp()
   const { data, isPending } = useDbQuery(
     ["post", "findMany", "search", q, me.id],
@@ -268,7 +284,7 @@ function PostResults({ q }: { q: string }) {
     <section className="flex flex-col gap-4" aria-labelledby="search-posts">
       <h2 id="search-posts" className="flex items-center gap-2 font-semibold">
         <FileTextIcon className="size-4 text-muted-foreground" />
-        Posts
+        {t("shell.search.tabs.post")}
         {data ? (
           <span className="font-normal text-muted-foreground">
             · {data.length}
@@ -279,7 +295,7 @@ function PostResults({ q }: { q: string }) {
         <PostSkeleton />
       ) : !data?.length ? (
         <p className="rounded-xl border border-dashed bg-card p-6 text-center text-sm text-muted-foreground">
-          No posts found.
+          {t("shell.searchPage.noPosts")}
         </p>
       ) : (
         data.map((post) => <PostCard key={post.id} post={post} />)

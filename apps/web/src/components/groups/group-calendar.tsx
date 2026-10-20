@@ -2,6 +2,7 @@ import { addHours, setHours, startOfHour } from "date-fns"
 import { ChevronLeftIcon, ChevronRightIcon, PlusIcon } from "lucide-react"
 import { useQueryState } from "nuqs"
 import { useState } from "react"
+import { useTranslation } from "react-i18next"
 import { AgendaView } from "@/components/calendar/agenda-view"
 import {
   type CalendarEvent,
@@ -39,6 +40,7 @@ export function GroupCalendar({
   group: GroupWithMe
   canCreate: boolean
 }) {
+  const { t } = useTranslation()
   const [view, setView] = useState<View>("month")
   const [date, setDate] = useState(() => new Date())
   const [dialog, setDialog] = useState<DialogState>(null)
@@ -78,13 +80,13 @@ export function GroupCalendar({
     <div className="flex flex-col overflow-hidden rounded-xl border bg-card">
       <div className="flex flex-wrap items-center gap-2 border-b px-3 py-2">
         <Button variant="outline" size="sm" onClick={() => setDate(new Date())}>
-          Today
+          {t("calendar.today")}
         </Button>
         <div className="flex items-center">
           <Button
             variant="ghost"
             size="icon-sm"
-            aria-label="Previous"
+            aria-label={t("calendar.previous")}
             onClick={() => setDate(stepDate(view, date, -1))}
           >
             <ChevronLeftIcon />
@@ -92,7 +94,7 @@ export function GroupCalendar({
           <Button
             variant="ghost"
             size="icon-sm"
-            aria-label="Next"
+            aria-label={t("calendar.next")}
             onClick={() => setDate(stepDate(view, date, 1))}
           >
             <ChevronRightIcon />
@@ -112,19 +114,19 @@ export function GroupCalendar({
             spacing={0}
             value={view}
             onValueChange={(v) => v && setView(v as View)}
-            aria-label="View"
+            aria-label={t("calendar.view")}
           >
             <ToggleGroupItem value="month" className="px-3">
-              Month
+              {t("calendar.views.month")}
             </ToggleGroupItem>
             <ToggleGroupItem value="agenda" className="px-3">
-              Agenda
+              {t("calendar.views.agenda")}
             </ToggleGroupItem>
           </ToggleGroup>
           {canCreate ? (
             <Button size="sm" onClick={() => openCreate()}>
               <PlusIcon />
-              <span className="hidden sm:inline">New event</span>
+              <span className="hidden sm:inline">{t("calendar.newEvent")}</span>
             </Button>
           ) : null}
         </div>

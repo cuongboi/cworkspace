@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next"
 import { Link } from "react-router-dom"
 import { UserAvatar } from "@/components/common/user-avatar"
 import { ScrollArea } from "@/components/ui/scroll-area"
@@ -8,6 +9,7 @@ import { useDbQuery } from "@/lib/query"
 
 /** Right rail: everyone in the company, online first. Clicking opens a 1:1 chat. */
 export function ContactsRail() {
+  const { t } = useTranslation()
   const { me } = useApp()
   const online = useOnlineUsers()
   const { data: people = [] } = useDbQuery(
@@ -30,7 +32,7 @@ export function ContactsRail() {
     <aside className="hidden w-64 shrink-0 border-l xl:block">
       <div className="flex h-full flex-col">
         <h2 className="px-4 pt-4 pb-2 text-sm font-semibold text-muted-foreground">
-          Contacts
+          {t("shell.contacts")}
         </h2>
         <ScrollArea className="min-h-0 flex-1">
           <ul className="px-2 pb-4">
@@ -47,7 +49,7 @@ export function ContactsRail() {
             ))}
             {sorted.length === 0 ? (
               <li className="px-2 py-1.5 text-sm text-muted-foreground">
-                Invite your team to get started.
+                {t("shell.inviteTeam")}
               </li>
             ) : null}
           </ul>

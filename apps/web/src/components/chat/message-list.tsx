@@ -16,6 +16,9 @@ import {
   useRef,
   useState,
 } from "react"
+import type { TFunction } from "i18next"
+import type { Locale } from "date-fns"
+import { useTranslation } from "react-i18next"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import { Marker, MarkerContent } from "@/components/ui/marker"
@@ -23,6 +26,7 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { Spinner } from "@/components/ui/spinner"
 import { useApp } from "@/hooks/use-app"
 import { db } from "@/lib/api-client"
+import { useDateLocale } from "@/lib/i18n"
 import { useDbInfinite } from "@/lib/query"
 import {
   type ChatMessage,
@@ -45,14 +49,15 @@ const STATUS_ROW_HEIGHT = 48
 // pages loaded backwards looking for a jump target before giving up
 const MAX_JUMP_PAGES = 20
 
-function dayLabel(d: Date) {
-  if (isToday(d)) return "Today"
-  if (isYesterday(d)) return "Yesterday"
+function dayLabel(d: Date, t: TFunction, locale: Locale) {
+  if (isToday(d)) return t("chat.messages.today")
+  if (isYesterday(d)) return t("chat.messages.yesterday")
   return format(
     d,
     d.getFullYear() === new Date().getFullYear()
-      ? "EEEE, MMMM d"
-      : "MMMM d, yyyy"
+      ? t("chat.messages.dayThisYear")
+      : t("chat.messages.dayOtherYear"),
+    { locale }
   )
 }
 
@@ -120,6 +125,8 @@ function Thread({
   loadingOlder: boolean
   loadOlder: () => void
 }) {
+  const { t } = useTranslation()
+  const locale = useDateLocale()
   const { me } = useApp()
   const [viewport, setViewport] = useState<HTMLDivElement | null>(null)
   const [ready, setReady] = useState(false)
@@ -183,12 +190,12 @@ function Thread({
       jumpPages.current += 1
       loadOlder()
     } else {
-      toast("That message is further back in the conversation", {
-        description: "Scroll up to load older messages.",
+      toast(t("chat.messages.furtherBack"), {
+        description: t("chat.messages.scrollUp"),
       })
       setPendingJump(null)
     }
-  }, [pendingJump, messages, hasOlder, loadingOlder, loadOlder, virtualizer])
+  }, [pendingJump, messages, hasOlder, loadingOlder, loadOlder, virtualizer, t])
 
   const jumpTo = useCallback((id: string) => {
     jumpPages.current = 0
@@ -217,12 +224,15 @@ function Thread({
   ) {
     const others = members.filter((m) => m.userId !== me.id)
     const seenBy = others.filter((m) => m.lastReadAt >= last.createdAt)
-    if (!isGroup) status = seenBy.length ? "Seen" : "Sent"
+    if (!isGroup)
+      status = seenBy.length ? t("chat.messages.seen") : t("chat.messages.sent")
     else if (others.length && seenBy.length === others.length)
-      status = "Seen by everyone"
+      status = t("chat.messages.seenByEveryone")
     else if (seenBy.length)
-      status = `Seen by ${seenBy.map((m) => m.user.name.split(/\s+/)[0]).join(", ")}`
-    else status = "Sent"
+      status = t("chat.messages.seenBy", {
+        names: seenBy.map((m) => m.user.name.split(/\s+/)[0]).join(", "),
+      })
+    else status = t("chat.messages.sent")
   }
 
   const sameGroup = (a: ChatMessage | undefined, b: ChatMessage | undefined) =>
@@ -245,7 +255,7 @@ function Thread({
       {loadingOlder ? (
         <Spinner />
       ) : !hasOlder && count > 0 ? (
-        <span>This is the beginning of the conversation</span>
+        <span>{t("chat.messages.beginning")}</span>
       ) : null}
     </div>
   )
@@ -255,7 +265,7 @@ function Thread({
       <div
         ref={setViewport}
         role="log"
-        aria-label="Messages"
+        aria-label={t("chat.messages.label")}
         className={cn(
           "flex scrollbar-thin size-full min-h-0 min-w-0 scrollbar-gutter-stable flex-col overflow-y-auto overscroll-contain [overflow-anchor:none]",
           !ready && "invisible"
@@ -325,12 +335,16 @@ function Thread({
                         variant="separator"
                         className="py-2 text-xs font-semibold text-foreground"
                       >
-                        <MarkerContent>Last read</MarkerContent>
+                        <MarkerContent>
+                          {t("chat.messages.lastRead")}
+                        </MarkerContent>
                       </Marker>
                     ) : null}
                     {newDay ? (
                       <Marker variant="separator" className="py-3 text-xs">
-                        <MarkerContent>{dayLabel(m.createdAt)}</MarkerContent>
+                        <MarkerContent>
+                          {dayLabel(m.createdAt, t, locale)}
+                        </MarkerContent>
                       </Marker>
                     ) : gap ? (
                       <p className="py-3 text-center text-xs text-muted-foreground">
@@ -356,12 +370,12 @@ function Thread({
       <Button
         variant="secondary"
         size="icon-sm"
-        aria-label="Scroll to newest message"
+        aria-label={t("chat.messages.scrollNewest")}
         tabIndex={atEnd ? -1 : 0}
         aria-hidden={atEnd}
         onClick={() => virtualizer.scrollToEnd({ behavior: "smooth" })}
         className={cn(
-          "absolute bottom-4 left-1/2 -translate-x-1/2 rounded-full border-border bg-background shadow-md transition-[translate,scale,opacity] duration-200 hover:bg-muted",
+          "absolute bottom-4 left-1/2 -translate-x-1/2 rounded-full border-border bg-popover shadow-overlay transition-[translate,scale,opacity] duration-200 hover:bg-muted",
           atEnd
             ? "pointer-events-none translate-y-full scale-95 opacity-0"
             : "translate-y-0 scale-100 opacity-100"

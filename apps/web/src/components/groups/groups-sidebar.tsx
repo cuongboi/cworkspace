@@ -1,12 +1,14 @@
 import { cn } from "cn"
 import {
+  BookOpenIcon,
   ChevronRightIcon,
   CompassIcon,
   HashIcon,
   PlusIcon,
   SearchIcon,
 } from "lucide-react"
-import { Link, useParams } from "react-router-dom"
+import { useTranslation } from "react-i18next"
+import { Link, useLocation, useParams } from "react-router-dom"
 import { useState } from "react"
 import {
   SidebarSection,
@@ -43,6 +45,7 @@ const EXPANDED_KEY = "groups:sidebar:expanded"
 
 /** Groups sidebar: my groups, each expandable into its channel tree. */
 export function GroupsSidebar() {
+  const { t } = useTranslation()
   const { me } = useApp()
   const [q, setQ] = useState("")
   const [createOpen, setCreateOpen] = useState(false)
@@ -57,30 +60,33 @@ export function GroupsSidebar() {
   return (
     <div className="flex h-full min-h-0 flex-col bg-muted/40">
       <div className="flex h-12 shrink-0 items-center justify-between gap-2 border-b px-4">
-        <h1 className="text-sm font-semibold">Groups</h1>
+        <h1 className="text-sm font-semibold">{t("groups.title")}</h1>
         <div className="flex items-center">
           <Tooltip>
             <TooltipTrigger asChild>
               <Button asChild variant="ghost" size="icon-sm">
-                <Link to="/groups/discover" aria-label="Discover groups">
+                <Link
+                  to="/groups/discover"
+                  aria-label={t("groups.directory.title")}
+                >
                   <CompassIcon />
                 </Link>
               </Button>
             </TooltipTrigger>
-            <TooltipContent>Discover groups</TooltipContent>
+            <TooltipContent>{t("groups.directory.title")}</TooltipContent>
           </Tooltip>
           <Tooltip>
             <TooltipTrigger asChild>
               <Button
                 variant="ghost"
                 size="icon-sm"
-                aria-label="Create group"
+                aria-label={t("groups.create.submit")}
                 onClick={() => setCreateOpen(true)}
               >
                 <PlusIcon />
               </Button>
             </TooltipTrigger>
-            <TooltipContent>Create group</TooltipContent>
+            <TooltipContent>{t("groups.create.submit")}</TooltipContent>
           </Tooltip>
         </div>
       </div>
@@ -93,8 +99,8 @@ export function GroupsSidebar() {
               value={q}
               onChange={(e) => setQ(e.target.value)}
               onKeyDown={(e) => e.key === "Escape" && setQ("")}
-              placeholder="Search groups"
-              aria-label="Search groups"
+              placeholder={t("groups.directory.search")}
+              aria-label={t("groups.directory.search")}
               className="h-8 bg-card pl-7 text-xs shadow-none md:text-xs"
             />
           </div>
@@ -110,14 +116,16 @@ export function GroupsSidebar() {
             </div>
           ) : error ? (
             <p className="px-3 py-6 text-center text-xs text-destructive">
-              Could not load your groups.
+              {t("groups.sidebar.loadFailed")}
             </p>
           ) : (
             <SidebarSection
               id="mine"
               storageKey="groups:sidebar:collapsed"
-              label="Your groups"
-              empty={term ? "No groups match" : "You haven't joined any group"}
+              label={t("groups.directory.mine")}
+              empty={
+                term ? t("groups.sidebar.noMatch") : t("groups.sidebar.none")
+              }
             >
               {groups.map((m) => (
                 <GroupBranch key={m.group.id} membership={m} />
@@ -132,6 +140,7 @@ export function GroupsSidebar() {
 }
 
 function GroupBranch({ membership }: { membership: MyGroup }) {
+  const { t } = useTranslation()
   const { isAdmin } = useApp()
   const params = useParams()
   const { group } = membership
@@ -140,19 +149,22 @@ function GroupBranch({ membership }: { membership: MyGroup }) {
   // the group being viewed always shows its channels
   const expanded = open || active
   const moderator = canModerate(membership.role, isAdmin)
+  const onWiki = useLocation().pathname.startsWith(`/groups/${group.slug}/wiki`)
 
   return (
     <div className="flex flex-col gap-px">
       <div
         className={cn(
           "group/branch relative flex items-center rounded-md",
-          active && !params.channelId && "bg-accent"
+          active && !params.channelId && !onWiki && "bg-accent"
         )}
       >
         <button
           type="button"
           aria-label={
-            expanded ? `Collapse ${group.name}` : `Expand ${group.name}`
+            expanded
+              ? t("groups.sidebar.collapse", { name: group.name })
+              : t("groups.sidebar.expand", { name: group.name })
           }
           aria-expanded={expanded}
           onClick={() => setOpen(!expanded)}
@@ -167,7 +179,9 @@ function GroupBranch({ membership }: { membership: MyGroup }) {
         </button>
         <Link
           to={`/groups/${group.slug}`}
-          aria-current={active && !params.channelId ? "page" : undefined}
+          aria-current={
+            active && !params.channelId && !onWiki ? "page" : undefined
+          }
           className={cn(
             sidebarRowClass,
             "-ml-1 min-w-0 flex-1 pl-1 hover:bg-transparent"
@@ -178,12 +192,14 @@ function GroupBranch({ membership }: { membership: MyGroup }) {
             {group.name}
           </span>
         </Link>
-        {moderator ? (
+        {moderator && group.channelsEnabled ? (
           <ChannelFormDialog groupId={group.id} groupSlug={group.slug}>
             <Button
               variant="ghost"
               size="icon-xs"
-              aria-label={`New channel in ${group.name}`}
+              aria-label={t("groups.sidebar.newChannelIn", {
+                name: group.name,
+              })}
               className="mr-1 text-muted-foreground opacity-0 group-hover/branch:opacity-100 focus-visible:opacity-100"
             >
               <PlusIcon />
@@ -191,7 +207,29 @@ function GroupBranch({ membership }: { membership: MyGroup }) {
           </ChannelFormDialog>
         ) : null}
       </div>
-      {expanded ? <ChannelList groupId={group.id} slug={group.slug} /> : null}
+      {expanded ? (
+        <>
+          {group.wikiEnabled ? (
+            <Link
+              to={`/groups/${group.slug}/wiki`}
+              aria-current={onWiki ? "page" : undefined}
+              className={cn(
+                sidebarRowClass,
+                "pl-9",
+                onWiki ? "bg-accent" : "text-muted-foreground"
+              )}
+            >
+              <BookOpenIcon className="size-3.5 shrink-0 opacity-70" />
+              <span className="min-w-0 flex-1 truncate">
+                {t("groups.tabs.wiki")}
+              </span>
+            </Link>
+          ) : null}
+          {group.channelsEnabled ? (
+            <ChannelList groupId={group.id} slug={group.slug} />
+          ) : null}
+        </>
+      ) : null}
     </div>
   )
 }
@@ -251,6 +289,7 @@ function ChannelRow({
   depth: 0 | 1
   activeId?: string
 }) {
+  const { t } = useTranslation()
   const active = channel.id === activeId
   const unread = isChannelUnread(channel) && !active
   return (
@@ -277,7 +316,7 @@ function ChannelRow({
       {unread ? (
         <span
           role="img"
-          aria-label="Unread"
+          aria-label={t("groups.sidebar.unread")}
           className="size-1.5 shrink-0 rounded-full bg-primary"
         />
       ) : null}
@@ -299,7 +338,7 @@ function GroupMark({
   ) : (
     <span
       aria-hidden="true"
-      className="inline-flex size-5 shrink-0 items-center justify-center rounded-md text-[10px] font-semibold text-white"
+      className="inline-flex size-5 shrink-0 items-center justify-center rounded-md text-2xs font-semibold text-white"
       style={{ backgroundColor: accentFor(group.id) }}
     >
       {group.name[0]?.toUpperCase()}

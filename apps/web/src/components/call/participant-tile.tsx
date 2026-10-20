@@ -3,6 +3,7 @@ import { Loader2Icon, MicOffIcon, MonitorUpIcon } from "lucide-react"
 import { UserAvatar } from "@/components/common/user-avatar"
 import type { UserSummary } from "@/lib/realtime-events"
 import { StreamVideo } from "./media-elements"
+import { useTranslation } from "react-i18next"
 
 export type TileProps = {
   user: UserSummary
@@ -38,12 +39,13 @@ export function ParticipantTile({
   size = "default",
   className,
 }: TileProps) {
+  const { t } = useTranslation()
   const showVideo = videoOn && Boolean(stream?.getVideoTracks().length)
   const name = label ?? user.name
 
   return (
     <figure
-      aria-label={`${name}${micOn ? "" : ", muted"}${speaking ? ", speaking" : ""}`}
+      aria-label={`${name}${micOn ? "" : t("call.tile.mutedSuffix")}${speaking ? t("call.tile.speakingSuffix") : ""}`}
       className={cn(
         "relative isolate flex min-h-0 min-w-0 items-center justify-center overflow-hidden rounded-xl bg-muted/40 ring-2 ring-transparent transition-shadow duration-150",
         speaking && "ring-primary",
@@ -77,14 +79,14 @@ export function ParticipantTile({
       {connecting ? (
         <div className="absolute inset-0 flex items-center justify-center gap-2 bg-background/60 text-sm text-muted-foreground backdrop-blur-sm">
           <Loader2Icon className="size-4 animate-spin" aria-hidden />
-          Connecting…
+          {t("call.tile.connecting")}
         </div>
       ) : null}
 
       <figcaption
         className={cn(
           "absolute bottom-2 left-2 flex max-w-[calc(100%-1rem)] items-center gap-1.5 rounded-md bg-background/70 px-2 py-1 text-foreground backdrop-blur-sm",
-          size === "small" ? "text-[11px]" : "text-xs"
+          size === "small" ? "text-2xs" : "text-xs"
         )}
       >
         {presenting ? (
@@ -94,7 +96,7 @@ export function ParticipantTile({
         {micOn ? null : (
           <MicOffIcon
             className="size-3.5 shrink-0 text-destructive"
-            aria-label="Muted"
+            aria-label={t("call.tile.muted")}
           />
         )}
       </figcaption>
