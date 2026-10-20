@@ -6,7 +6,7 @@ export const groups: DeepStrings<typeof en> = {
   sections: "Các mục của nhóm",
   tabs: {
     discussion: "Thảo luận",
-    wiki: "Wiki",
+    wiki: "Tài liệu",
     calendar: "Sự kiện",
     members: "Thành viên",
     about: "Giới thiệu",
@@ -59,7 +59,7 @@ export const groups: DeepStrings<typeof en> = {
   noPosts: "Chưa có bài viết nào",
   noPostsMember: "Hãy là người đầu tiên chia sẻ với nhóm.",
   noPostsGuest: "Tham gia nhóm để bắt đầu trò chuyện.",
-  wikiLocked: "Tham gia nhóm để đọc Wiki.",
+  wikiLocked: "Tham gia nhóm để đọc tài liệu.",
   title: "Nhóm",
   noDescription: "Chưa có mô tả.",
   privacyGroup: {
@@ -127,7 +127,7 @@ export const groups: DeepStrings<typeof en> = {
     postPolicy: "Ai có thể đăng bài",
     postMembers: "Tất cả thành viên",
     postAdmins: "Chỉ quản trị viên và người kiểm duyệt",
-    wikiEnabled: "Wiki",
+    wikiEnabled: "Tài liệu",
     wikiEnabledHint: "Các trang chung do nhóm cùng viết.",
     channelsEnabled: "Kênh",
     channelsEnabledHint: "Kênh trò chuyện và tích hợp.",
@@ -135,7 +135,7 @@ export const groups: DeepStrings<typeof en> = {
     calendarEnabledHint: "Sự kiện và cuộc họp của nhóm.",
     keptHint:
       "Tắt một tính năng sẽ ẩn nó; nội dung vẫn được giữ và hiện lại khi bạn bật lại.",
-    wikiOff: "Wiki đã bị tắt",
+    wikiOff: "Tài liệu đã bị tắt",
     offBody: "Quản trị viên nhóm có thể bật lại trong cài đặt nhóm.",
     backToGroup: "Quay lại nhóm",
     adminsOnlyPosting:
@@ -149,7 +149,7 @@ export const groups: DeepStrings<typeof en> = {
     change: "Đổi",
     upload: "Tải lên",
     defaultPrivacy: "Nhóm toàn công ty luôn hiển thị với mọi người.",
-    wikiPolicy: "Ai có thể chỉnh sửa Wiki",
+    wikiPolicy: "Ai có thể chỉnh sửa tài liệu",
     wikiMembers: "Tất cả thành viên",
     wikiAdmins: "Quản trị viên và người kiểm duyệt",
     wikiPolicyHint:

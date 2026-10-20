@@ -1,8 +1,9 @@
 import { cn } from "cn"
-import { format } from "date-fns"
+import { format, formatDistanceToNow } from "date-fns"
 import {
   BotIcon,
   CopyIcon,
+  MessagesSquareIcon,
   MoreHorizontalIcon,
   PencilIcon,
   PhoneIcon,
@@ -52,7 +53,10 @@ import {
 
 export type MessageActions = {
   onReact: (message: ChatMessage, type: ReactionType) => void
-  onReply: (message: ChatMessage) => void
+  /** quote-reply; omitted inside a thread panel */
+  onReply?: (message: ChatMessage) => void
+  /** CHANNEL conversations: open the message's thread (the root, for a reply) */
+  onOpenThread?: (rootId: string) => void
   onEdit: (message: ChatMessage) => void
   onDelete: (message: ChatMessage) => void
   onJumpTo: (messageId: string) => void
@@ -322,6 +326,23 @@ function TextMessage({
           </div>
         ) : null}
 
+        {actions.onOpenThread && message.threadId ? (
+          <button
+            type="button"
+            onClick={() => actions.onOpenThread?.(message.threadId as string)}
+            className="-mt-1 self-start text-2xs text-muted-foreground hover:text-foreground hover:underline"
+          >
+            {t("chat.threads.repliedToThread")}
+          </button>
+        ) : null}
+
+        {actions.onOpenThread && !message.threadId && message.replyCount > 0 ? (
+          <ThreadSummary
+            message={message}
+            onOpen={() => actions.onOpenThread?.(message.id)}
+          />
+        ) : null}
+
         {meta.length ? (
           <p className="-mt-1 text-2xs text-muted-foreground">
             {meta.join(" · ")}
@@ -341,6 +362,53 @@ function TextMessage({
         </div>
       ) : null}
     </div>
+  )
+}
+
+function ThreadSummary({
+  message,
+  onOpen,
+}: {
+  message: ChatMessage
+  onOpen: () => void
+}) {
+  const { t } = useTranslation()
+  const locale = useDateLocale()
+  const repliers = [
+    ...new Map(
+      message.threadReplies.map((r) => [r.sender.id, r.sender])
+    ).values(),
+  ].slice(0, 3)
+  return (
+    <button
+      type="button"
+      onClick={onOpen}
+      className="group/thread -mt-1 flex max-w-md items-center gap-2 self-start rounded-md border border-transparent px-1 py-0.5 text-2xs hover:border-border hover:bg-background"
+    >
+      <span className="flex -space-x-1.5">
+        {repliers.map((u) => (
+          <UserAvatar
+            key={u.id}
+            user={u}
+            size="sm"
+            className="ring-2 ring-background [&_[data-slot=avatar]]:size-5"
+          />
+        ))}
+      </span>
+      <span className="font-semibold text-brand group-hover/thread:underline">
+        {t("chat.threads.replyCount", { count: message.replyCount })}
+      </span>
+      {message.lastReplyAt ? (
+        <span className="text-muted-foreground">
+          {t("chat.threads.lastReply", {
+            time: formatDistanceToNow(message.lastReplyAt, {
+              addSuffix: true,
+              locale,
+            }),
+          })}
+        </span>
+      ) : null}
+    </button>
   )
 }
 
@@ -450,19 +518,36 @@ function Toolbar({
           </div>
         </PopoverContent>
       </Popover>
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <Button
-            variant="ghost"
-            size="icon-xs"
-            aria-label={t("chat.messages.reply")}
-            onClick={() => actions.onReply(message)}
-          >
-            <ReplyIcon />
-          </Button>
-        </TooltipTrigger>
-        <TooltipContent>{t("chat.messages.reply")}</TooltipContent>
-      </Tooltip>
+      {actions.onOpenThread && !message.threadId ? (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon-xs"
+              aria-label={t("chat.threads.replyInThread")}
+              onClick={() => actions.onOpenThread?.(message.id)}
+            >
+              <MessagesSquareIcon />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>{t("chat.threads.replyInThread")}</TooltipContent>
+        </Tooltip>
+      ) : null}
+      {actions.onReply ? (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon-xs"
+              aria-label={t("chat.messages.reply")}
+              onClick={() => actions.onReply?.(message)}
+            >
+              <ReplyIcon />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>{t("chat.messages.reply")}</TooltipContent>
+        </Tooltip>
+      ) : null}
       <DropdownMenu
         open={moreOpen}
         onOpenChange={(o) => {
@@ -485,9 +570,11 @@ function Toolbar({
               <CopyIcon /> {t("chat.messages.copyText")}
             </DropdownMenuItem>
           ) : null}
-          <DropdownMenuItem onSelect={() => actions.onReply(message)}>
-            <ReplyIcon /> {t("chat.messages.reply")}
-          </DropdownMenuItem>
+          {actions.onReply ? (
+            <DropdownMenuItem onSelect={() => actions.onReply?.(message)}>
+              <ReplyIcon /> {t("chat.messages.reply")}
+            </DropdownMenuItem>
+          ) : null}
           {canEdit ? (
             <DropdownMenuItem onSelect={() => actions.onEdit(message)}>
               <PencilIcon /> {t("common.edit")}

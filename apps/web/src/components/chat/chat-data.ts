@@ -30,6 +30,7 @@ export function fetchConversationList(meId: string) {
       id: true,
       lastReadAt: true,
       mutedUntil: true,
+      favoritedAt: true,
       conversation: {
         select: {
           id: true,
@@ -165,6 +166,12 @@ export const messageInclude = {
       sender: { select: { name: true } },
     },
   },
+  /** CHANNEL thread roots: the latest repliers (avatar stack under the root) */
+  threadReplies: {
+    select: { id: true, sender: userSummary },
+    orderBy: { createdAt: "desc" },
+    take: 10,
+  },
 } as const
 
 export const messagesKey = (conversationId: string) =>
@@ -175,10 +182,27 @@ export function fetchMessages(
   cursor: string | undefined
 ) {
   return db.message.findMany({
-    where: { conversationId },
+    // thread replies live in the thread panel unless also sent to the channel
+    where: {
+      conversationId,
+      OR: [{ threadId: null }, { alsoSentToChannel: true }],
+    },
     orderBy: [{ createdAt: "desc" }, { id: "desc" }],
     take: MESSAGE_PAGE_SIZE,
     ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
+    include: messageInclude,
+  })
+}
+
+export const threadRepliesKey = (rootId: string) =>
+  ["message", "thread-replies", rootId] as const
+
+/** A CHANNEL thread's replies, oldest first. */
+export function fetchThreadReplies(rootId: string) {
+  return db.message.findMany({
+    where: { threadId: rootId },
+    orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+    take: 200,
     include: messageInclude,
   })
 }
@@ -252,32 +276,70 @@ function updatePages(
 const hasId = (pages: ChatMessage[][], id: string) =>
   pages.some((p) => p.some((m) => m.id === id))
 
+function updateThread(
+  qc: QueryClient,
+  rootId: string,
+  fn: (replies: ChatMessage[]) => ChatMessage[]
+) {
+  qc.setQueryData<ChatMessage[]>(threadRepliesKey(rootId), (old) =>
+    old ? fn(old) : old
+  )
+}
+
+/** Applies `fn` to every cached thread (edits/reactions/unsend from the thread panel). */
+function updateAllThreads(
+  qc: QueryClient,
+  fn: (replies: ChatMessage[]) => ChatMessage[]
+) {
+  qc.setQueriesData<ChatMessage[]>(
+    { queryKey: ["message", "thread-replies"] },
+    (old) => (old ? fn(old) : old)
+  )
+}
+
+/** Swaps my optimistic message for its server echo (same sender + content). */
+function reconcile(list: ChatMessage[], message: ChatMessage) {
+  let replaced = false
+  const next = list.map((m) => {
+    if (replaced || !m.pending || !isTemp(m.id)) return m
+    if (m.senderId !== message.senderId || m.content !== message.content)
+      return m
+    replaced = true
+    // keep the optimistic attachments / quote until the full row arrives
+    return {
+      ...m,
+      ...message,
+      attachments: m.attachments,
+      replyTo: m.replyTo,
+      pending: false,
+    }
+  })
+  return replaced ? next : null
+}
+
 /**
  * Inserts a new message at the newest end. Dedupes by id, and a server echo of my own optimistic
  * message replaces the temp entry (matched by sender + content) instead of duplicating it.
  */
 export function insertMessage(qc: QueryClient, message: ChatMessage) {
+  if (message.threadId) {
+    updateThread(qc, message.threadId, (list) => {
+      if (list.some((m) => m.id === message.id)) return list
+      return (
+        (!message.pending && reconcile(list, message)) || [...list, message]
+      )
+    })
+    if (!message.alsoSentToChannel) return
+  }
   updatePages(qc, message.conversationId, (pages) => {
     if (hasId(pages, message.id)) return pages
     if (!message.pending) {
-      let replaced = false
-      const next = pages.map((page) =>
-        page.map((m) => {
-          if (replaced || !m.pending || !isTemp(m.id)) return m
-          if (m.senderId !== message.senderId || m.content !== message.content)
-            return m
-          replaced = true
-          // keep the optimistic attachments / quote until the full row arrives
-          return {
-            ...m,
-            ...message,
-            attachments: m.attachments,
-            replyTo: m.replyTo,
-            pending: false,
-          }
-        })
-      )
-      if (replaced) return next
+      let next: ChatMessage[][] | null = null
+      for (let i = 0; i < pages.length && !next; i++) {
+        const page = reconcile(pages[i] ?? [], message)
+        if (page) next = pages.map((p, j) => (j === i ? page : p))
+      }
+      if (next) return next
     }
     const [first = [], ...rest] = pages
     return [[message, ...first], ...rest]
@@ -291,6 +353,15 @@ export function replaceMessage(
   id: string,
   message: ChatMessage
 ) {
+  if (message.threadId) {
+    updateThread(qc, message.threadId, (list) => {
+      if (id !== message.id && list.some((m) => m.id === message.id))
+        return list.filter((m) => m.id !== id)
+      if (!list.some((m) => m.id === id)) return [...list, message]
+      return list.map((m) => (m.id === id ? message : m))
+    })
+    if (!message.alsoSentToChannel) return
+  }
   updatePages(qc, conversationId, (pages) => {
     if (id !== message.id && hasId(pages, message.id)) {
       // the realtime echo already reconciled it: just drop the temp
@@ -313,6 +384,7 @@ export function patchMessage(
   updatePages(qc, conversationId, (pages) =>
     pages.map((page) => page.map((m) => (m.id === id ? patch(m) : m)))
   )
+  updateAllThreads(qc, (list) => list.map((m) => (m.id === id ? patch(m) : m)))
 }
 
 export function removeMessage(
@@ -323,6 +395,7 @@ export function removeMessage(
   updatePages(qc, conversationId, (pages) =>
     pages.map((page) => page.filter((m) => m.id !== id))
   )
+  updateAllThreads(qc, (list) => list.filter((m) => m.id !== id))
 }
 
 export function findCachedMessage(
@@ -349,7 +422,7 @@ export function otherUsers(
 
 export function conversationTitle(
   conversation: {
-    type: "DIRECT" | "GROUP"
+    type: "DIRECT" | "GROUP" | "CHANNEL"
     title: string | null
     group?: { name: string } | null
   },

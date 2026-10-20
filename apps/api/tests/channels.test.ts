@@ -91,6 +91,7 @@ describe("channel creation", () => {
     expect(channels[0]?.isDefault).toBe(true);
     const general = await db.conversation.findUnique({ where: { groupId } });
     expect(general?.channelId).toBe(channels[0]!.id);
+    expect(general?.type).toBe("CHANNEL");
   });
 
   it("mirrors the group's active members into the channel chat", async () => {

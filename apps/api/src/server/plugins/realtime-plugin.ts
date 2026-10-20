@@ -99,7 +99,7 @@ async function mentionedMembers(message: {
     select: { userId: true, mutedUntil: true, conversation: { select: { type: true } } },
   });
   const now = new Date();
-  const everyone = ids.includes(EVERYONE_ID) && members[0]?.conversation.type === "GROUP";
+  const everyone = ids.includes(EVERYONE_ID) && members[0]?.conversation.type !== "DIRECT";
   return members
     .filter(
       (m) =>
@@ -133,6 +133,52 @@ async function pushMessage(
       kind: "message",
     },
   );
+}
+
+/**
+ * Thread replies notify the thread's participants (root author + earlier repliers) instead of
+ * pushing to the whole channel; mentions still win over the plain THREAD_REPLY.
+ */
+async function notifyThreadReply(message: {
+  id: string;
+  threadId: string | null;
+  conversationId: string;
+  senderId: string;
+  content: string;
+}) {
+  if (!message.threadId) return;
+  const db = await getDb();
+  const [root, repliers] = await Promise.all([
+    db.message.findUnique({ where: { id: message.threadId }, select: { senderId: true } }),
+    db.message.findMany({
+      where: { threadId: message.threadId },
+      select: { senderId: true },
+      distinct: ["senderId"],
+    }),
+  ]);
+  const mentioned = await mentionedMembers(message);
+  const participants = [
+    ...new Set([root?.senderId, ...repliers.map((r) => r.senderId)].filter(Boolean)),
+  ] as string[];
+  const preview = toPlainText(message.content).slice(0, 140);
+  await notify([
+    ...mentioned.map((userId) => ({
+      userId,
+      actorId: message.senderId,
+      type: "MENTION" as const,
+      conversationId: message.conversationId,
+      data: { preview, threadId: message.threadId },
+    })),
+    ...participants
+      .filter((id) => !mentioned.includes(id))
+      .map((userId) => ({
+        userId,
+        actorId: message.senderId,
+        type: "THREAD_REPLY" as const,
+        conversationId: message.conversationId,
+        data: { preview, threadId: message.threadId },
+      })),
+  ]);
 }
 
 const handlers: Partial<Record<string, Handler>> = {
@@ -384,11 +430,18 @@ const handlers: Partial<Record<string, Handler>> = {
           },
         });
         if (!message) continue;
-        await db.conversation.update({
-          where: { id: conversationId },
-          data: { lastMessageAt: message.createdAt },
-        });
+        // a thread reply only surfaces in the channel list when also sent to the channel
+        if (!message.threadId || message.alsoSentToChannel) {
+          await db.conversation.update({
+            where: { id: conversationId },
+            data: { lastMessageAt: message.createdAt },
+          });
+        }
         emitToUsers(memberIds, "message:new", message as ChatMessagePayload);
+        if (message.threadId && message.type === "TEXT") {
+          await notifyThreadReply(message);
+          continue;
+        }
         if (message.type === "BOT") void pushMessage(message, memberIds);
         if (message.type === "TEXT") {
           void dispatchOutgoing(message);

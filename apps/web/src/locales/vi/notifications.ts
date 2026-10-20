@@ -42,6 +42,7 @@ export const notifications: DeepStrings<typeof en> = {
     eventInvite: "<b>{{actor}}</b> đã mời bạn tham gia <b>{{event}}</b>",
     eventReminder: "Sự kiện sắp bắt đầu: <b>{{event}}</b>",
     missedCall: "Cuộc gọi nhỡ từ <b>{{actor}}</b>",
+    threadReply: "<b>{{actor}}</b> đã trả lời trong một thảo luận",
     other: "Hoạt động mới từ <b>{{actor}}</b>",
   },
   pwa: {

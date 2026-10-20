@@ -1,3 +1,4 @@
+import { HashIcon } from "lucide-react"
 import { cn } from "cn"
 import { UserAvatar } from "@/components/common/user-avatar"
 import { accentFor } from "@/lib/accent"
@@ -5,7 +6,7 @@ import { useOnlineUsers } from "@/hooks/use-presence"
 import { otherUsers } from "./chat-data"
 
 type Props = {
-  type: "DIRECT" | "GROUP"
+  type: "DIRECT" | "GROUP" | "CHANNEL"
   members: {
     userId: string
     user: { id: string; name: string; image: string | null }
@@ -48,6 +49,21 @@ export function ConversationAvatar({
         style={{ backgroundColor: accentFor(group.id) }}
       >
         {group.name[0]?.toUpperCase()}
+      </span>
+    )
+  }
+
+  if (type === "CHANNEL") {
+    return (
+      <span
+        aria-hidden="true"
+        className={cn(
+          "inline-flex shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground",
+          box,
+          className
+        )}
+      >
+        <HashIcon className="size-1/2" />
       </span>
     )
   }

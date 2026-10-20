@@ -33,7 +33,7 @@ export async function ensureGroupConversation(groupId: string) {
     const created = await db.conversation.create({
       data: {
         groupId,
-        type: "GROUP",
+        type: "CHANNEL",
         createdById: group.createdById,
       },
       select: { id: true },
@@ -149,7 +149,7 @@ export async function createChannel(
       },
     });
     const conversation = await tx.conversation.create({
-      data: { type: "GROUP", channelId: channel.id, title: `#${name}`, createdById: actorId },
+      data: { type: "CHANNEL", channelId: channel.id, title: `#${name}`, createdById: actorId },
       select: { id: true },
     });
     const members = await tx.groupMember.findMany({

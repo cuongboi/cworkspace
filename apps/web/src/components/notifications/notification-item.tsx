@@ -11,6 +11,7 @@ import {
   MessageCircleIcon,
   MoreHorizontalIcon,
   NewspaperIcon,
+  MessagesSquareIcon,
   PhoneMissedIcon,
   ReplyIcon,
   Trash2Icon,
@@ -82,6 +83,7 @@ const TYPE_META: Record<string, { icon: LucideIcon; className: string }> = {
   EVENT_INVITE: { icon: CalendarPlusIcon, className: "bg-violet-500" },
   EVENT_REMINDER: { icon: BellRingIcon, className: "bg-warning" },
   MISSED_CALL: { icon: PhoneMissedIcon, className: "bg-destructive" },
+  THREAD_REPLY: { icon: MessagesSquareIcon, className: "bg-blue-500" },
 }
 
 /** The sentence describing a notification, with emphasized names. */
@@ -120,6 +122,8 @@ export function describeNotification(n: NotificationLike): ReactNode {
         return "notifications.text.eventReminder"
       case "MISSED_CALL":
         return "notifications.text.missedCall"
+      case "THREAD_REPLY":
+        return "notifications.text.threadReply"
       default:
         return "notifications.text.other"
     }

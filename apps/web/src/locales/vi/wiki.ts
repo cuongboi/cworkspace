@@ -2,19 +2,19 @@ import type { DeepStrings } from "../ja/types"
 import type { wiki as en } from "../en/wiki"
 
 export const wiki: DeepStrings<typeof en> = {
-  groupWiki: "Wiki của {{name}}",
+  groupWiki: "Tài liệu của {{name}}",
   breadcrumb: "Đường dẫn",
   outline: "Trên trang này",
   workspace: {
     allPages: "Tất cả trang",
     newPage: "Trang mới",
     noPagesShort: "Chưa có trang nào.",
-    noPages: "Chưa có trang Wiki nào",
+    noPages: "Chưa có tài liệu nào",
     noPagesBody: "Lưu tài liệu, hướng dẫn và quyết định của nhóm ở một nơi.",
     createFirst: "Tạo trang đầu tiên",
     notFound: "Không tìm thấy trang",
     notFoundBody: "Trang có thể đã bị xóa hoặc di chuyển.",
-    backToWiki: "Quay lại Wiki",
+    backToWiki: "Quay lại Tài liệu",
     pagesOfGroup: "Các trang của nhóm này",
   },
   page: {

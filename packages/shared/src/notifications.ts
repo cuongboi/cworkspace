@@ -61,6 +61,8 @@ export function notificationText(n: NotificationLinkable): string {
       return `Event starting soon: ${event}`;
     case "MISSED_CALL":
       return `Missed call from ${actor}`;
+    case "THREAD_REPLY":
+      return `${actor} replied in a thread`;
     default:
       return `New activity from ${actor}`;
   }
@@ -79,8 +81,13 @@ export function notificationHref(
     case "EVENT_INVITE":
     case "EVENT_REMINDER":
       return n.eventId ? `/calendar?event=${n.eventId}` : "/calendar";
+    case "THREAD_REPLY":
+      return n.conversationId ? threadHref(n.conversationId, dataField(n.data, "threadId")) : "/chat";
     case "MENTION":
     case "MISSED_CALL":
+      if (n.conversationId && n.type === "MENTION") {
+        return threadHref(n.conversationId, dataField(n.data, "threadId"));
+      }
       if (n.conversationId) return `/chat/${n.conversationId}`;
       if (n.type === "MENTION") return n.postId ? `/posts/${n.postId}` : "/notifications";
       return n.eventId ? `/calendar?event=${n.eventId}` : "/chat";
@@ -89,4 +96,8 @@ export function notificationHref(
       if (groupSlug) return `/groups/${groupSlug}`;
       return "/notifications";
   }
+}
+
+function threadHref(conversationId: string, threadId?: string) {
+  return threadId ? `/chat/${conversationId}?thread=${threadId}` : `/chat/${conversationId}`;
 }

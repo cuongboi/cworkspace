@@ -261,6 +261,33 @@ describe("chat", () => {
       }),
     );
   });
+
+  it("members favorite only their own membership", async () => {
+    const convo = await as("alice").conversation.create({
+      data: {
+        type: "GROUP",
+        title: "fav",
+        members: {
+          create: [{ userId: users.alice.id, role: "ADMIN" }, { userId: users.bob.id }],
+        },
+      },
+    });
+    const key = (userId: string) => ({
+      conversationId_userId: { conversationId: convo.id, userId },
+    });
+
+    const mine = await as("bob").conversationMember.update({
+      where: key(users.bob.id),
+      data: { favoritedAt: new Date() },
+    });
+    expect(mine.favoritedAt).toBeInstanceOf(Date);
+    await rejected(
+      as("bob").conversationMember.update({
+        where: key(users.alice.id),
+        data: { favoritedAt: new Date() },
+      }),
+    );
+  });
 });
 
 describe("notifications", () => {

@@ -16,13 +16,25 @@ import {
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Spinner } from "@/components/ui/spinner"
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { useApp } from "@/hooks/use-app"
 import { ApiError, api, db } from "@/lib/api-client"
 import { invalidateModels } from "@/lib/query"
 import { PeoplePicker, type PickedUser } from "./people-picker"
 
-/** Pick one person → open the DM; pick several → create a group conversation. */
-export function NewConversationDialog({ children }: { children: ReactNode }) {
+type NewKind = "chat" | "channel"
+
+/**
+ * Chat: pick one person → open the DM; pick several → create a group conversation.
+ * Channel: a named CHANNEL conversation (Slack-style threads) with any number of members.
+ */
+export function NewConversationDialog({
+  children,
+  defaultKind = "chat",
+}: {
+  children: ReactNode
+  defaultKind?: NewKind
+}) {
   const { t } = useTranslation()
   const { me } = useApp()
   const navigate = useNavigate()
@@ -31,20 +43,38 @@ export function NewConversationDialog({ children }: { children: ReactNode }) {
   const [people, setPeople] = useState<PickedUser[]>([])
   const [title, setTitle] = useState("")
   const [busy, setBusy] = useState(false)
-  const isGroup = people.length > 1
+  const [kind, setKind] = useState<NewKind>(defaultKind)
+  const isChannel = kind === "channel"
+  const isGroup = !isChannel && people.length > 1
+  const canSubmit = isChannel ? title.trim().length > 0 : people.length > 0
 
   const reset = () => {
     setPeople([])
     setTitle("")
     setBusy(false)
+    setKind(defaultKind)
   }
 
   const submit = async () => {
-    if (people.length === 0 || busy) return
+    if (!canSubmit || busy) return
     setBusy(true)
     try {
       let id: string
-      if (!isGroup) {
+      if (isChannel) {
+        ;({ id } = await db.conversation.create({
+          data: {
+            type: "CHANNEL",
+            title: title.trim().replace(/^#/, ""),
+            members: {
+              create: [
+                { userId: me.id, role: "ADMIN" },
+                ...people.map((p) => ({ userId: p.id })),
+              ],
+            },
+          },
+          select: { id: true },
+        }))
+      } else if (!isGroup) {
         const first = people[0] as PickedUser
         ;({ id } = await api.post<{ id: string }>("/api/conversations/direct", {
           userId: first.id,
@@ -99,7 +129,41 @@ export function NewConversationDialog({ children }: { children: ReactNode }) {
             void submit()
           }}
         >
-          <PeoplePicker value={people} onChange={setPeople} autoFocus />
+          <ToggleGroup
+            type="single"
+            variant="outline"
+            size="sm"
+            value={kind}
+            onValueChange={(v) => v && setKind(v as NewKind)}
+            className="self-start"
+          >
+            <ToggleGroupItem value="chat">
+              {t("chat.newDialog.kindChat")}
+            </ToggleGroupItem>
+            <ToggleGroupItem value="channel">
+              {t("chat.newDialog.kindChannel")}
+            </ToggleGroupItem>
+          </ToggleGroup>
+          {isChannel ? (
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="new-channel-name">
+                {t("chat.newDialog.channelName")}
+              </Label>
+              <Input
+                id="new-channel-name"
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                placeholder={t("chat.newDialog.channelNamePlaceholder")}
+                maxLength={80}
+                required
+              />
+            </div>
+          ) : null}
+          <PeoplePicker
+            value={people}
+            onChange={setPeople}
+            autoFocus={!isChannel}
+          />
           {isGroup ? (
             <div className="flex flex-col gap-2">
               <Label htmlFor="new-chat-title">
@@ -115,11 +179,15 @@ export function NewConversationDialog({ children }: { children: ReactNode }) {
             </div>
           ) : null}
           <DialogFooter>
-            <Button type="submit" disabled={people.length === 0 || busy}>
+            <Button type="submit" disabled={!canSubmit || busy}>
               {busy ? <Spinner /> : null}
-              {isGroup
-                ? t("chat.newDialog.createGroup", { count: people.length + 1 })
-                : t("chat.newDialog.chat")}
+              {isChannel
+                ? t("chat.newDialog.createChannel")
+                : isGroup
+                  ? t("chat.newDialog.createGroup", {
+                      count: people.length + 1,
+                    })
+                  : t("chat.newDialog.chat")}
             </Button>
           </DialogFooter>
         </form>

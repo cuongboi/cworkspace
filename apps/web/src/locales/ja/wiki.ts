@@ -2,20 +2,20 @@ import type { DeepStrings } from "./types"
 import type { wiki as en } from "../en/wiki"
 
 export const wiki: DeepStrings<typeof en> = {
-  groupWiki: "{{name}} のWiki",
+  groupWiki: "{{name}} のドキュメント",
   breadcrumb: "パンくずリスト",
   outline: "このページの内容",
   workspace: {
     allPages: "すべてのページ",
     newPage: "新しいページ",
     noPagesShort: "まだページがありません。",
-    noPages: "Wikiページはまだありません",
+    noPages: "ドキュメントはまだありません",
     noPagesBody:
       "グループのドキュメント、手順、決定事項をひとつの場所にまとめましょう。",
     createFirst: "最初のページを作成",
     notFound: "ページが見つかりません",
     notFoundBody: "削除または移動された可能性があります。",
-    backToWiki: "Wikiに戻る",
+    backToWiki: "ドキュメントに戻る",
     pagesOfGroup: "このグループのページ",
   },
   page: {

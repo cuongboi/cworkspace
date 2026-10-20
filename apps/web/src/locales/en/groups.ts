@@ -3,7 +3,7 @@ export const groups = {
   sections: "Group sections",
   tabs: {
     discussion: "Discussion",
-    wiki: "Wiki",
+    wiki: "Documents",
     calendar: "Events",
     members: "Members",
     about: "About",
@@ -55,7 +55,7 @@ export const groups = {
   noPosts: "No posts yet",
   noPostsMember: "Be the first to share something with the group.",
   noPostsGuest: "Join the group to start the conversation.",
-  wikiLocked: "Join the group to read its wiki.",
+  wikiLocked: "Join the group to read its documents.",
   title: "Groups",
   noDescription: "No description yet.",
   privacyGroup: {
@@ -122,7 +122,7 @@ export const groups = {
     postPolicy: "Who can post",
     postMembers: "All members",
     postAdmins: "Admins and moderators only",
-    wikiEnabled: "Wiki",
+    wikiEnabled: "Documents",
     wikiEnabledHint: "Shared pages the group writes together.",
     channelsEnabled: "Channels",
     channelsEnabledHint: "Chat channels and integrations.",
@@ -130,7 +130,7 @@ export const groups = {
     calendarEnabledHint: "Group events and meetings.",
     keptHint:
       "Turning a feature off hides it; its content is kept and comes back when you turn it on.",
-    wikiOff: "The wiki is turned off",
+    wikiOff: "Documents are turned off",
     offBody: "A group admin can turn it back on in the group settings.",
     backToGroup: "Back to group",
     adminsOnlyPosting: "Only admins and moderators can post in this group.",
@@ -143,7 +143,7 @@ export const groups = {
     change: "Change",
     upload: "Upload",
     defaultPrivacy: "The company-wide group is always visible to everyone.",
-    wikiPolicy: "Who can edit the wiki",
+    wikiPolicy: "Who can edit documents",
     wikiMembers: "All members",
     wikiAdmins: "Admins and moderators",
     wikiPolicyHint:

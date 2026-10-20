@@ -37,6 +37,7 @@ export const notifications = {
     eventInvite: "<b>{{actor}}</b> invited you to <b>{{event}}</b>",
     eventReminder: "Event starting soon: <b>{{event}}</b>",
     missedCall: "Missed call from <b>{{actor}}</b>",
+    threadReply: "<b>{{actor}}</b> replied in a thread",
     other: "New activity from <b>{{actor}}</b>",
   },
   pwa: {

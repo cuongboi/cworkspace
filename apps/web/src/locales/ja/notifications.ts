@@ -44,6 +44,7 @@ export const notifications: DeepStrings<typeof en> = {
     eventInvite: "<b>{{actor}}</b>さんが<b>{{event}}</b>にあなたを招待しました",
     eventReminder: "まもなくイベントが始まります: <b>{{event}}</b>",
     missedCall: "<b>{{actor}}</b>さんからの不在着信",
+    threadReply: "<b>{{actor}}</b>さんがスレッドで返信しました",
     other: "<b>{{actor}}</b>さんの新しいアクティビティ",
   },
   pwa: {

@@ -6,7 +6,7 @@ export const groups: DeepStrings<typeof en> = {
   sections: "グループのメニュー",
   tabs: {
     discussion: "投稿",
-    wiki: "Wiki",
+    wiki: "ドキュメント",
     calendar: "イベント",
     members: "メンバー",
     about: "概要",
@@ -57,7 +57,7 @@ export const groups: DeepStrings<typeof en> = {
   noPosts: "まだ投稿がありません",
   noPostsMember: "最初の投稿をしてみましょう。",
   noPostsGuest: "グループに参加して会話を始めましょう。",
-  wikiLocked: "Wiki を読むにはグループに参加してください。",
+  wikiLocked: "ドキュメントを読むにはグループに参加してください。",
   title: "グループ",
   noDescription: "説明はまだありません。",
   privacyGroup: {
@@ -125,7 +125,7 @@ export const groups: DeepStrings<typeof en> = {
     postPolicy: "投稿できるユーザー",
     postMembers: "すべてのメンバー",
     postAdmins: "管理者とモデレーターのみ",
-    wikiEnabled: "Wiki",
+    wikiEnabled: "ドキュメント",
     wikiEnabledHint: "グループで一緒に作成する共有ページ。",
     channelsEnabled: "チャンネル",
     channelsEnabledHint: "チャットチャンネルと連携。",
@@ -133,7 +133,7 @@ export const groups: DeepStrings<typeof en> = {
     calendarEnabledHint: "グループのイベントと会議。",
     keptHint:
       "機能をオフにすると非表示になります。内容は保持され、オンに戻すと再表示されます。",
-    wikiOff: "Wiki はオフになっています",
+    wikiOff: "ドキュメントはオフになっています",
     offBody: "グループ管理者はグループ設定でオンに戻せます。",
     backToGroup: "グループに戻る",
     adminsOnlyPosting:
@@ -147,7 +147,7 @@ export const groups: DeepStrings<typeof en> = {
     change: "変更",
     upload: "アップロード",
     defaultPrivacy: "全社グループは常に全員に公開されます。",
-    wikiPolicy: "Wiki を編集できるユーザー",
+    wikiPolicy: "ドキュメントを編集できるユーザー",
     wikiMembers: "すべてのメンバー",
     wikiAdmins: "管理者とモデレーター",
     wikiPolicyHint: "グループのページの作成・編集・移動に適用されます。",

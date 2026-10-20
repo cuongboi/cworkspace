@@ -133,7 +133,7 @@ function Thread({
   const [highlight, setHighlight] = useState<string | null>(null)
   // snapshot: the live marker moves as soon as we mark read, which would hide the divider
   const [lastReadAtOpen] = useState(myLastReadAt)
-  const isGroup = conversation.type === "GROUP"
+  const isGroup = conversation.type !== "DIRECT"
   const count = messages.length
 
   const virtualizer = useVirtualizer({
@@ -325,7 +325,7 @@ function Thread({
                 >
                   <div
                     className={cn(
-                      "mx-auto max-w-5xl min-w-0 rounded-md transition-colors duration-700",
+                      "mx-auto min-w-0 rounded-md transition-colors duration-700",
                       first ? "pt-5" : "pt-0.5",
                       highlight === m.id && "bg-primary/10"
                     )}

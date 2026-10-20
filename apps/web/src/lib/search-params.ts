@@ -13,12 +13,18 @@ export type ChatFilter = (typeof chatFilters)[number]
 export const chatFilterParser =
   parseAsStringLiteral(chatFilters).withDefault("all")
 
-/** Chat details column (desktop) / sheet (mobile) and its active tab. */
-export const chatInfoParser = parseAsBoolean.withDefault(true)
+/**
+ * Chat details column (desktop) / sheet (mobile) and its active tab. Unset means the
+ * conversation's default: open, except in channels (room for threads).
+ */
+export const chatInfoParser = parseAsBoolean
 export const chatInfoTabs = ["info", "files", "members", "search"] as const
 export type ChatInfoTab = (typeof chatInfoTabs)[number]
 export const chatInfoTabParser =
   parseAsStringLiteral(chatInfoTabs).withDefault("info")
+/** Open thread (root message id) in a CHANNEL conversation. */
+export const chatThreadParser = parseAsString
+
 /** Search query inside the open conversation (the details "search" tab). */
 export const chatSearchParser = parseAsString.withDefault("")
 

@@ -479,6 +479,8 @@ model Attachment {
 enum ConversationType {
     DIRECT
     GROUP
+    // Slack-style: top-level messages with threaded replies
+    CHANNEL
 }
 
 enum ConversationRole {
@@ -520,8 +522,8 @@ model Conversation {
     // group chats: grounded in the group, not the mirrored rows, so a lagging mirror never grants access
     @@allow('read', groupId != null && group.members?[userId == auth().id && status == ACTIVE])
     @@allow('create', createdById == auth().id)
-    @@allow('update', type == GROUP && members?[userId == auth().id])
-    @@allow('delete', type == GROUP && members?[userId == auth().id && role == ADMIN])
+    @@allow('update', type != DIRECT && members?[userId == auth().id])
+    @@allow('delete', type != DIRECT && members?[userId == auth().id && role == ADMIN])
     @@deny('post-update', directKey != before().directKey || createdById != before().createdById || groupId != before().groupId || channelId != before().channelId)
     // group and channel chats are created and maintained by the server only; the title follows them
     @@deny('create,update,delete', groupId != null || channelId != null)
@@ -540,18 +542,20 @@ model ConversationMember {
     role           ConversationRole @default(MEMBER) @deny('update', !(conversation.members?[userId == auth().id && role == ADMIN]))
     lastReadAt     DateTime         @default(now())
     mutedUntil     DateTime?
+    // pinned to the top of the chat sidebar
+    favoritedAt    DateTime?
     joinedAt       DateTime         @default(now())
 
     @@allow('read', check(conversation, 'read'))
     @@allow('create', conversation.createdById == auth().id)
-    @@allow('create', conversation.type == GROUP && conversation.members?[userId == auth().id && role == ADMIN])
-    // own read state / mute; admins manage roles
+    @@allow('create', conversation.type != DIRECT && conversation.members?[userId == auth().id && role == ADMIN])
+    // own read state / mute / favorite; admins manage roles
     @@allow('update', userId == auth().id || conversation.members?[userId == auth().id && role == ADMIN])
     // group chat membership follows the group (server-side sync); members only update their own read state / mute
     @@deny('create,delete', conversation.groupId != null || conversation.channelId != null)
     @@deny('update', (conversation.groupId != null || conversation.channelId != null) && userId != auth().id)
     // leave a group conversation, or be removed by an admin
-    @@allow('delete', conversation.type == GROUP && (userId == auth().id || conversation.members?[userId == auth().id && role == ADMIN]))
+    @@allow('delete', conversation.type != DIRECT && (userId == auth().id || conversation.members?[userId == auth().id && role == ADMIN]))
     @@deny('post-update', conversationId != before().conversationId || userId != before().userId)
 
     @@unique([conversationId, userId])
@@ -581,13 +585,24 @@ model Message {
     // BOT messages: the integration that posted it (sender is the integration's creator)
     integrationId  String?
     integration    ChannelIntegration? @relation(fields: [integrationId], references: [id], onDelete: SetNull)
+    // CHANNEL threads: replies point at a top-level root; counters are maintained server-side
+    threadId          String?
+    thread            Message?          @relation('MessageThread', fields: [threadId], references: [id], onDelete: Cascade)
+    threadReplies     Message[]         @relation('MessageThread')
+    replyCount        Int               @default(0) @deny('update', true)
+    lastReplyAt       DateTime?         @deny('update', true)
+    // a thread reply that is also shown in the channel timeline
+    alsoSentToChannel Boolean           @default(false) @deny('update', true)
 
     @@allow('read', check(conversation, 'read'))
     @@allow('create', senderId == auth().id && type == TEXT && check(conversation, 'read'))
     @@allow('update', senderId == auth().id && type == TEXT)
-    @@deny('post-update', conversationId != before().conversationId || senderId != before().senderId || integrationId != before().integrationId)
+    @@deny('post-update', conversationId != before().conversationId || senderId != before().senderId || integrationId != before().integrationId || threadId != before().threadId)
+    // thread replies need validation and counter updates: POST /api/conversations/:id/threads/:rootId/replies
+    @@deny('create', threadId != null)
 
     @@index([conversationId, createdAt])
+    @@index([threadId, createdAt])
     @@map('message')
 }
 
@@ -621,6 +636,7 @@ enum NotificationType {
     EVENT_INVITE
     EVENT_REMINDER
     MISSED_CALL
+    THREAD_REPLY
 }
 
 model Notification {

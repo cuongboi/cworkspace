@@ -1,17 +1,17 @@
 export const wiki = {
-  groupWiki: "{{name}} Wiki",
+  groupWiki: "{{name}} Documents",
   breadcrumb: "Breadcrumb",
   outline: "On this page",
   workspace: {
     allPages: "All pages",
     newPage: "New page",
     noPagesShort: "No pages yet.",
-    noPages: "No wiki pages yet",
+    noPages: "No documents yet",
     noPagesBody: "Keep the group's docs, how-tos and decisions in one place.",
     createFirst: "Create the first page",
     notFound: "Page not found",
     notFoundBody: "It may have been deleted or moved.",
-    backToWiki: "Back to the wiki",
+    backToWiki: "Back to documents",
     pagesOfGroup: "Pages of this group",
   },
   page: {

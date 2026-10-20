@@ -24,6 +24,11 @@ export type ChatMessagePayload = {
   /** BOT messages: the posting integration */
   integrationId: string | null;
   integration: { id: string; name: string; avatarUrl: string | null } | null;
+  /** CHANNEL thread reply: the root message (replies are routed to the thread, not the timeline) */
+  threadId: string | null;
+  replyCount: number;
+  lastReplyAt: Date | null;
+  alsoSentToChannel: boolean;
 };
 
 export type NotificationPayload = {

@@ -11,6 +11,7 @@ import {
 } from "lucide-react"
 import { cn } from "cn"
 import { useQueryState } from "nuqs"
+import { useDefaultLayout } from "react-resizable-panels"
 import { Link } from "react-router-dom"
 import { type ReactNode, useEffect, useState } from "react"
 import { useTranslation } from "react-i18next"
@@ -35,6 +36,11 @@ import {
   EmptyMedia,
   EmptyTitle,
 } from "@/components/ui/empty"
+import {
+  ResizableHandle,
+  ResizablePanel,
+  ResizablePanelGroup,
+} from "@/components/ui/resizable"
 import { Skeleton } from "@/components/ui/skeleton"
 import {
   Tooltip,
@@ -48,7 +54,11 @@ import { useSocketEvent } from "@/hooks/use-socket"
 import { useUploads } from "@/hooks/use-uploads"
 import { ApiError, db } from "@/lib/api-client"
 import { useDbQuery } from "@/lib/query"
-import { chatInfoParser, chatInfoTabParser } from "@/lib/search-params"
+import {
+  chatInfoParser,
+  chatInfoTabParser,
+  chatThreadParser,
+} from "@/lib/search-params"
 import type { CallKind } from "@/lib/realtime-events"
 import type { ReactionType } from "@app/api/zenstack/models"
 import {
@@ -73,9 +83,28 @@ import { ConversationAvatar } from "./conversation-avatar"
 import { ConversationInfoPanel } from "./conversation-info-panel"
 import { ConversationInfoSheet } from "./conversation-info-sheet"
 import { MessageList } from "./message-list"
+import { ThreadPanel } from "./thread-panel"
 import { ThreadScrollProvider } from "./thread-scroll"
 
 type ThreadVariant = "page" | "panel"
+
+/** localStorage that never throws (private mode, blocked site data). */
+const safeStorage = {
+  getItem: (key: string) => {
+    try {
+      return localStorage.getItem(key)
+    } catch {
+      return null
+    }
+  },
+  setItem: (key: string, value: string) => {
+    try {
+      localStorage.setItem(key, value)
+    } catch {
+      // layout just isn't remembered
+    }
+  },
+}
 
 /**
  * One conversation. `page` is the Messenger pane; `panel` is embedded (group page, call screen):
@@ -159,17 +188,32 @@ function ThreadView({
   const [mode, setMode] = useState<ComposerMode | null>(null)
   const isWide = useIsWide()
   // wide pages show details as a column (toggle kept in the URL); otherwise as a sheet
-  const [infoColumn, setInfoColumn] = useQueryState("info", chatInfoParser)
+  const [infoParam, setInfoParam] = useQueryState("info", chatInfoParser)
+  const infoDefault = conversation.type !== "CHANNEL"
+  const infoColumn = infoParam ?? infoDefault
+  // the default stays out of the URL
+  const setInfoColumn = (open: boolean) =>
+    setInfoParam(open === infoDefault ? null : open)
   const [infoOpen, setInfoOpen] = useState(false)
-  const showColumn = variant === "page" && isWide && infoColumn
+  const isChannel = conversation.type === "CHANNEL"
+  const [threadRoot, setThreadRoot] = useQueryState("thread", chatThreadParser)
+  const openThread = isChannel ? threadRoot : null
+  const resizable = variant === "page" && isWide
+  const threadLayout = useDefaultLayout({
+    id: "chat-thread-panel",
+    panelIds: ["main", "thread"],
+    storage: safeStorage,
+  })
+  // an open thread takes the details column's place
+  const showColumn = variant === "page" && isWide && infoColumn && !openThread
   const toggleInfo = () =>
     variant === "page" && isWide
-      ? void setInfoColumn(infoColumn ? false : null)
+      ? void setInfoColumn(!infoColumn)
       : setInfoOpen(true)
   const [, setInfoTab] = useQueryState("infoTab", chatInfoTabParser)
   const openSearch = () => {
     void setInfoTab("search")
-    if (variant === "page" && isWide) void setInfoColumn(null)
+    if (variant === "page" && isWide) void setInfoColumn(true)
     else setInfoOpen(true)
   }
   const [toDelete, setToDelete] = useState<ChatMessage | null>(null)
@@ -242,103 +286,154 @@ function ThreadView({
       })
   }
 
-  return (
-    <div className="flex h-full min-h-0">
-      <section
-        aria-label={t("chat.conversation")}
-        className="relative flex h-full min-h-0 min-w-0 flex-1 flex-col bg-background"
-        onDragEnter={(e) => {
-          if (e.dataTransfer.types.includes("Files")) setDragging(true)
-        }}
-        onDragOver={(e) => {
-          if (e.dataTransfer.types.includes("Files")) e.preventDefault()
-        }}
-        onDragLeave={(e) => {
-          if (!e.currentTarget.contains(e.relatedTarget as Node | null))
-            setDragging(false)
-        }}
-        onDrop={(e) => {
-          if (!e.dataTransfer.files.length) return
-          e.preventDefault()
+  const main = (
+    <section
+      aria-label={t("chat.conversation")}
+      className="relative flex h-full min-h-0 min-w-0 flex-1 flex-col bg-background"
+      onDragEnter={(e) => {
+        if (e.dataTransfer.types.includes("Files")) setDragging(true)
+      }}
+      onDragOver={(e) => {
+        if (e.dataTransfer.types.includes("Files")) e.preventDefault()
+      }}
+      onDragLeave={(e) => {
+        if (!e.currentTarget.contains(e.relatedTarget as Node | null))
           setDragging(false)
-          void uploads.add(e.dataTransfer.files)
+      }}
+      onDrop={(e) => {
+        if (!e.dataTransfer.files.length) return
+        e.preventDefault()
+        setDragging(false)
+        void uploads.add(e.dataTransfer.files)
+      }}
+    >
+      <ThreadHeader
+        conversation={conversation}
+        members={members}
+        variant={variant}
+        actions={actions}
+        crumbs={crumbs}
+        infoShown={showColumn}
+        onOpenInfo={toggleInfo}
+        onSearch={openSearch}
+      />
+      <MessageList
+        conversation={conversation}
+        members={members}
+        actions={{
+          onReact: react,
+          onReply: (message) => setMode({ kind: "reply", message }),
+          onOpenThread: isChannel
+            ? (rootId) => void setThreadRoot(rootId)
+            : undefined,
+          onEdit: (message) => setMode({ kind: "edit", message }),
+          onDelete: setToDelete,
         }}
+      />
+      <TypingIndicator names={typing} />
+      <Composer
+        key={conversation.id}
+        conversationId={conversation.id}
+        mode={mode}
+        onModeChange={setMode}
+        uploads={uploads}
+        members={members.map((m) => m.user)}
+        isGroup={conversation.type !== "DIRECT"}
+        disabled={!isMember}
+      />
+
+      {dragging ? (
+        <div className="pointer-events-none absolute inset-2 z-30 flex flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-primary bg-background/90 text-primary">
+          <UploadIcon className="size-8" />
+          <p className="text-sm font-medium">{t("chat.thread.dropFiles")}</p>
+        </div>
+      ) : null}
+
+      <ConversationInfoSheet
+        key={`info-${conversation.id}-${conversation.title ?? ""}`}
+        open={infoOpen && !showColumn}
+        onOpenChange={setInfoOpen}
+        conversation={conversation}
+        members={members}
+      />
+
+      <AlertDialog
+        open={toDelete !== null}
+        onOpenChange={(o) => !o && setToDelete(null)}
       >
-        <ThreadHeader
-          conversation={conversation}
-          members={members}
-          variant={variant}
-          actions={actions}
-          crumbs={crumbs}
-          infoShown={showColumn}
-          onOpenInfo={toggleInfo}
-          onSearch={openSearch}
-        />
-        <MessageList
-          conversation={conversation}
-          members={members}
-          actions={{
-            onReact: react,
-            onReply: (message) => setMode({ kind: "reply", message }),
-            onEdit: (message) => setMode({ kind: "edit", message }),
-            onDelete: setToDelete,
-          }}
-        />
-        <TypingIndicator names={typing} />
-        <Composer
-          key={conversation.id}
-          conversationId={conversation.id}
-          mode={mode}
-          onModeChange={setMode}
-          uploads={uploads}
-          members={members.map((m) => m.user)}
-          isGroup={conversation.type === "GROUP"}
-          disabled={!isMember}
-        />
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{t("chat.thread.unsendTitle")}</AlertDialogTitle>
+            <AlertDialogDescription>
+              {t("chat.thread.unsendBody")}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>{t("common.cancel")}</AlertDialogCancel>
+            <AlertDialogAction
+              variant="destructive"
+              onClick={() => {
+                if (toDelete) unsend(toDelete)
+                setToDelete(null)
+              }}
+            >
+              {t("chat.thread.unsend")}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </section>
+  )
+  const threadPanel = openThread ? (
+    <ThreadPanel
+      key={openThread}
+      conversation={conversation}
+      members={members}
+      rootId={openThread}
+      isMember={isMember}
+      onClose={() => void setThreadRoot(null)}
+      onReact={react}
+      onDelete={setToDelete}
+    />
+  ) : null
 
-        {dragging ? (
-          <div className="pointer-events-none absolute inset-2 z-30 flex flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-primary bg-background/90 text-primary">
-            <UploadIcon className="size-8" />
-            <p className="text-sm font-medium">{t("chat.thread.dropFiles")}</p>
-          </div>
-        ) : null}
-
-        <ConversationInfoSheet
-          key={`info-${conversation.id}-${conversation.title ?? ""}`}
-          open={infoOpen && !showColumn}
-          onOpenChange={setInfoOpen}
-          conversation={conversation}
-          members={members}
-        />
-
-        <AlertDialog
-          open={toDelete !== null}
-          onOpenChange={(o) => !o && setToDelete(null)}
+  // wide pages: the thread is a resizable column whose width is remembered
+  if (threadPanel && resizable) {
+    return (
+      <ResizablePanelGroup
+        orientation="horizontal"
+        className="min-h-0"
+        defaultLayout={threadLayout.defaultLayout}
+        onLayoutChanged={threadLayout.onLayoutChanged}
+      >
+        <ResizablePanel id="main" minSize={360}>
+          {main}
+        </ResizablePanel>
+        <ResizableHandle />
+        <ResizablePanel
+          id="thread"
+          defaultSize={384}
+          minSize={300}
+          maxSize="60"
+          aria-label={t("chat.threads.title")}
         >
-          <AlertDialogContent>
-            <AlertDialogHeader>
-              <AlertDialogTitle>
-                {t("chat.thread.unsendTitle")}
-              </AlertDialogTitle>
-              <AlertDialogDescription>
-                {t("chat.thread.unsendBody")}
-              </AlertDialogDescription>
-            </AlertDialogHeader>
-            <AlertDialogFooter>
-              <AlertDialogCancel>{t("common.cancel")}</AlertDialogCancel>
-              <AlertDialogAction
-                variant="destructive"
-                onClick={() => {
-                  if (toDelete) unsend(toDelete)
-                  setToDelete(null)
-                }}
-              >
-                {t("chat.thread.unsend")}
-              </AlertDialogAction>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
-      </section>
+          {threadPanel}
+        </ResizablePanel>
+      </ResizablePanelGroup>
+    )
+  }
+
+  return (
+    <div className="relative flex h-full min-h-0">
+      {main}
+      {threadPanel ? (
+        <aside
+          aria-label={t("chat.threads.title")}
+          className="absolute inset-y-0 right-0 z-20 w-full max-w-md border-l"
+        >
+          {threadPanel}
+        </aside>
+      ) : null}
       {showColumn ? (
         <aside
           aria-label={t("chat.thread.details")}
@@ -379,7 +474,7 @@ function ThreadHeader({
   const isMobile = useIsMobile()
   const { startCall } = useCalls()
   const [calling, setCalling] = useState<CallKind | null>(null)
-  const isGroup = conversation.type === "GROUP"
+  const isGroup = conversation.type !== "DIRECT"
   const other = !isGroup ? otherUsers(members, me.id)[0] : undefined
   const online = useIsOnline(other?.id)
   const title = conversationTitle(conversation, members, me.id)
@@ -463,9 +558,11 @@ function ThreadHeader({
               to={"/chat"}
               className="hidden shrink-0 text-muted-foreground hover:text-foreground sm:inline"
             >
-              {isGroup
-                ? t("chat.thread.groups")
-                : t("chat.thread.directMessages")}
+              {conversation.type === "CHANNEL"
+                ? t("chat.thread.channels")
+                : isGroup
+                  ? t("chat.thread.groups")
+                  : t("chat.thread.directMessages")}
             </Link>
             <span className="hidden text-muted-foreground/60 sm:inline">/</span>
             {isGroup ? (
@@ -665,6 +762,7 @@ function useLiveMessages(conversationId: string) {
       attachments: [],
       reactions: [],
       integration: payload.integration ?? null,
+      threadReplies: [],
       replyTo: quoted
         ? {
             id: quoted.id,

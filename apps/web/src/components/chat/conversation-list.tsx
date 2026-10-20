@@ -1,18 +1,44 @@
 import { cn } from "cn"
 import {
+  BellIcon,
   BellOffIcon,
   InboxIcon,
+  LinkIcon,
+  LogOutIcon,
   MessageCirclePlusIcon,
   MessagesSquareIcon,
   PlusIcon,
   SearchIcon,
+  MoreHorizontalIcon,
   SquarePenIcon,
+  StarIcon,
+  StarOffIcon,
 } from "lucide-react"
 import { Link } from "react-router-dom"
 import { type ReactNode, useState } from "react"
 import { useQueryState } from "nuqs"
 import { useTranslation } from "react-i18next"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 import { Button } from "@/components/ui/button"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import {
   SidebarCount,
   SidebarSection,
@@ -46,6 +72,10 @@ import {
 } from "./chat-data"
 import { ConversationAvatar } from "./conversation-avatar"
 import { NewConversationDialog } from "./new-conversation-dialog"
+import {
+  MUTE_OPTIONS,
+  useConversationActions,
+} from "./use-conversation-actions"
 
 type Row = { item: ConversationListItem; title: string }
 
@@ -85,8 +115,12 @@ export function ConversationList({ activeId }: { activeId?: string }) {
       )
     )
   })
-  const groups = visible.filter((r) => r.item.conversation.type === "GROUP")
-  const direct = visible.filter((r) => r.item.conversation.type === "DIRECT")
+  // favorites appear only in their own section
+  const favorites = visible.filter((r) => r.item.favoritedAt)
+  const rest = visible.filter((r) => !r.item.favoritedAt)
+  const groups = rest.filter((r) => r.item.conversation.type === "GROUP")
+  const channels = rest.filter((r) => r.item.conversation.type === "CHANNEL")
+  const direct = rest.filter((r) => r.item.conversation.type === "DIRECT")
 
   const quickFilters: {
     value: ChatFilter
@@ -193,6 +227,36 @@ export function ConversationList({ activeId }: { activeId?: string }) {
             </p>
           ) : (
             <>
+              {favorites.length ? (
+                <SidebarSection
+                  id="favorites"
+                  storageKey={SECTION_KEY}
+                  label={t("chat.list.menu.favorites")}
+                >
+                  {favorites.map((r) => (
+                    <ConversationRow
+                      key={r.item.conversation.id}
+                      {...r}
+                      muted={isMuted(r.item)}
+                      active={r.item.conversation.id === activeId}
+                    />
+                  ))}
+                </SidebarSection>
+              ) : null}
+              <Section
+                id="channels"
+                label={t("chat.list.channels")}
+                addLabel={t("chat.list.newChannel")}
+              >
+                {channels.map((r) => (
+                  <ConversationRow
+                    key={r.item.conversation.id}
+                    {...r}
+                    muted={isMuted(r.item)}
+                    active={r.item.conversation.id === activeId}
+                  />
+                ))}
+              </Section>
               <Section
                 id="groups"
                 label={t("chat.list.groups")}
@@ -249,7 +313,9 @@ function Section({
       label={label}
       action={
         <Tooltip>
-          <NewConversationDialog>
+          <NewConversationDialog
+            defaultKind={id === "channels" ? "channel" : "chat"}
+          >
             <TooltipTrigger asChild>
               <Button
                 variant="ghost"
@@ -283,41 +349,156 @@ function ConversationRow({
   const preview = conversation.messages[0]?.content
 
   return (
-    <Link
-      to={`/chat/${conversation.id}`}
-      aria-current={active ? "page" : undefined}
-      title={preview || undefined}
-      className={cn(sidebarRowClass, active && "bg-accent")}
-    >
-      <ConversationAvatar
-        type={conversation.type}
-        group={conversation.group}
-        members={conversation.members}
-        meId={me.id}
-        size="sm"
-      />
-      <span
-        className={cn(
-          "min-w-0 flex-1 truncate",
-          unread && !muted ? "font-semibold" : "font-normal",
-          muted && "text-muted-foreground"
-        )}
+    <div className="group/row relative">
+      <Link
+        to={`/chat/${conversation.id}`}
+        aria-current={active ? "page" : undefined}
+        title={preview || undefined}
+        className={cn(sidebarRowClass, "pr-8", active && "bg-accent")}
       >
-        {title}
-      </span>
-      {muted ? (
-        <BellOffIcon
-          className="size-3 shrink-0 text-muted-foreground"
-          aria-label={t("chat.list.muted")}
+        <ConversationAvatar
+          type={conversation.type}
+          group={conversation.group}
+          members={conversation.members}
+          meId={me.id}
+          size="sm"
         />
-      ) : unread ? (
         <span
-          role="img"
-          aria-label={t("chat.list.unread")}
-          className="size-1.5 shrink-0 rounded-full bg-primary"
-        />
-      ) : null}
-    </Link>
+          className={cn(
+            "min-w-0 flex-1 truncate",
+            unread && !muted ? "font-semibold" : "font-normal",
+            muted && "text-muted-foreground"
+          )}
+        >
+          {title}
+        </span>
+        {/* the menu button takes this spot on hover */}
+        <span className="flex shrink-0 group-focus-within/row:hidden group-hover/row:hidden">
+          {muted ? (
+            <BellOffIcon
+              className="size-3 text-muted-foreground"
+              aria-label={t("chat.list.muted")}
+            />
+          ) : unread ? (
+            <span
+              role="img"
+              aria-label={t("chat.list.unread")}
+              className="size-1.5 rounded-full bg-primary"
+            />
+          ) : null}
+        </span>
+      </Link>
+      <ConversationRowMenu item={item} title={title} muted={muted} />
+    </div>
+  )
+}
+
+function ConversationRowMenu({
+  item,
+  title,
+  muted,
+}: {
+  item: ConversationListItem
+  title: string
+  muted: boolean
+}) {
+  const { t } = useTranslation()
+  const { conversation } = item
+  const { setMute, setFavorite, copyLink, leave } = useConversationActions(
+    conversation.id
+  )
+  const [open, setOpen] = useState(false)
+  const [confirmLeave, setConfirmLeave] = useState(false)
+  // DIRECT chats can't be left (policy); group/channel-linked chats aren't listed here
+  const canLeave = conversation.type !== "DIRECT"
+
+  return (
+    <>
+      <DropdownMenu open={open} onOpenChange={setOpen}>
+        <DropdownMenuTrigger asChild>
+          <Button
+            variant="ghost"
+            size="icon-xs"
+            aria-label={t("chat.list.menu.more", { name: title })}
+            className={cn(
+              "absolute top-1/2 right-1 -translate-y-1/2 text-muted-foreground opacity-0 group-focus-within/row:opacity-100 group-hover/row:opacity-100",
+              open && "opacity-100"
+            )}
+          >
+            <MoreHorizontalIcon />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="start" side="right" className="w-52">
+          {muted ? (
+            <DropdownMenuItem onSelect={() => void setMute("off")}>
+              <BellIcon /> {t("chat.list.menu.unmute")}
+            </DropdownMenuItem>
+          ) : (
+            <DropdownMenuSub>
+              <DropdownMenuSubTrigger>
+                <BellOffIcon /> {t("chat.list.menu.mute")}
+              </DropdownMenuSubTrigger>
+              <DropdownMenuSubContent>
+                {MUTE_OPTIONS.filter((o) => o.value !== "off").map((o) => (
+                  <DropdownMenuItem
+                    key={o.value}
+                    onSelect={() => void setMute(o.value)}
+                  >
+                    {t(o.label)}
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuSubContent>
+            </DropdownMenuSub>
+          )}
+          <DropdownMenuItem
+            onSelect={() => void setFavorite(!item.favoritedAt)}
+          >
+            {item.favoritedAt ? (
+              <>
+                <StarOffIcon /> {t("chat.list.menu.unfavorite")}
+              </>
+            ) : (
+              <>
+                <StarIcon /> {t("chat.list.menu.favorite")}
+              </>
+            )}
+          </DropdownMenuItem>
+          <DropdownMenuItem onSelect={() => void copyLink()}>
+            <LinkIcon /> {t("chat.list.menu.copyLink")}
+          </DropdownMenuItem>
+          {canLeave ? (
+            <>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                variant="destructive"
+                onSelect={() => setConfirmLeave(true)}
+              >
+                <LogOutIcon /> {t("chat.list.menu.leave")}
+              </DropdownMenuItem>
+            </>
+          ) : null}
+        </DropdownMenuContent>
+      </DropdownMenu>
+      <AlertDialog open={confirmLeave} onOpenChange={setConfirmLeave}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{t("chat.info.leaveTitle")}</AlertDialogTitle>
+            <AlertDialogDescription>
+              {t("chat.info.leaveBody")}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>{t("common.cancel")}</AlertDialogCancel>
+            <AlertDialogAction
+              variant="destructive"
+              onClick={() => void leave()}
+            >
+              {t("chat.info.leaveGroup")}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
   )
 }
 

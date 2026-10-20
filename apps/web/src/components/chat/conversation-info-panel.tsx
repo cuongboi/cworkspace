@@ -1,5 +1,5 @@
 import { useQueryClient } from "@tanstack/react-query"
-import { addHours, format } from "date-fns"
+import { format } from "date-fns"
 import {
   BellOffIcon,
   CalendarDaysIcon,
@@ -14,7 +14,7 @@ import {
   UserRoundIcon,
   UsersRoundIcon,
 } from "lucide-react"
-import { Link, useNavigate } from "react-router-dom"
+import { Link } from "react-router-dom"
 import { type ReactNode, useState } from "react"
 import { useQueryState } from "nuqs"
 import { useTranslation } from "react-i18next"
@@ -71,16 +71,12 @@ import {
 import { ConversationAvatar } from "./conversation-avatar"
 import { MessageSearch } from "./message-search"
 import { PeoplePicker, type PickedUser } from "./people-picker"
-
-const FOREVER = new Date("9999-12-31T00:00:00.000Z")
-
-const MUTE_OPTIONS = [
-  { value: "off", label: "chat.info.mute.off" },
-  { value: "1", label: "chat.info.mute.h1" },
-  { value: "8", label: "chat.info.mute.h8" },
-  { value: "24", label: "chat.info.mute.h24" },
-  { value: "forever", label: "chat.info.mute.forever" },
-] as const
+import {
+  FOREVER,
+  MUTE_OPTIONS,
+  type MuteValue,
+  useConversationActions,
+} from "./use-conversation-actions"
 
 const errorMessage = (err: unknown, fallback: string) =>
   err instanceof ApiError ? err.message : fallback
@@ -104,7 +100,7 @@ export function ConversationInfoPanel({
   const { t } = useTranslation()
   const { me } = useApp()
   const [tab, setTab] = useQueryState("infoTab", chatInfoTabParser)
-  const isGroup = conversation.type === "GROUP"
+  const isGroup = conversation.type !== "DIRECT"
   const title = conversationTitle(conversation, members, me.id)
   const other = !isGroup ? otherUsers(members, me.id)[0] : undefined
   const otherOnline = useIsOnline(other?.id)
@@ -216,9 +212,7 @@ function InfoTab({ conversation, members, onLeft }: Props) {
   const locale = useDateLocale()
   const { me } = useApp()
   const now = useNow()
-  const navigate = useNavigate()
-  const qc = useQueryClient()
-  const isGroup = conversation.type === "GROUP"
+  const isGroup = conversation.type !== "DIRECT"
   // a group's chat is managed through the group (members, name), not here
   const linkedGroup = conversation.group
   const myMember = members.find((m) => m.userId === me.id)
@@ -226,8 +220,9 @@ function InfoTab({ conversation, members, onLeft }: Props) {
   const [name, setName] = useState(conversation.title ?? "")
   const [savingName, setSavingName] = useState(false)
 
-  const refresh = () =>
-    invalidateModels(qc, ["conversation", "conversationMember"])
+  const { refresh, setMute, leave } = useConversationActions(conversation.id, {
+    onLeft,
+  })
 
   const rename = async () => {
     setSavingName(true)
@@ -250,53 +245,6 @@ function InfoTab({ conversation, members, onLeft }: Props) {
     myMember?.mutedUntil && myMember.mutedUntil.getTime() > now
       ? myMember.mutedUntil
       : null
-  const setMute = async (value: string) => {
-    const until =
-      value === "off"
-        ? null
-        : value === "forever"
-          ? FOREVER
-          : addHours(new Date(), Number(value))
-    try {
-      await db.conversationMember.update({
-        where: {
-          conversationId_userId: {
-            conversationId: conversation.id,
-            userId: me.id,
-          },
-        },
-        data: { mutedUntil: until },
-        select: { id: true },
-      })
-      await refresh()
-      toast.success(
-        until ? t("chat.info.mutedToast") : t("chat.info.unmutedToast")
-      )
-    } catch (err) {
-      toast.error(errorMessage(err, t("chat.info.muteFailed")))
-    }
-  }
-
-  const leave = async () => {
-    try {
-      await db.conversationMember.delete({
-        where: {
-          conversationId_userId: {
-            conversationId: conversation.id,
-            userId: me.id,
-          },
-        },
-        select: { id: true },
-      })
-      onLeft?.()
-      await navigate("/chat")
-      await refresh()
-      toast.success(t("chat.info.left"))
-    } catch (err) {
-      toast.error(errorMessage(err, t("chat.info.leaveFailed")))
-    }
-  }
-
   return (
     <div className="flex flex-col gap-4">
       <section className="flex flex-col">
@@ -323,7 +271,7 @@ function InfoTab({ conversation, members, onLeft }: Props) {
           </label>
           <Select
             value={mutedUntil ? "custom" : "off"}
-            onValueChange={(v) => void setMute(v)}
+            onValueChange={(v) => void setMute(v as MuteValue)}
           >
             <SelectTrigger
               id="chat-mute"
@@ -556,7 +504,7 @@ function MembersTab({
   const myMember = members.find((m) => m.userId === me.id)
   const linkedGroup = conversation.group
   const iAmAdmin =
-    conversation.type === "GROUP" && !linkedGroup && myMember?.role === "ADMIN"
+    conversation.type !== "DIRECT" && !linkedGroup && myMember?.role === "ADMIN"
   const [adding, setAdding] = useState(false)
   const [toAdd, setToAdd] = useState<PickedUser[]>([])
   const [busy, setBusy] = useState(false)
