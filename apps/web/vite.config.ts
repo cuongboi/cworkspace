@@ -5,10 +5,10 @@ import { defineConfig, loadEnv, type Plugin } from "vite"
 import * as fs from "node:fs"
 // relative: the config bundler doesn't follow workspace package exports to .ts sources
 import {
+  type AppConfig,
   buildManifest,
-  HEAD_PLACEHOLDER,
   parseAppConfig,
-  renderHead,
+  renderShell,
 } from "../../packages/shared/src/app-config.ts"
 
 /**
@@ -23,10 +23,12 @@ function appConfigPlugin(mode: string): Plugin {
   return {
     name: "app-config",
     apply: "serve",
-    transformIndexHtml: (html, ctx) =>
-      html.replace(
-        HEAD_PLACEHOLDER,
-        renderHead(cfg, ctx.server?.resolvedUrls?.local[0])
+    // the running API knows the live settings (social sign-in, onboarding); .env if it's down
+    transformIndexHtml: async (html, ctx) =>
+      renderShell(
+        html,
+        await liveAppConfig(cfg),
+        ctx.server?.resolvedUrls?.local[0]
       ),
     configureServer(server) {
       server.middlewares.use("/manifest.webmanifest", (_req, res) => {
@@ -35,6 +37,20 @@ function appConfigPlugin(mode: string): Plugin {
       })
     },
   }
+}
+
+const API_TARGET = "http://localhost:3000"
+
+async function liveAppConfig(fallback: AppConfig): Promise<AppConfig> {
+  try {
+    const res = await fetch(`${API_TARGET}/api/settings/public`, {
+      signal: AbortSignal.timeout(1500),
+    })
+    if (res.ok) return ((await res.json()) as { data: AppConfig }).data
+  } catch {
+    // API not up yet
+  }
+  return fallback
 }
 
 /** One chunk per npm package (scoped packages keep their scope); react-dom pulls in its scheduler. */
@@ -75,15 +91,15 @@ export default defineConfig(({ command, mode }) => ({
   server: {
     proxy: {
       "/api": {
-        target: "http://localhost:3000",
+        target: API_TARGET,
         changeOrigin: true,
       },
       "/ws": {
-        target: "ws://localhost:3000",
+        target: API_TARGET.replace(/^http/, "ws"),
         ws: true,
       },
       "/openapi": {
-        target: "http://localhost:3000",
+        target: API_TARGET,
         changeOrigin: true,
         rewrite: (path) => {
           return path

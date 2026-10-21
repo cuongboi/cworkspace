@@ -19,6 +19,7 @@ import { Input } from "@/components/ui/input"
 import { authClient } from "@/lib/auth-client"
 import { redirectParser, safeRedirect } from "@/lib/search-params"
 import { FormError } from "./auth-layout"
+import { SocialSignIn } from "./social-sign-in"
 
 type Values = {
   name: string
@@ -108,6 +109,7 @@ export function SignUpPage() {
         <CardDescription>{t("auth.signUp.description")}</CardDescription>
       </CardHeader>
       <CardContent>
+        <SocialSignIn />
         <AutoForm
           schema={schema}
           defaultValues={defaultValues}

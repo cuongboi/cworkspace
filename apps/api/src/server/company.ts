@@ -50,3 +50,20 @@ export async function acceptPendingInvitation(user: { id: string; email: string 
     });
   });
 }
+
+/**
+ * The instance always has an admin: when none exists (a fresh install whose first sign-up raced
+ * the admin plugin's default role, or the last admin was deleted), the oldest active account is
+ * promoted. Runs after every sign-up and at boot.
+ */
+export async function ensureAdmin() {
+  if (await db.user.count({ where: { role: "admin" } })) return;
+  const first = await db.user.findFirst({
+    where: { OR: [{ banned: null }, { banned: false }] },
+    orderBy: { createdAt: "asc" },
+    select: { id: true, email: true },
+  });
+  if (!first) return;
+  await db.user.update({ where: { id: first.id }, data: { role: "admin" } });
+  console.log(`[company] ${first.email} is now the instance admin (there was none)`);
+}

@@ -68,6 +68,7 @@ export function useCall(callId: string, kind: CallKind | null) {
   })
   useSocketEvent("call:caption", (p) => session.receiveCaption(p))
   useSocketEvent("call:glossary", (p) => session.receiveGlossary(p))
+  useSocketEvent("call:caption-status", (p) => session.receiveCaptionStatus(p))
 
   return {
     ...state,

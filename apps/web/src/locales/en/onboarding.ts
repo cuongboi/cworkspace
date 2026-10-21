@@ -1,0 +1,56 @@
+export const onboarding = {
+  pageTitle: "Set up your workspace",
+  title: "Welcome! Let's set up your workspace",
+  steps: {
+    account: "Admin account",
+    workspace: "Workspace",
+    services: "Services",
+  },
+  stepOf: "Step {{step}} of {{total}}",
+  crossOrigin:
+    "Setup must be finished from this server's own address. Open the setup link directly.",
+  next: "Continue",
+  back: "Back",
+  skip: "Skip for now",
+  finish: "Create workspace",
+  finishing: "Creating…",
+  token: {
+    title: "Open the setup link",
+    body: "For security, setup needs the link printed in the server console when it started with no users. Open that link, or paste the token from it.",
+    label: "Setup token",
+    submit: "Continue",
+    invalid:
+      "This setup link isn't valid anymore. Restart the server for a new one, or check ONBOARDING_TOKEN.",
+  },
+  account: {
+    body: "You'll be the admin: you manage people, settings and every group.",
+    name: "Your name",
+    email: "Email",
+    password: "Password",
+    passwordHint: "At least 8 characters. A long passphrase is best.",
+    confirm: "Confirm password",
+    weak: "Use at least 8 characters",
+    mismatch: "The passwords don't match",
+    sameAsEmail: "Don't use your email as the password",
+    strength: { weak: "Weak", fair: "Fair", strong: "Strong" },
+  },
+  workspace: {
+    body: "How your company appears to everyone. You can change it later in Settings.",
+    name: "Company or workspace name",
+    description: "Short description",
+  },
+  services: {
+    body: "Optional. Add these now or later in Settings.",
+    captions: "Live captions in calls",
+    provider: "Service",
+    apiKey: "API key",
+    email: "Email (Resend)",
+    emailBody:
+      "Invitations and password resets. Without a key emails are only printed to the server console.",
+    resendKey: "Resend API key",
+    from: "Sender",
+  },
+  done: "Your workspace is ready",
+  alreadySetUp: "This workspace is already set up. Sign in instead.",
+  failed: "Setup failed",
+}

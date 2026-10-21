@@ -25,10 +25,10 @@ type PermissionType {
 // ───────────────────────────── better-auth ─────────────────────────────
 
 model User {
-    id                      String              @id
+    id                      String               @id
     name                    String
-    email                   String              @unique @deny('update', true)
-    emailVerified           Boolean             @default(false) @deny('update', true)
+    email                   String               @unique @deny('update', true)
+    emailVerified           Boolean              @default(false) @deny('update', true)
     image                   String?
     // profile (editable by the user through `db.user.update`)
     title                   String?
@@ -37,18 +37,18 @@ model User {
     phone                   String?
     bio                     String?
     // better-auth admin plugin: written by the server only, never through /api/execute
-    role                    String?             @deny('update', true)
-    banned                  Boolean?            @default(false) @deny('update', true)
-    banReason               String?             @deny('update', true)
-    banExpires              DateTime?           @deny('update', true)
+    role                    String?              @deny('update', true)
+    banned                  Boolean?             @default(false) @deny('update', true)
+    banReason               String?              @deny('update', true)
+    banExpires              DateTime?            @deny('update', true)
     // RBAC: [{ model, actions }], see `type Permission`
-    permissions             PermissionType[]    @json @default("[]") @deny('update', true)
-    createdAt               DateTime            @default(now())
-    updatedAt               DateTime            @default(now()) @updatedAt
+    permissions             PermissionType[]     @json @default("[]") @deny('update', true)
+    createdAt               DateTime             @default(now())
+    updatedAt               DateTime             @default(now()) @updatedAt
     sessions                Session[]
     accounts                Account[]
     invitationsSent         Invitation[]
-    groupsCreated           Group[]             @relation('GroupCreator')
+    groupsCreated           Group[]              @relation('GroupCreator')
     groupMemberships        GroupMember[]
     posts                   Post[]
     comments                Comment[]
@@ -60,8 +60,8 @@ model User {
     conversationMemberships ConversationMember[]
     messages                Message[]
     messageReactions        MessageReaction[]
-    notifications           Notification[]      @relation('NotificationRecipient')
-    notificationsActed      Notification[]      @relation('NotificationActor')
+    notifications           Notification[]       @relation('NotificationRecipient')
+    notificationsActed      Notification[]       @relation('NotificationActor')
     pushTokens              PushToken[]
     eventsCreated           Event[]
     eventAttendances        EventAttendee[]
@@ -79,16 +79,16 @@ model User {
 }
 
 model Session {
-    id                   String   @id
-    expiresAt            DateTime
-    token                String   @unique
-    createdAt            DateTime @default(now())
-    updatedAt            DateTime @updatedAt
-    ipAddress            String?
-    userAgent            String?
-    userId               String
-    user                 User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-    impersonatedBy       String?
+    id             String   @id
+    expiresAt      DateTime
+    token          String   @unique
+    createdAt      DateTime @default(now())
+    updatedAt      DateTime @updatedAt
+    ipAddress      String?
+    userAgent      String?
+    userId         String
+    user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+    impersonatedBy String?
 
     // managed by better-auth through the unscoped client only
     @@deny('all', true)
@@ -167,6 +167,33 @@ model Invitation {
     @@map('invitation')
 }
 
+// ───────────────────────────── instance settings ─────────────────────────────
+
+// Admin-editable instance settings (one row, id 'default'); read and written only through
+// src/routes/settings.ts with the trusted client: `secrets` holds encrypted API keys.
+model AppSetting {
+    id          String   @id @default('default')
+    // AppConfig overrides: name, shortName, description, locale, twitterSite, ogImage, icon
+    branding    Json     @default("{}")
+    // provider ('soniox' | 'gemini' | 'off') and model names
+    captions    Json     @default("{}")
+    // { google: { enabled, clientId }, github: …, line: … }
+    social      Json     @default("{}")
+    // { from } (Resend sender)
+    email       Json     @default("{}")
+    // Firebase: projectId, clientEmail (service account), apiKey, appId, messagingSenderId, vapidKey
+    push        Json     @default("{}")
+    // AES-256-GCM (src/server/settings.ts): provider API keys, OAuth client secrets, Resend key,
+    // Firebase private key
+    secrets     String   @default('')
+    updatedById String?
+    updatedAt   DateTime @updatedAt
+
+    @@deny('all', true)
+    @@allow('all', auth().role == 'admin')
+    @@map('app_setting')
+}
+
 // ───────────────────────────── groups ─────────────────────────────
 
 // who may create and edit the group's Knowledge pages
@@ -199,27 +226,27 @@ enum MembershipStatus {
 }
 
 model Group {
-    id             String        @id @default(cuid())
-    name           String
-    slug           String        @unique
-    description    String?
-    coverUrl       String?
-    privacy        GroupPrivacy  @default(PUBLIC)
+    id              String          @id @default(cuid())
+    name            String
+    slug            String          @unique
+    description     String?
+    coverUrl        String?
+    privacy         GroupPrivacy    @default(PUBLIC)
     // the "All company" group: every user belongs to it, it cannot be deleted
-    isDefault      Boolean       @default(false) @deny('update', true)
-    createdById    String        @default(auth().id)
-    createdBy      User          @relation('GroupCreator', fields: [createdById], references: [id], onDelete: Cascade)
-    createdAt      DateTime      @default(now())
-    updatedAt      DateTime      @updatedAt
-    members        GroupMember[]
-    posts          Post[]
-    events         Event[]
-    notifications  Notification[]
+    isDefault       Boolean         @default(false) @deny('update', true)
+    createdById     String          @default(auth().id)
+    createdBy       User            @relation('GroupCreator', fields: [createdById], references: [id], onDelete: Cascade)
+    createdAt       DateTime        @default(now())
+    updatedAt       DateTime        @updatedAt
+    members         GroupMember[]
+    posts           Post[]
+    events          Event[]
+    notifications   Notification[]
     // the group chat, created lazily by the server (src/server/group-chat.ts)
-    conversation   Conversation?
-    wikiPages      WikiPage[]
-    wikiEditPolicy WikiEditPolicy @default(MEMBERS)
-    channels       Channel[]
+    conversation    Conversation?
+    wikiPages       WikiPage[]
+    wikiEditPolicy  WikiEditPolicy  @default(MEMBERS)
+    channels        Channel[]
     // optional features; switching one off hides it and freezes its data (nothing is deleted)
     wikiEnabled     Boolean         @default(true)
     channelsEnabled Boolean         @default(true)
@@ -436,28 +463,28 @@ model PollVote {
 // ───────────────────────────── files ─────────────────────────────
 
 model Attachment {
-    id             String        @id @default(cuid())
-    uploaderId     String        @default(auth().id)
-    uploader       User          @relation(fields: [uploaderId], references: [id], onDelete: Cascade)
+    id         String    @id @default(cuid())
+    uploaderId String    @default(auth().id)
+    uploader   User      @relation(fields: [uploaderId], references: [id], onDelete: Cascade)
     // object key in the S3 bucket: files/{id}/{name}
-    key            String        @unique
-    name           String
-    mimeType       String
-    size           Int           @deny('update', true)
-    width          Int?
-    height         Int?
+    key        String    @unique
+    name       String
+    mimeType   String
+    size       Int       @deny('update', true)
+    width      Int?
+    height     Int?
     // avatars, group covers: readable by every signed-in user
-    isPublic       Boolean       @default(false) @deny('update', true)
-    postId         String?
-    post           Post?         @relation(fields: [postId], references: [id], onDelete: Cascade)
-    commentId      String?
-    comment        Comment?      @relation(fields: [commentId], references: [id], onDelete: Cascade)
-    messageId      String?
-    message        Message?      @relation(fields: [messageId], references: [id], onDelete: Cascade)
+    isPublic   Boolean   @default(false) @deny('update', true)
+    postId     String?
+    post       Post?     @relation(fields: [postId], references: [id], onDelete: Cascade)
+    commentId  String?
+    comment    Comment?  @relation(fields: [commentId], references: [id], onDelete: Cascade)
+    messageId  String?
+    message    Message?  @relation(fields: [messageId], references: [id], onDelete: Cascade)
     // images embedded in a Knowledge page
-    wikiPageId     String?
-    wikiPage       WikiPage?     @relation(fields: [wikiPageId], references: [id], onDelete: SetNull)
-    createdAt      DateTime      @default(now())
+    wikiPageId String?
+    wikiPage   WikiPage? @relation(fields: [wikiPageId], references: [id], onDelete: SetNull)
+    createdAt  DateTime  @default(now())
 
     @@deny('all', auth() == null)
     @@allow('read', uploaderId == auth().id || isPublic || check(post, 'read') || check(comment, 'read') || check(message, 'read') || check(wikiPage, 'read'))
@@ -497,24 +524,24 @@ enum MessageType {
 }
 
 model Conversation {
-    id             String               @id @default(cuid())
-    type           ConversationType     @default(GROUP) @deny('update', true)
-    title          String?
+    id            String               @id @default(cuid())
+    type          ConversationType     @default(GROUP) @deny('update', true)
+    title         String?
     // DIRECT only: `sortedUserIds.join(':')`, dedupes 1:1 conversations
-    directKey      String?              @unique
-    createdById    String               @default(auth().id)
-    createdBy      User                 @relation(fields: [createdById], references: [id], onDelete: Cascade)
-    lastMessageAt  DateTime             @default(now())
-    createdAt      DateTime             @default(now())
-    members        ConversationMember[]
-    messages       Message[]
-    calls          Call[]
+    directKey     String?              @unique
+    createdById   String               @default(auth().id)
+    createdBy     User                 @relation(fields: [createdById], references: [id], onDelete: Cascade)
+    lastMessageAt DateTime             @default(now())
+    createdAt     DateTime             @default(now())
+    members       ConversationMember[]
+    messages      Message[]
+    calls         Call[]
     // set for a group's chat: membership mirrors the group's ACTIVE members (written server-side)
-    groupId        String?              @unique
-    group          Group?               @relation(fields: [groupId], references: [id], onDelete: Cascade)
+    groupId       String?              @unique
+    group         Group?               @relation(fields: [groupId], references: [id], onDelete: Cascade)
     // set for a group channel's chat (the group chat above is the group's #general channel)
-    channelId      String?              @unique
-    channel        Channel?             @relation(fields: [channelId], references: [id], onDelete: Cascade)
+    channelId     String?              @unique
+    channel       Channel?             @relation(fields: [channelId], references: [id], onDelete: Cascade)
 
     @@deny('all', auth() == null)
     @@allow('read', groupId == null && channelId == null && members?[userId == auth().id])
@@ -564,35 +591,35 @@ model ConversationMember {
 }
 
 model Message {
-    id             String            @id @default(cuid())
-    conversationId String
-    conversation   Conversation      @relation(fields: [conversationId], references: [id], onDelete: Cascade)
-    senderId       String            @default(auth().id)
-    sender         User              @relation(fields: [senderId], references: [id], onDelete: Cascade)
-    content        String            @default('') @fullText
-    type           MessageType       @default(TEXT) @deny('update', true)
+    id                String              @id @default(cuid())
+    conversationId    String
+    conversation      Conversation        @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+    senderId          String              @default(auth().id)
+    sender            User                @relation(fields: [senderId], references: [id], onDelete: Cascade)
+    content           String              @default('') @fullText
+    type              MessageType         @default(TEXT) @deny('update', true)
     // CALL / SYSTEM payloads (call id, duration, …)
-    data           Json?
-    replyToId      String?
-    replyTo        Message?          @relation('MessageReplies', fields: [replyToId], references: [id], onDelete: SetNull)
-    replies        Message[]         @relation('MessageReplies')
-    editedAt       DateTime?
+    data              Json?
+    replyToId         String?
+    replyTo           Message?            @relation('MessageReplies', fields: [replyToId], references: [id], onDelete: SetNull)
+    replies           Message[]           @relation('MessageReplies')
+    editedAt          DateTime?
     // soft delete: content is cleared by the sender
-    deletedAt      DateTime?
-    createdAt      DateTime          @default(now())
-    reactions      MessageReaction[]
-    attachments    Attachment[]
+    deletedAt         DateTime?
+    createdAt         DateTime            @default(now())
+    reactions         MessageReaction[]
+    attachments       Attachment[]
     // BOT messages: the integration that posted it (sender is the integration's creator)
-    integrationId  String?
-    integration    ChannelIntegration? @relation(fields: [integrationId], references: [id], onDelete: SetNull)
+    integrationId     String?
+    integration       ChannelIntegration? @relation(fields: [integrationId], references: [id], onDelete: SetNull)
     // CHANNEL threads: replies point at a top-level root; counters are maintained server-side
     threadId          String?
-    thread            Message?          @relation('MessageThread', fields: [threadId], references: [id], onDelete: Cascade)
-    threadReplies     Message[]         @relation('MessageThread')
-    replyCount        Int               @default(0) @deny('update', true)
-    lastReplyAt       DateTime?         @deny('update', true)
+    thread            Message?            @relation('MessageThread', fields: [threadId], references: [id], onDelete: Cascade)
+    threadReplies     Message[]           @relation('MessageThread')
+    replyCount        Int                 @default(0) @deny('update', true)
+    lastReplyAt       DateTime?           @deny('update', true)
     // a thread reply that is also shown in the channel timeline
-    alsoSentToChannel Boolean           @default(false) @deny('update', true)
+    alsoSentToChannel Boolean             @default(false) @deny('update', true)
 
     @@allow('read', check(conversation, 'read'))
     @@allow('create', senderId == auth().id && type == TEXT && check(conversation, 'read'))
@@ -686,30 +713,30 @@ enum Rsvp {
 }
 
 model Event {
-    id             String          @id @default(cuid())
-    groupId        String?         @deny('update', true)
-    group          Group?          @relation(fields: [groupId], references: [id], onDelete: Cascade)
+    id            String          @id @default(cuid())
+    groupId       String?         @deny('update', true)
+    group         Group?          @relation(fields: [groupId], references: [id], onDelete: Cascade)
     // group events are announced as a Post(type EVENT)
-    postId         String?         @unique
-    post           Post?           @relation(fields: [postId], references: [id], onDelete: SetNull)
-    creatorId      String          @default(auth().id)
-    creator        User            @relation(fields: [creatorId], references: [id], onDelete: Cascade)
-    title          String
-    description    String?
-    type           EventType       @default(MEETING)
-    startAt        DateTime
-    endAt          DateTime
-    allDay         Boolean         @default(false)
-    location       String?
+    postId        String?         @unique
+    post          Post?           @relation(fields: [postId], references: [id], onDelete: SetNull)
+    creatorId     String          @default(auth().id)
+    creator       User            @relation(fields: [creatorId], references: [id], onDelete: Cascade)
+    title         String
+    description   String?
+    type          EventType       @default(MEETING)
+    startAt       DateTime
+    endAt         DateTime
+    allDay        Boolean         @default(false)
+    location      String?
     // RFC 5545 recurrence rule (expanded client-side)
-    rrule          String?
-    hasVideoCall   Boolean         @default(false)
-    remindedAt     DateTime?
-    createdAt      DateTime        @default(now())
-    updatedAt      DateTime        @updatedAt
-    attendees      EventAttendee[]
-    calls          Call[]
-    notifications  Notification[]
+    rrule         String?
+    hasVideoCall  Boolean         @default(false)
+    remindedAt    DateTime?
+    createdAt     DateTime        @default(now())
+    updatedAt     DateTime        @updatedAt
+    attendees     EventAttendee[]
+    calls         Call[]
+    notifications Notification[]
 
     @@deny('all', auth() == null)
     @@allow('read', creatorId == auth().id || attendees?[userId == auth().id] || type == OUT_OF_OFFICE)

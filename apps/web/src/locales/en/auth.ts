@@ -67,4 +67,9 @@ export const auth = {
     createYourAccount: "Create your account",
     haveAccount: "I already have an account",
   },
+  social: {
+    continueWith: "Continue with {{provider}}",
+    or: "or",
+    failed: "Couldn't sign in with {{provider}}",
+  },
 }

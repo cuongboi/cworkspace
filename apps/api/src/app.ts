@@ -8,7 +8,6 @@ import * as pkg from "../package.json";
 import { notFound, toErrorResponse } from "./lib/errors";
 import { BetterAuthOpenApi, betterAuthPlugin } from "./plugins/auth";
 import { callsRoute } from "./routes/calls";
-import { captionsRoute } from "./routes/captions";
 import { channelsRoute } from "./routes/channels";
 import { conversationsRoute } from "./routes/conversations";
 import { executeRoute } from "./routes/execute";
@@ -17,8 +16,10 @@ import { groupsRoute } from "./routes/groups";
 import { hooksRoute } from "./routes/hooks";
 import { invitationsRoute } from "./routes/invitations";
 import { linkPreviewRoute } from "./routes/link-preview";
+import { onboardingRoute } from "./routes/onboarding";
 import { pushRoute } from "./routes/push";
 import { rtcRoute } from "./routes/rtc";
+import { settingsRoute } from "./routes/settings";
 import { uploadsRoute } from "./routes/uploads";
 import { serveIndex, serveManifest } from "./server/spa";
 import { webSocketPlugin } from "./websocket";
@@ -73,13 +74,14 @@ export const app = new Elysia()
   .use(rtcRoute)
   .use(callsRoute)
   .use(pushRoute)
-  .use(captionsRoute)
+  .use(settingsRoute)
+  .use(onboardingRoute)
   .use(webSocketPlugin())
   // unknown API paths answer with the JSON envelope, not the SPA's index.html
   .get("/api/*", () => {
     throw notFound();
   })
-  // generated from APP_NAME / APP_INFO, so the static file must never shadow it
+  // generated from admin settings over APP_NAME / APP_INFO, so the static file must never shadow it
   .get("/manifest.webmanifest", serveManifest)
   // last: its `/*` wildcard would shadow every route registered after it
   .use(

@@ -6,8 +6,11 @@ import { authMacro } from "../plugins/auth";
 
 type OperationFn = (args: Record<string, unknown>) => Promise<unknown>;
 
-/** better-auth internals: denied by policy anyway, but never even routed. */
-const INTERNAL_MODELS = new Set(["session", "account", "verification", "jwks"]);
+/**
+ * better-auth internals and `appSetting` (encrypted API keys, read by `routes/settings.ts`):
+ * denied by policy anyway, but never even routed.
+ */
+const INTERNAL_MODELS = new Set(["session", "account", "verification", "jwks", "appSetting"]);
 
 /** Delegate names (`db.groupMember`) of every model in the schema. */
 export const MODELS = new Set(

@@ -1,18 +1,35 @@
 import { Resend } from "resend";
-import { env } from "@/env";
+import { getSecret, getSettings, onSettingsChange } from "@/server/settings";
 
-const resend = env.RESEND_API_KEY ? new Resend(env.RESEND_API_KEY) : null;
+/** Rebuilt when an admin changes the key (Settings → Notifications); `.env` is the default. */
+let resend: Resend | null = null;
+let resendKey = "";
+onSettingsChange(() => {
+  const key = getSecret("resendApiKey");
+  if (key === resendKey) return;
+  resendKey = key;
+  resend = key ? new Resend(key) : null;
+});
 
 export type Mail = { to: string; subject: string; html: string; text?: string };
 
-/** Sends through Resend; without `RESEND_API_KEY` (local dev) the mail is printed instead. */
+export const mailEnabled = () => resend !== null;
+
+/** Sends through Resend; without a key (local dev) the mail is printed instead. */
 export async function sendMail(mail: Mail) {
   if (!resend) {
     console.info(`[mail] to=${mail.to} subject="${mail.subject}"\n${mail.text ?? mail.html}`);
     return;
   }
-  const { error } = await resend.emails.send({ from: env.MAIL_FROM, ...mail });
+  const { error } = await resend.emails.send({ from: getSettings().mail.from, ...mail });
   if (error) console.error("[mail]", error);
+}
+
+/** Like `sendMail`, but reports failure (Settings → Notifications → Send test email). */
+export async function sendMailOrThrow(mail: Mail) {
+  if (!resend) throw new Error("No Resend API key set");
+  const { error } = await resend.emails.send({ from: getSettings().mail.from, ...mail });
+  if (error) throw new Error(error.message);
 }
 
 export function escapeHtml(value: string) {

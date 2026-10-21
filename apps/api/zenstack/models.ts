@@ -13,6 +13,7 @@ export type Account = $ModelResult<$Schema, "Account">;
 export type Verification = $ModelResult<$Schema, "Verification">;
 export type Jwks = $ModelResult<$Schema, "Jwks">;
 export type Invitation = $ModelResult<$Schema, "Invitation">;
+export type AppSetting = $ModelResult<$Schema, "AppSetting">;
 export type Group = $ModelResult<$Schema, "Group">;
 export type GroupMember = $ModelResult<$Schema, "GroupMember">;
 export type Post = $ModelResult<$Schema, "Post">;

@@ -1,224 +1,115 @@
-import {
-  CAPTION_PAIR,
-  type CaptionLang,
-  type CaptionMark,
-  type CaptionSegment,
-} from "@/lib/realtime-events"
-import {
-  CHUNK_MS,
-  type CaptionStatus,
-  CaptionStream,
-  type CaptionTokens,
-  PcmTap,
-  RotatingStream,
-  type StreamOwner,
-  type StreamSegment,
-} from "./caption-stream"
+import { CHUNK_MS, PcmTap } from "./caption-stream"
 
 /**
- * Live captions of the local speaker: our microphone goes to one Transcribe Live session in the
- * language we speak, and the original text is sent over `/ws` to everyone reading captions.
- *
- * Gemini's voice detection is off; this class detects speech itself and announces each
- * utterance (`call:caption-mark` start/end) so the server can order the transcript by when each
- * utterance started. Readers translate our final text in their own browser.
+ * Sends our microphone to the server for live captions while we speak: binary `/ws` frames of
+ * `[n][callId][PCM16]`. The server transcribes and translates (one provider session per call,
+ * billed by the hour), so silence is not sent: a loudness gate opens on speech, keeps a little
+ * audio from before it (the first syllable) and closes after a short hangover.
  * Runs while anyone in the call (us included) reads captions and we aren't muted.
  */
 
-export type { CaptionStatus } from "./caption-stream"
-
 export type CaptionerOptions = {
-  tokens: CaptionTokens
-  onSegment: (segment: CaptionSegment) => void
-  onMark: (mark: CaptionMark) => void
-  /** captions are not configured on the server (or the call refused them): stop trying */
-  onUnavailable: (message: string) => void
-  onStatus: (status: CaptionStatus, reason: string | null) => void
+  callId: string
+  /** sends a binary frame; false when the socket is down */
+  send: (frame: ArrayBuffer) => boolean
+  /** our utterance ended (mute / stop): the server finalizes it now */
+  end: () => void
 }
 
-// voice detection, in 100 ms chunks
+/** loud chunks in a row that open the gate */
 const START_CHUNKS = 2
-const END_SILENCE_MS = 700
-/** long monologues are cut so captions (and translations) keep flowing */
-const MAX_UTTERANCE_MS = 15_000
-/** audio kept from before speech was detected, so the first syllable isn't clipped */
+/** silence after speech still sent, so the provider hears the end of the utterance */
+const HANGOVER_MS = 600
+/** audio kept from before speech was detected */
 const PREROLL_CHUNKS = 3
 const MIN_THRESHOLD = 0.012
 
-export class Captioner implements StreamOwner {
-  readonly tokens: CaptionTokens
-  private opts: CaptionerOptions
-  private stream: RotatingStream | null = null
-  /** the transcriber gave up; not reopened until the language changes */
-  private failure: string | null = null
-  private disabled = false
+export class Captioner {
+  private readonly opts: CaptionerOptions
+  private readonly prefix: Uint8Array
   private tap: PcmTap
   private track: MediaStreamTrack | null = null
   private muted = true
   private active = false
-  private lang: CaptionLang = CAPTION_PAIR[0]
-  private lastStatus = ""
 
-  // voice detection / utterances
-  private readonly prefix = Math.random().toString(36).slice(2, 8)
-  private seq = 0
-  private current: string | null = null
+  private open = false
   private loudChunks = 0
   private silentMs = 0
-  private utteranceMs = 0
   private noiseFloor = 0.005
-  private preroll: string[] = []
+  private preroll: ArrayBuffer[] = []
 
   constructor(opts: CaptionerOptions) {
     this.opts = opts
-    this.tokens = opts.tokens
-    this.tap = new PcmTap((data, rms) => this.onChunk(data, rms))
+    const id = new TextEncoder().encode(opts.callId)
+    this.prefix = new Uint8Array([id.length, ...id])
+    this.tap = new PcmTap((pcm, rms) => this.onChunk(pcm, rms))
   }
 
-  /** `lang` is what we speak; `active` = someone in the call reads captions. */
-  configure(lang: CaptionLang, active: boolean) {
-    if (lang !== this.lang) {
-      this.failure = null
-      this.endUtterance()
-      this.stream?.close()
-      this.stream = null
-    }
-    this.lang = lang
+  /** `active` = someone in the call reads captions */
+  configure(active: boolean) {
     this.active = active
     this.reconcile()
   }
 
   /** The live microphone track (null = none); captions follow it across device changes. */
   setTrack(track: MediaStreamTrack | null, muted: boolean) {
-    // muted: stop sending audio rather than sending silence
     this.muted = muted || !track
-    if (track?.id !== this.track?.id) {
-      this.endUtterance()
-      this.track = track
-    }
-    if (this.muted) this.endUtterance()
+    this.track = track
     this.reconcile()
-  }
-
-  /** The call's glossary changed: the next session (opened now) picks it up from the server. */
-  glossaryChanged() {
-    this.stream?.tick(true)
   }
 
   stop() {
     this.active = false
     this.reconcile()
     this.tap.close()
-    this.tap = new PcmTap((data, rms) => this.onChunk(data, rms))
-  }
-
-  // --- StreamOwner ---------------------------------------------------------------------------
-
-  emit(_stream: CaptionStream, s: StreamSegment) {
-    this.opts.onSegment({ ...s, lang: this.lang })
-  }
-
-  unavailable(message: string) {
-    if (this.disabled) return
-    this.disabled = true
-    this.reconcile()
-    this.opts.onUnavailable(message)
-  }
-
-  failed(stream: CaptionStream, reason: string) {
-    if (!this.stream?.owns(stream)) return
-    if (this.stream.dropNext(stream)) return
-    this.stream.close()
-    this.stream = null
-    this.failure = reason
-    this.endUtterance()
-    this.reconcile()
-  }
-
-  streamStatusChanged() {
-    this.reportStatus()
-  }
-
-  // -------------------------------------------------------------------------------------------
-
-  private reportStatus() {
-    const status: CaptionStatus = this.failure
-      ? "error"
-      : !this.stream
-        ? "off"
-        : this.stream.current.status === "live"
-          ? "live"
-          : "connecting"
-    const key = `${status}:${this.failure}`
-    if (key === this.lastStatus) return
-    this.lastStatus = key
-    this.opts.onStatus(status, this.failure)
+    this.tap = new PcmTap((pcm, rms) => this.onChunk(pcm, rms))
   }
 
   private reconcile() {
-    // nothing to say while muted: the session is opened on the first unmute
-    const want =
-      !this.disabled && !this.failure && this.active && this.track && !this.muted
-    if (!want && this.stream) {
-      this.endUtterance()
-      this.stream.close()
-      this.stream = null
-    }
-    if (want && !this.stream) {
-      this.tokens.lang = this.lang
-      this.stream = new RotatingStream(() => new CaptionStream(this, "transcribe"))
-    }
+    const want = this.active && this.track !== null && !this.muted
+    if (!want) this.close()
     this.tap.setTrack(want ? this.track : null)
-    this.reportStatus()
   }
 
-  // --- voice detection -----------------------------------------------------------------------
-
-  private onChunk(data: string, rms: number) {
-    const stream = this.stream
-    if (this.muted || !stream) return this.endUtterance()
-    stream.tick()
+  private onChunk(pcm: ArrayBuffer, rms: number) {
+    if (this.muted || !this.active) return this.close()
     const threshold = Math.max(MIN_THRESHOLD, this.noiseFloor * 3)
     const loud = rms > threshold
 
-    if (!this.current) {
+    if (!this.open) {
       if (!loud) this.noiseFloor = this.noiseFloor * 0.95 + rms * 0.05
       this.loudChunks = loud ? this.loudChunks + 1 : 0
-      this.preroll.push(data)
+      this.preroll.push(pcm)
       if (this.preroll.length > PREROLL_CHUNKS) this.preroll.shift()
       if (this.loudChunks < START_CHUNKS) return
-      this.startUtterance()
-      for (const chunk of this.preroll.splice(0)) this.stream?.current.send(chunk)
+      this.open = true
+      this.silentMs = 0
+      for (const chunk of this.preroll.splice(0)) this.send(chunk)
       return
     }
 
-    stream.current.send(data)
-    this.utteranceMs += CHUNK_MS
+    this.send(pcm)
     this.silentMs = loud ? 0 : this.silentMs + CHUNK_MS
-    if (this.silentMs >= END_SILENCE_MS) this.endUtterance()
-    else if (this.utteranceMs >= MAX_UTTERANCE_MS) {
-      this.endUtterance()
-      this.startUtterance()
+    // the server ends the utterance itself once frames stop coming
+    if (this.silentMs >= HANGOVER_MS) {
+      this.open = false
+      this.loudChunks = 0
     }
   }
 
-  private startUtterance() {
-    const id = `${this.prefix}-${this.seq++}`
-    this.current = id
-    this.silentMs = 0
-    this.utteranceMs = 0
-    this.loudChunks = 0
-    this.stream?.current.begin(id)
-    this.opts.onMark({ utteranceId: id, lang: this.lang, state: "start" })
+  private send(pcm: ArrayBuffer) {
+    const frame = new Uint8Array(this.prefix.length + pcm.byteLength)
+    frame.set(this.prefix)
+    frame.set(new Uint8Array(pcm), this.prefix.length)
+    this.opts.send(frame.buffer)
   }
 
-  private endUtterance() {
+  /** stops sending; a cut-off utterance is finalized at once */
+  private close() {
     this.preroll = []
     this.loudChunks = 0
-    const id = this.current
-    if (!id) return
-    this.current = null
-    this.stream?.current.end()
-    this.opts.onMark({ utteranceId: id, lang: this.lang, state: "end" })
+    if (!this.open) return
+    this.open = false
+    this.opts.end()
   }
 }

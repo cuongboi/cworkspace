@@ -24,6 +24,9 @@ export function useRealtimeSync() {
     invalidateModels(qc, ["group", "groupMember"])
   )
   useSocketEvent("channel:changed", () => invalidateModels(qc, ["channel"]))
+  useSocketEvent("settings:changed", () =>
+    qc.invalidateQueries({ queryKey: ["appSetting"] })
+  )
   useSocketEvent("wiki:changed", () =>
     invalidateModels(qc, ["wikiPage", "wikiRevision"])
   )

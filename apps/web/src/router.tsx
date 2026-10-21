@@ -158,6 +158,8 @@ export const router = createBrowserRouter([
           },
         ],
       },
+      // First run only (the page itself checks the server and the setup token).
+      { path: "onboarding", lazy: page(() => import("@/pages/onboarding")) },
       // Reachable whether or not a session exists (the links come from emails).
       { path: "invite/:id", lazy: page(() => import("@/pages/invite")) },
       {

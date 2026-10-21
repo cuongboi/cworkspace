@@ -4,7 +4,11 @@
  *   APP_INFO='{"shortName":"Acme","description":"…","themeColor":"#09090b","ogImage":"/og.png"}'
  * Rendered into index.html (title, Open Graph, `window.__APP_CONFIG__`) and the PWA manifest at
  * runtime by the API, and by the Vite plugin in dev, so one build serves any company.
+ * Admins override any of it at runtime (Settings → General / Theme); `.env` stays the default.
  */
+
+export const SOCIAL_PROVIDERS = ["google", "github", "line"] as const;
+export type SocialProvider = (typeof SOCIAL_PROVIDERS)[number];
 
 export type AppConfig = {
   name: string;
@@ -18,6 +22,12 @@ export type AppConfig = {
   locale: string;
   /** Twitter/X handle, e.g. `@acme`. */
   twitterSite?: string;
+  /** App icon (square PNG, 512×512 recommended): replaces the bundled icons when set. */
+  icon?: string;
+  /** Social sign-in buttons on the login page (configured by an admin). */
+  socialProviders: SocialProvider[];
+  /** The instance has no user yet: the SPA sends everyone to `/onboarding`. */
+  onboarding?: boolean;
   /** Public origin (`APP_URL`); empty when it isn't an absolute URL (e.g. `WEB_ORIGIN=*`). */
   url: string;
 };
@@ -29,6 +39,7 @@ export const DEFAULT_APP_CONFIG: AppConfig = {
   themeColor: "#09090b",
   backgroundColor: "#09090b",
   locale: "en_US",
+  socialProviders: [],
   url: "",
 };
 
@@ -52,12 +63,26 @@ function color(info: Record<string, unknown>, key: string): string | undefined {
   return v;
 }
 
-/** Validates `APP_NAME` / `APP_INFO`; throws a readable error so a bad deploy fails at boot. */
-export function parseAppConfig(env: {
-  APP_NAME?: string;
-  APP_INFO?: string;
-  APP_URL?: string;
-}): AppConfig {
+/** A path on this origin or an absolute http(s) URL. */
+function link(info: Record<string, unknown>, key: string): string | undefined {
+  const v = str(info, key, 2048);
+  if (v && !v.startsWith("/") && !httpOrigin(v))
+    throw new Error(`APP_INFO.${key} must be an http(s) URL or a path starting with /`);
+  return v;
+}
+
+/**
+ * Validates `APP_NAME` / `APP_INFO`; throws a readable error so a bad deploy fails at boot.
+ * `overrides` (admin settings) win over the env, field by field.
+ */
+export function parseAppConfig(
+  env: {
+    APP_NAME?: string;
+    APP_INFO?: string;
+    APP_URL?: string;
+  },
+  overrides: { name?: string; info?: Record<string, unknown> } = {},
+): AppConfig {
   let info: Record<string, unknown> = {};
   if (env.APP_INFO?.trim()) {
     let parsed: unknown;
@@ -70,13 +95,12 @@ export function parseAppConfig(env: {
       throw new Error("APP_INFO must be a JSON object");
     info = parsed as Record<string, unknown>;
   }
+  info = { ...info, ...overrides.info };
   const d = DEFAULT_APP_CONFIG;
-  const name = env.APP_NAME?.trim() || d.name;
+  const name = overrides.name?.trim() || env.APP_NAME?.trim() || d.name;
   if (name.length > 60) throw new Error("APP_NAME is longer than 60 characters");
   const url = httpOrigin(env.APP_URL) ?? "";
-  const ogImage = str(info, "ogImage", 2048);
-  if (ogImage && !ogImage.startsWith("/") && !httpOrigin(ogImage))
-    throw new Error("APP_INFO.ogImage must be an http(s) URL or a path starting with /");
+  const ogImage = link(info, "ogImage");
   const locale = str(info, "locale", 10);
   if (locale && !/^[a-z]{2,3}(?:_[A-Z]{2})?$/.test(locale))
     throw new Error("APP_INFO.locale must look like en_US");
@@ -93,6 +117,8 @@ export function parseAppConfig(env: {
     ogImage,
     locale: locale ?? d.locale,
     twitterSite,
+    icon: link(info, "icon"),
+    socialProviders: [],
     url,
   };
 }
@@ -162,15 +188,63 @@ export function buildManifest(cfg: AppConfig) {
     lang: cfg.locale.split("_")[0],
     orientation: "any",
     categories: ["business", "productivity"],
-    icons: [
-      { src: "/icon-192.png", sizes: "192x192", type: "image/png", purpose: "any" },
-      { src: "/icon-512.png", sizes: "512x512", type: "image/png", purpose: "any" },
-      { src: "/icon-maskable-512.png", sizes: "512x512", type: "image/png", purpose: "maskable" },
-    ],
+    icons: cfg.icon
+      ? [
+          { src: cfg.icon, sizes: "512x512", type: "image/png", purpose: "any" },
+          { src: cfg.icon, sizes: "512x512", type: "image/png", purpose: "maskable" },
+        ]
+      : [
+          { src: "/icon-192.png", sizes: "192x192", type: "image/png", purpose: "any" },
+          { src: "/icon-512.png", sizes: "512x512", type: "image/png", purpose: "any" },
+          {
+            src: "/icon-maskable-512.png",
+            sizes: "512x512",
+            type: "image/png",
+            purpose: "maskable",
+          },
+        ],
     shortcuts: [
       { name: "Feed", url: "/" },
       { name: "Chat", url: "/chat" },
       { name: "Calendar", url: "/calendar" },
     ],
   };
+}
+
+/**
+ * The user's theme (`localStorage.theme`, written by ThemeProvider) applied before the first
+ * paint, so a dark choice doesn't flash light while the app loads.
+ */
+const THEME_BOOT_SCRIPT = `<script>(function(){try{var t=localStorage.getItem("theme");if(t!=="light"&&t!=="dark")t=matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light";document.documentElement.classList.add(t)}catch(e){}})()</script>`;
+
+/**
+ * The whole SPA shell for the configured instance: `renderHead` at the placeholder, plus the
+ * static tags of index.html that depend on settings (`<html lang>`, icons, theme-color) and the
+ * user's theme applied before the first paint. Used by the API and by Vite in dev.
+ */
+export function renderShell(html: string, cfg: AppConfig, origin?: string): string {
+  const head = `${renderHead(cfg, origin)}\n    ${THEME_BOOT_SCRIPT}`;
+  let out = html.includes(HEAD_PLACEHOLDER)
+    ? html.replace(HEAD_PLACEHOLDER, head)
+    : // builds from before the placeholder existed still get the tags
+      html.replace(/<title>.*?<\/title>/s, "").replace("</head>", `    ${head}\n  </head>`);
+  out = out.replace(
+    /<html\b([^>]*?)\slang="[^"]*"/,
+    `<html$1 lang="${escapeHtml(cfg.locale.split("_")[0]!)}"`,
+  );
+  if (cfg.icon) {
+    const icon = escapeHtml(cfg.icon);
+    out = out
+      .replace(/<link rel="icon"[^>]*>/, `<link rel="icon" href="${icon}" />`)
+      .replace(
+        /<link rel="apple-touch-icon"[^>]*>/,
+        `<link rel="apple-touch-icon" href="${icon}" />`,
+      );
+  }
+  // browser chrome color: the bundled light/dark pair unless the instance sets its own
+  if (cfg.themeColor !== DEFAULT_APP_CONFIG.themeColor) {
+    const color = escapeHtml(cfg.themeColor);
+    out = out.replace(/(<meta\s+name="theme-color"\s+content=")[^"]*"/g, `$1${color}"`);
+  }
+  return out;
 }

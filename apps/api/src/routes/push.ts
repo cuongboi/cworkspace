@@ -1,8 +1,8 @@
 import { Elysia, t } from "elysia";
-import { env } from "@/env";
 import { db } from "@/lib/db";
 import { tooManyRequests } from "@/lib/errors";
 import { pushEnabled, sendPush } from "@/server/push";
+import { getSettings } from "@/server/settings";
 import { rateLimit } from "@/server/rate-limit";
 import { authMacro } from "../plugins/auth";
 
@@ -13,21 +13,24 @@ export const pushRoute = new Elysia({ name: "routes.push" })
   .use(authMacro)
   .get(
     "/api/push/config",
-    () => ({
-      data:
-        pushEnabled && env.FIREBASE_VAPID_KEY && env.FIREBASE_API_KEY
-          ? {
-              enabled: true as const,
-              vapidKey: env.FIREBASE_VAPID_KEY,
-              firebase: {
-                apiKey: env.FIREBASE_API_KEY,
-                projectId: env.FIREBASE_PROJECT_ID,
-                appId: env.FIREBASE_APP_ID,
-                messagingSenderId: env.FIREBASE_MESSAGING_SENDER_ID,
-              },
-            }
-          : { enabled: false as const },
-    }),
+    () => {
+      const f = getSettings().firebase;
+      return {
+        data:
+          pushEnabled() && f.vapidKey && f.apiKey
+            ? {
+                enabled: true as const,
+                vapidKey: f.vapidKey,
+                firebase: {
+                  apiKey: f.apiKey,
+                  projectId: f.projectId,
+                  appId: f.appId,
+                  messagingSenderId: f.messagingSenderId,
+                },
+              }
+            : { enabled: false as const },
+      };
+    },
     { auth: true, detail: { tags: ["Notifications"], summary: "Web push configuration" } },
   )
   .post(

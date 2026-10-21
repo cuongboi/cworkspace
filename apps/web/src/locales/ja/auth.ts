@@ -69,4 +69,9 @@ export const auth: DeepStrings<typeof en> = {
     createYourAccount: "アカウントを作成",
     haveAccount: "すでにアカウントをお持ちの方",
   },
+  social: {
+    continueWith: "{{provider}}で続ける",
+    or: "または",
+    failed: "{{provider}}でログインできませんでした",
+  },
 }

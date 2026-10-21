@@ -1,4 +1,3 @@
-import { env } from "@/env";
 import { db } from "@/lib/db";
 import {
   CAPTION_PAIR,
@@ -15,6 +14,13 @@ import {
   type TranscriptEntry,
   type UserSummary,
 } from "@app/shared/realtime-events";
+import {
+  type CaptionOutput,
+  callCaptions,
+  captionsAvailable,
+  closeCallCaptions,
+  peekCallCaptions,
+} from "@/server/captions";
 import { ensureGroupConversation } from "@/server/group-chat";
 import { notify } from "@/server/notify";
 import { sendPush } from "@/server/push";
@@ -55,37 +61,108 @@ function stopRinging(callId: string, userIds: string[]) {
 }
 const MAX_CAPTION_CHARS = 500;
 const MAX_TRANSCRIPT = 2_000;
-/** utterance start times kept for ordering; older ones fall back to "now" */
-const MAX_OPEN_UTTERANCES = 200;
+/** a 100 ms PCM16 chunk at 16 kHz is 3200 bytes; anything much larger is not our client */
+const MAX_AUDIO_BYTES = 16_000;
 
 /**
  * Live caption state of a call, in memory only: the transcript is gone when the call ends.
- * The server orders finals by when the utterance started (its `start` mark), so a late final
- * never jumps ahead of what was said after it.
+ * Finals are ordered by when the utterance started, so a late final never jumps ahead of what
+ * was said after it.
  */
-type CallCaptions = {
+type CallCaptionState = {
   seq: number;
   entries: TranscriptEntry[];
-  /** `${userId}:${utteranceId}` → start (server clock) */
-  starts: Map<string, number>;
-  /** finals already recorded (a speaker resends finals after a reconnect) */
-  seen: Set<string>;
   glossary: string[];
 };
-const captionState = new Map<string, CallCaptions>();
+const captionState = new Map<string, CallCaptionState>();
 
-function captionsOf(callId: string): CallCaptions {
+function captionsOf(callId: string): CallCaptionState {
   let state = captionState.get(callId);
   if (!state) {
-    state = { seq: 0, entries: [], starts: new Map(), seen: new Set(), glossary: [] };
+    state = { seq: 0, entries: [], glossary: [] };
     captionState.set(callId, state);
   }
   return state;
 }
 
-/** The call's shared glossary (biases the transcriber; locked into its tokens). */
-export function callGlossary(callId: string): string[] {
+/** The call's shared glossary (biases the transcriber). */
+function callGlossary(callId: string): string[] {
   return captionState.get(callId)?.glossary ?? [];
+}
+
+/** The server-side caption pipeline of a call (`server/captions`), wired to this call's peers. */
+function pipelineOf(callId: string) {
+  return callCaptions(callId, {
+    glossary: () => callGlossary(callId),
+    publish: (out) => publishCaption(callId, out),
+    status: (status, error) =>
+      emitToRoom(rooms.call(callId), "call:caption-status", { callId, status, error }),
+  });
+}
+
+/** A caption from the provider: kept in the transcript when final, sent to every reader. */
+function publishCaption(callId: string, out: CaptionOutput) {
+  const peers = live.get(callId);
+  const speaker = peers?.get(out.speaker.socketId);
+  if (!peers || !speaker) return;
+  const text = out.text.slice(0, MAX_CAPTION_CHARS);
+  const translation = out.translation
+    ? { lang: out.translation.lang, text: out.translation.text.slice(0, MAX_CAPTION_CHARS) }
+    : null;
+  let seq: number | null = null;
+  if (out.final) {
+    const state = captionsOf(callId);
+    seq = ++state.seq;
+    const entry: TranscriptEntry = {
+      seq,
+      socketId: speaker.socketId,
+      user: speaker.user,
+      utteranceId: out.utteranceId,
+      lang: out.lang,
+      text,
+      translation,
+      ts: out.ts,
+    };
+    let i = state.entries.length;
+    while (i > 0 && state.entries[i - 1]!.ts > out.ts) i--;
+    state.entries.splice(i, 0, entry);
+    if (state.entries.length > MAX_TRANSCRIPT) state.entries.shift();
+  }
+  const segment = {
+    callId,
+    from: speaker.socketId,
+    userId: speaker.user.id,
+    name: speaker.user.name,
+    utteranceId: out.utteranceId,
+    lang: out.lang,
+    text,
+    translation,
+    final: out.final,
+    ts: out.ts,
+    seq,
+  };
+  for (const peer of peers.values()) {
+    if (peer.captions.enabled || peer.socketId === speaker.socketId)
+      emitToConn(peer.socketId, "call:caption", segment);
+  }
+}
+
+/**
+ * Microphone audio of a speaker (binary `/ws` frame, see `websocket/index.ts`). Only forwarded
+ * while the speaker is in the call, unmuted, and someone in the call reads captions.
+ */
+export function onCallAudio(socket: Conn, callId: string, pcm: Uint8Array) {
+  const peers = live.get(callId);
+  const self = peers?.get(socket.id);
+  if (!peers || !self || !self.media.audio) return;
+  if (pcm.byteLength === 0 || pcm.byteLength > MAX_AUDIO_BYTES || pcm.byteLength % 2) return;
+  if (!rateLimit(`call:audio:${socket.id}`, 40, 2_000)) return;
+  if (![...peers.values()].some((p) => p.captions.enabled)) return;
+  if (!captionsAvailable()) return;
+  pipelineOf(callId).push(
+    { socketId: socket.id, userId: socket.user.id, lang: self.captions.lang },
+    pcm,
+  );
 }
 
 /** callId → socketId → peer */
@@ -202,6 +279,7 @@ async function endCall(callId: string) {
   });
   live.delete(callId);
   captionState.delete(callId);
+  closeCallCaptions(callId);
   const group = groupCalls.get(callId);
   groupCalls.delete(callId);
   callState.delete(callId);
@@ -280,6 +358,7 @@ async function leave(socket: Conn, callId: string) {
   socket.calls.delete(callId);
   socket.leave(rooms.call(callId));
   const peers = live.get(callId);
+  peekCallCaptions(callId)?.release(socket.id);
   if (!peers?.delete(socket.id)) return;
   const userId = socket.user.id;
   emitToRoom(rooms.call(callId), "call:peer-left", { callId, socketId: socket.id, userId });
@@ -531,7 +610,7 @@ export function registerCalls(socket: Conn) {
           call: summary(call),
           peers: existing,
           title: await callTitle(call, user.id),
-          captions: Boolean(env.GEMINI_API_KEY),
+          captions: captionsAvailable(),
           transcript: captionState.get(call.id)?.entries ?? [],
           glossary: callGlossary(call.id),
         },
@@ -567,6 +646,7 @@ export function registerCalls(socket: Conn) {
     const peer = live.get(String(callId))?.get(socket.id);
     if (!peer) return;
     peer.media = sanitizeMedia(media);
+    if (!peer.media.audio) peekCallCaptions(String(callId))?.release(socket.id);
     socket.broadcast(rooms.call(String(callId)), "call:peer-media", {
       callId: String(callId),
       socketId: socket.id,
@@ -585,74 +665,9 @@ export function registerCalls(socket: Conn) {
     });
   });
 
-  // Utterance boundaries of a speaker: the start orders the transcript.
-  socket.on("call:caption-mark", ({ callId, utteranceId, lang, state }) => {
-    const id = String(callId);
-    const peers = live.get(id);
-    const self = peers?.get(socket.id);
-    if (!peers || !self || !isCaptionLang(lang)) return;
-    if (state !== "start" && state !== "end") return;
-    if (!rateLimit(`call:caption-mark:${socket.id}`, 20, 2_000)) return;
-    const uid = String(utteranceId).slice(0, 64);
-    if (state === "start") {
-      const { starts } = captionsOf(id);
-      starts.set(`${user.id}:${uid}`, Date.now());
-      if (starts.size > MAX_OPEN_UTTERANCES) starts.delete(starts.keys().next().value!);
-    }
-  });
-
-  // The original text of an utterance, transcribed in the speaker's browser. It goes to every
-  // reader (the speaker included, so everyone shares the server's order); finals are kept.
-  socket.on("call:caption", ({ callId, utteranceId, lang, text, final }) => {
-    const id = String(callId);
-    const peers = live.get(id);
-    const self = peers?.get(socket.id);
-    if (!peers || !self || typeof text !== "string" || !isCaptionLang(lang)) return;
-    if (!rateLimit(`call:caption:${socket.id}`, 30, 2_000)) return;
-    const uid = String(utteranceId).slice(0, 64);
-    // by user, not socket: a speaker resends its finals from a new socket after a reconnect
-    const key = `${user.id}:${uid}`;
-    const state = captionsOf(id);
-    const ts = state.starts.get(key) ?? Date.now();
-    const body = text.slice(0, MAX_CAPTION_CHARS);
-    let seq: number | null = null;
-    if (final) {
-      if (state.seen.has(key)) return;
-      state.seen.add(key);
-      if (state.seen.size > MAX_TRANSCRIPT) state.seen.delete(state.seen.values().next().value!);
-      state.starts.delete(key);
-      seq = ++state.seq;
-      const entry: TranscriptEntry = {
-        seq,
-        socketId: socket.id,
-        user: self.user,
-        utteranceId: uid,
-        lang,
-        text: body,
-        ts,
-      };
-      // insert by start time: finals of overlapping speakers arrive out of order
-      let i = state.entries.length;
-      while (i > 0 && state.entries[i - 1]!.ts > ts) i--;
-      state.entries.splice(i, 0, entry);
-      if (state.entries.length > MAX_TRANSCRIPT) state.entries.shift();
-    }
-    const segment = {
-      callId: id,
-      from: socket.id,
-      userId: user.id,
-      name: user.name,
-      utteranceId: uid,
-      lang,
-      text: body,
-      final: Boolean(final),
-      ts,
-      seq,
-    };
-    for (const peer of peers.values()) {
-      if (peer.captions.enabled || peer.socketId === socket.id)
-        emitToConn(peer.socketId, "call:caption", segment);
-    }
+  // the speaker muted: their utterance ends now rather than after the silence timeout
+  socket.on("call:audio-end", ({ callId }) => {
+    peekCallCaptions(String(callId))?.release(socket.id);
   });
 
   socket.on("call:glossary", ({ callId, terms }) => {
@@ -668,6 +683,7 @@ export function registerCalls(socket: Conn) {
       ),
     ].slice(0, MAX_GLOSSARY_TERMS);
     captionsOf(id).glossary = glossary;
+    peekCallCaptions(id)?.glossaryChanged();
     emitToRoom(rooms.call(id), "call:glossary", { callId: id, terms: glossary });
   });
 
@@ -703,10 +719,4 @@ function sanitizeCaptions(captions: CaptionPrefs | undefined): CaptionPrefs {
     enabled: Boolean(captions?.enabled),
     lang: isCaptionLang(captions?.lang) ? captions.lang : CAPTION_PAIR[0],
   };
-}
-
-/** True while the user has a socket in the live call (captions are for people in the call). */
-export function isInLiveCall(callId: string, userId: string) {
-  for (const peer of live.get(callId)?.values() ?? []) if (peer.user.id === userId) return true;
-  return false;
 }

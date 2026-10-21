@@ -92,29 +92,27 @@ export const isCaptionLang = (v: unknown): v is CaptionLang =>
 export type CaptionPrefs = { enabled: boolean; lang: CaptionLang };
 
 /**
- * Live captions: every speaker transcribes their own microphone (Transcribe Live) and sends the
- * original over `/ws`; every reader translates each remote speaker's audio into their own
- * language (Live Translate) in their browser. Translations never go through the server.
+ * Live captions: each speaker's browser streams its microphone (16 kHz PCM16, binary `/ws`
+ * frames) while they talk; the server transcribes and translates it with the provider an admin
+ * chose (Soniox or Gemini, one session per call) and sends every reader the original and its
+ * translation into the other language of the pair.
  */
 
-/** Original text of one utterance. Partial updates replace `text` until `final`. */
+export type CaptionTranslation = { lang: CaptionLang; text: string };
+
+/** One utterance. Partial updates replace `text` / `translation` until `final`. */
 export type CaptionSegment = {
   utteranceId: string;
-  /** the speaker's language */
+  /** the language spoken */
   lang: CaptionLang;
   text: string;
+  /** into the other language of the pair (null: none yet, or the provider gave none) */
+  translation: CaptionTranslation | null;
   final: boolean;
 };
 
-/**
- * Utterance boundaries from the speaker's voice detection (speaker → server only): the start
- * time orders the transcript.
- */
-export type CaptionMark = {
-  utteranceId: string;
-  lang: CaptionLang;
-  state: "start" | "end";
-};
+/** State of the call's caption provider session. */
+export type CaptionServiceStatus = "live" | "off" | "error";
 
 /** A final original kept by the server while the call lasts (never stored), in order. */
 export type TranscriptEntry = {
@@ -124,6 +122,7 @@ export type TranscriptEntry = {
   utteranceId: string;
   lang: CaptionLang;
   text: string;
+  translation: CaptionTranslation | null;
   /** when the utterance started (server clock): the transcript is ordered by it */
   ts: number;
 };
@@ -184,6 +183,9 @@ export interface ServerToClientEvents {
   // notifications & calendar
   "notification:new": (p: NotificationPayload) => void;
   "event:changed": (p: { eventId: string }) => void;
+  // instance
+  /** an admin changed branding, theme or sign-in settings: refetch `/api/settings/public` */
+  "settings:changed": (p: Record<string, never>) => void;
   // calls
   "call:incoming": (p: { call: CallSummary; from: UserSummary; title: string }) => void;
   "call:peer-joined": (p: CallPeer & { callId: string }) => void;
@@ -205,6 +207,11 @@ export interface ServerToClientEvents {
       seq: number | null;
     },
   ) => void;
+  "call:caption-status": (p: {
+    callId: string;
+    status: CaptionServiceStatus;
+    error: string | null;
+  }) => void;
   /** to the other readers of the call */
   "call:glossary": (p: { callId: string; terms: string[] }) => void;
   "rtc:signal": (p: { callId: string; from: string; data: RtcSignal }) => void;
@@ -237,8 +244,8 @@ export interface ClientToServerEvents {
   "call:decline": (p: { callId: string }) => void;
   "call:media": (p: { callId: string; media: MediaState }) => void;
   "call:captions": (p: { callId: string; captions: CaptionPrefs }) => void;
-  "call:caption": (p: CaptionSegment & { callId: string }) => void;
-  "call:caption-mark": (p: CaptionMark & { callId: string }) => void;
+  /** the speaker muted: end their current utterance (audio itself goes in binary frames) */
+  "call:audio-end": (p: { callId: string }) => void;
   "call:glossary": (p: { callId: string; terms: string[] }) => void;
   "rtc:signal": (p: { callId: string; to: string; data: RtcSignal }) => void;
 }
@@ -274,3 +281,4 @@ export type ServerFrame =
   | { e: ServerEvent; d: unknown }
   | { ack: number; res: AckResult<unknown> };
 export type ClientFrame = { e: ClientEvent; d: unknown; id?: number };
+/*   client → server  binary: [n: u8][callId: n bytes utf-8][PCM16 16 kHz mono]  call audio */

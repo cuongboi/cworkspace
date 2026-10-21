@@ -32,7 +32,8 @@ export const badRequest = (message: string, details?: unknown) =>
 export const notFound = (message = "Not found") => new HttpError(404, "NOT_FOUND", message);
 /** The request is valid but the record is not in a state that allows it (e.g. already assessed). */
 export const invalidState = (message: string) => new HttpError(409, "INVALID_STATE", message);
-export const forbidden = (message: string) => new HttpError(403, "FORBIDDEN", message);
+export const forbidden = (message: string, details?: unknown) =>
+  new HttpError(403, "FORBIDDEN", message, details);
 /** Optimistic-lock mismatch or LY 409 (e.g. 査定結果が確定済み). */
 export const conflict = (message: string, details?: unknown) =>
   new HttpError(409, "CONFLICT", message, details);

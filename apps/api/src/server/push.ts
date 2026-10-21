@@ -1,4 +1,4 @@
-import { env } from "../env";
+import { getSecret, getSettings, onSettingsChange } from "./settings";
 
 /**
  * Background push through Firebase Cloud Messaging. Messages are data-only so the service
@@ -18,27 +18,48 @@ export type PushPayload = {
   callId?: string;
 };
 
-export const pushEnabled = Boolean(
-  env.FIREBASE_PROJECT_ID && env.FIREBASE_CLIENT_EMAIL && env.FIREBASE_PRIVATE_KEY,
-);
+/** Firebase credentials are set (Settings → Notifications, else `.env`). */
+export const pushEnabled = () => getSettings().firebase.enabled;
 
 // lazy: db.ts installs the realtime plugin, which imports this file
 const getDb = async () => (await import("../lib/db")).db;
 
 let messagingPromise: Promise<import("firebase-admin/messaging").Messaging> | undefined;
+let generation = 0;
+
+// new credentials: the next send initializes a fresh Firebase app with them
+let credentialsKey = "";
+onSettingsChange((s) => {
+  const key = JSON.stringify([
+    s.firebase.projectId,
+    s.firebase.clientEmail,
+    getSecret("firebasePrivateKey"),
+  ]);
+  if (key === credentialsKey) return;
+  credentialsKey = key;
+  const old = messagingPromise;
+  messagingPromise = undefined;
+  generation++;
+  void old
+    ?.then((m) => import("firebase-admin/app").then(({ deleteApp }) => deleteApp(m.app)))
+    .catch(() => undefined);
+});
+
 function messaging() {
   messagingPromise ??= (async () => {
-    const { cert, getApps, initializeApp } = await import("firebase-admin/app");
+    const { cert, initializeApp } = await import("firebase-admin/app");
     const { getMessaging } = await import("firebase-admin/messaging");
-    const app =
-      getApps()[0] ??
-      initializeApp({
+    const { firebase } = getSettings();
+    const app = initializeApp(
+      {
         credential: cert({
-          projectId: env.FIREBASE_PROJECT_ID,
-          clientEmail: env.FIREBASE_CLIENT_EMAIL,
-          privateKey: env.FIREBASE_PRIVATE_KEY,
+          projectId: firebase.projectId,
+          clientEmail: firebase.clientEmail,
+          privateKey: getSecret("firebasePrivateKey"),
         }),
-      });
+      },
+      `push-${generation}`,
+    );
     return getMessaging(app);
   })();
   return messagingPromise;
@@ -52,7 +73,7 @@ const DEAD_TOKEN = new Set([
 
 /** Sends to every registered device of `userIds`. Never throws. */
 export async function sendPush(userIds: string[], payload: PushPayload) {
-  if (!pushEnabled || userIds.length === 0) return;
+  if (!pushEnabled() || userIds.length === 0) return;
   try {
     const db = await getDb();
     const rows = await db.pushToken.findMany({

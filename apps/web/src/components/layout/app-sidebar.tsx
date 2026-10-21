@@ -151,7 +151,7 @@ function NavButton({ item, active }: { item: NavItem; active: boolean }) {
       <span className="relative">
         <item.icon
           className={cn("size-5", active && "fill-brand/15")}
-          strokeWidth={active ? 1.5 : 0.7}
+          strokeWidth={active ? 1.5 : 1}
         />
         {item.badge ? (
           <span className="absolute -top-1.5 -right-2.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-highlight px-1 text-2xs leading-none font-bold text-highlight-foreground">

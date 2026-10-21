@@ -2,6 +2,7 @@ import { useTranslation } from "react-i18next"
 import { Navigate, Outlet, useLocation } from "react-router-dom"
 
 import { authClient } from "@/lib/auth-client"
+import { APP_CONFIG } from "@/lib/company"
 
 function FullPageSpinner() {
   const { t } = useTranslation()
@@ -17,6 +18,8 @@ export function RequireAuth() {
   const { data: session, isPending } = authClient.useSession()
   const location = useLocation()
 
+  // a fresh instance has nobody to sign in yet
+  if (APP_CONFIG.onboarding) return <Navigate to="/onboarding" replace />
   if (isPending) return <FullPageSpinner />
   if (!session) {
     const redirect = location.pathname + location.search
@@ -31,6 +34,7 @@ export function RequireAuth() {
 export function GuestOnly() {
   const { data: session, isPending } = authClient.useSession()
 
+  if (APP_CONFIG.onboarding) return <Navigate to="/onboarding" replace />
   if (isPending) return <FullPageSpinner />
   if (session) return <Navigate to="/" replace />
   return <Outlet />

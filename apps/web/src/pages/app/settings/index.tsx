@@ -3,8 +3,12 @@ import { parseAsStringLiteral, useQueryState } from "nuqs"
 import { useTranslation } from "react-i18next"
 import { Link } from "react-router-dom"
 import { PageTitle } from "@/components/common/page-title"
+import { GeneralSettings } from "@/components/settings/general-settings"
+import { IntegrationsSettings } from "@/components/settings/integrations-settings"
 import { InvitationsSettings } from "@/components/settings/invitations-settings"
 import { MembersSettings } from "@/components/settings/members-settings"
+import { NotificationsSettings } from "@/components/settings/notifications-settings"
+import { SignInSettings } from "@/components/settings/sign-in-settings"
 import { Button } from "@/components/ui/button"
 import {
   Empty,
@@ -18,7 +22,14 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { useApp } from "@/hooks/use-app"
 import { COMPANY_NAME } from "@/lib/company"
 
-const TABS = ["members", "invitations"] as const
+const TABS = [
+  "members",
+  "invitations",
+  "general",
+  "integrations",
+  "notifications",
+  "signIn",
+] as const
 type Tab = (typeof TABS)[number]
 
 const SettingsPage = () => {
@@ -65,19 +76,30 @@ const SettingsPage = () => {
           onValueChange={(value) => void setTab(value as Tab)}
           className="gap-6"
         >
-          <TabsList>
-            <TabsTrigger value="members">
-              {t("settings.tabs.members")}
-            </TabsTrigger>
-            <TabsTrigger value="invitations">
-              {t("settings.tabs.invitations")}
-            </TabsTrigger>
+          <TabsList className="max-w-full justify-start overflow-x-auto overflow-y-hidden">
+            {TABS.map((value) => (
+              <TabsTrigger key={value} value={value}>
+                {t(`settings.tabs.${value}`)}
+              </TabsTrigger>
+            ))}
           </TabsList>
           <TabsContent value="members">
             <MembersSettings />
           </TabsContent>
           <TabsContent value="invitations">
             <InvitationsSettings />
+          </TabsContent>
+          <TabsContent value="general">
+            <GeneralSettings />
+          </TabsContent>
+          <TabsContent value="integrations">
+            <IntegrationsSettings />
+          </TabsContent>
+          <TabsContent value="notifications">
+            <NotificationsSettings />
+          </TabsContent>
+          <TabsContent value="signIn">
+            <SignInSettings />
           </TabsContent>
         </Tabs>
       </div>

@@ -47,7 +47,7 @@ export const call = {
     presenting: "{{name}} is presenting",
     waiting: "Waiting for others to join…",
     captionsNotice:
-      "Live captions on: speech is transcribed and translated by Google Gemini, nothing is kept after the call",
+      "Live captions on: speech is transcribed and translated by the caption service (on the server), nothing is kept after the call",
     moreControls: "More controls",
     closeMoreControls: "Close more controls",
     duration: "Call duration",
@@ -66,7 +66,7 @@ export const call = {
   },
   captions: {
     status: {
-      off: "Speech is sent to Google Gemini only while someone reads captions",
+      off: "Speech is sent to the caption service only while someone reads captions",
       connecting: "Connecting to live captions…",
       live: "Live captions are on",
       error: "Live captions failed",

@@ -50,7 +50,7 @@ export const call: DeepStrings<typeof en> = {
     presenting: "{{name}} đang trình bày",
     waiting: "Đang chờ người khác tham gia…",
     captionsNotice:
-      "Phụ đề trực tiếp đang bật: lời nói được Google Gemini chép lại và dịch, không lưu lại gì sau cuộc gọi",
+      "Phụ đề trực tiếp đang bật: lời nói được dịch vụ phụ đề chép lại và dịch, không lưu lại gì sau cuộc gọi",
     moreControls: "Điều khiển khác",
     closeMoreControls: "Đóng điều khiển khác",
     duration: "Thời lượng cuộc gọi",
@@ -69,7 +69,7 @@ export const call: DeepStrings<typeof en> = {
   },
   captions: {
     status: {
-      off: "Lời nói chỉ được gửi đến Google Gemini khi có người đang xem phụ đề",
+      off: "Lời nói chỉ được gửi đến dịch vụ phụ đề khi có người đang xem phụ đề",
       connecting: "Đang kết nối phụ đề trực tiếp…",
       live: "Phụ đề trực tiếp đang bật",
       error: "Phụ đề trực tiếp gặp lỗi",

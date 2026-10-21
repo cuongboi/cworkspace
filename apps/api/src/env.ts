@@ -35,6 +35,10 @@ export const env = {
   // Branding: name + JSON details (shortName, description, themeColor, ogImage…), see app-config.ts
   APP_NAME: read("APP_NAME", ""),
   APP_INFO: read("APP_INFO", ""),
+  /** Fixed setup token for first-run onboarding (else a random one is printed at boot). */
+  ONBOARDING_TOKEN: read("ONBOARDING_TOKEN", ""),
+  /** Encrypts API keys stored in admin settings; defaults to BETTER_AUTH_SECRET. */
+  SETTINGS_SECRET: read("SETTINGS_SECRET", ""),
   DB_LOG_QUERIES: read("DB_LOG_QUERIES", "false") === "true",
 
   // Email (Resend). Without a key, emails are printed to the API console.
@@ -55,7 +59,10 @@ export const env = {
   TURN_URLS: read("TURN_URLS", ""),
   TURN_SECRET: read("TURN_SECRET", ""),
 
-  // Live call captions (Gemini Live). Captions are disabled without a key.
+  // Live call captions: defaults for Settings → Integrations (an admin's stored key wins).
+  // The provider defaults to Soniox when its key is set, else Gemini, else captions are off.
+  SONIOX_API_KEY: read("SONIOX_API_KEY", ""),
+  SONIOX_MODEL: read("SONIOX_MODEL", "stt-rt-v5"),
   GEMINI_API_KEY: read("GEMINI_API_KEY", ""),
   GEMINI_TRANSCRIBE_MODEL: read("GEMINI_TRANSCRIBE_MODEL", "gemini-3.5-transcribe-live"),
   GEMINI_TRANSLATE_MODEL: read("GEMINI_TRANSLATE_MODEL", "gemini-3.8-live"),

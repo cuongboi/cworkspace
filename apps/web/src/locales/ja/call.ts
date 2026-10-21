@@ -51,7 +51,7 @@ export const call: DeepStrings<typeof en> = {
     presenting: "{{name}}さんが画面を共有しています",
     waiting: "他の参加者を待っています…",
     captionsNotice:
-      "ライブ字幕がオンです：音声はGoogle Geminiで文字起こし・翻訳され、通話終了後は保存されません",
+      "ライブ字幕がオンです：音声は字幕サービスで文字起こし・翻訳され、通話終了後は保存されません",
     moreControls: "その他の操作",
     closeMoreControls: "その他の操作を閉じる",
     duration: "通話時間",
@@ -70,7 +70,7 @@ export const call: DeepStrings<typeof en> = {
   },
   captions: {
     status: {
-      off: "音声は誰かが字幕を表示している間だけGoogle Geminiに送信されます",
+      off: "音声は誰かが字幕を表示している間だけ字幕サービスに送信されます",
       connecting: "ライブ字幕に接続しています…",
       live: "ライブ字幕はオンです",
       error: "ライブ字幕でエラーが発生しました",

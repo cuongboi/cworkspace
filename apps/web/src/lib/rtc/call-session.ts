@@ -4,8 +4,6 @@ import {
   type CallPeer,
   type CaptionLang,
   type CaptionPrefs,
-  type CaptionSegment,
-  type ClientPayload,
   type MediaState,
   type ServerPayload,
   type TranscriptEntry,
@@ -13,9 +11,8 @@ import {
   CAPTION_PAIR,
   isCaptionLang,
 } from "@/lib/realtime-events"
-import { CaptionTokens, type CaptionStatus } from "./caption-stream"
+import type { CaptionStatus } from "./caption-stream"
 import { Captioner } from "./captioner"
-import { Translator } from "./translator"
 import { MeshTransport } from "./mesh-transport"
 import { SpeakerDetector } from "./speaker-detector"
 import type {
@@ -52,9 +49,8 @@ export type RemoteParticipant = {
 export type CaptionPart = { text: string; final: boolean }
 
 /**
- * One utterance of one speaker: the original (`source`, in `sourceLang`, from the speaker's
- * browser via the server) and, when we read another language, its translation (made in our
- * browser from their audio). Both arrive separately and are paired by utterance id.
+ * One utterance of one speaker: the original (`source`, in `sourceLang`) and its translation
+ * into the other language of the pair, both made on the server from the speaker's audio.
  */
 export type CaptionLine = {
   /** `${speaker userId}:${utteranceId}` (stable across the speaker's reconnects) */
@@ -96,7 +92,7 @@ export type CallState = {
   audioDeviceId: string | null
   videoDeviceId: string | null
   captions: CaptionPrefs
-  /** false once the server said captions aren't available (no Gemini key) */
+  /** false when the server has no caption provider configured (Settings → Integrations) */
   captionsAvailable: boolean
   captionStatus: CaptionStatus
   /** why our captioning failed (shown in the CC menu) */
@@ -105,7 +101,7 @@ export type CallState = {
   captionLines: CaptionLine[]
   /** every utterance with final text in this call, oldest first */
   transcript: CaptionLine[]
-  /** someone in the call reads captions: speech is sent to Gemini (consent banner) */
+  /** someone in the call reads captions: speech is sent to the caption provider (consent banner) */
   captionsActive: boolean
   /** the call's shared glossary (biases the transcribers) */
   glossary: string[]
@@ -135,8 +131,6 @@ const MAX_CAPTION_LINES = 3
 const MAX_TRANSCRIPT = 1_000
 /** a final original with no translation by then is shown untranslated */
 const TRANSLATION_WAIT_MS = 10_000
-/** finals said while our socket was down, resent once we're back in the call */
-const MAX_OUTBOX = 50
 
 function loadCaptionPrefs(): CaptionPrefs {
   const browserLang = navigator.language?.slice(0, 2)
@@ -217,19 +211,8 @@ export class CallSession {
 
   private transport: CallTransport | null = null
   private socket: SignalingSocket | null = null
-  private tokens: CaptionTokens
   private captioner: Captioner
-  private translator: Translator
   private captionTimer: number | undefined
-  private outbox: ClientPayload<"call:caption">[] = []
-  private speakStatus: { status: CaptionStatus; error: string | null } = {
-    status: "off",
-    error: null,
-  }
-  private readStatus: { status: CaptionStatus; error: string | null } = {
-    status: "off",
-    error: null,
-  }
   private unbind: (() => void)[] = []
   private speaker: SpeakerDetector
   /** bumps on every activate/deactivate so late async results are discarded */
@@ -251,36 +234,14 @@ export class CallSession {
       this.patch({ speaking, activeSpeaker: active })
     )
     this.state = { ...INITIAL_STATE, captions: loadCaptionPrefs() }
-    this.tokens = new CaptionTokens(opts.callId)
-    const onUnavailable = (message: string) => {
-      if (!this.state.captionsAvailable) return
-      this.patch({ captionsAvailable: false })
-      this.notice(message)
-    }
     this.captioner = new Captioner({
-      tokens: this.tokens,
-      onSegment: (segment) => this.sendCaption(segment),
-      onMark: (mark) => {
+      callId: opts.callId,
+      send: (frame) =>
+        this.state.phase === "in-call" &&
+        Boolean(this.socket?.sendBinary(frame)),
+      end: () => {
         if (this.socket?.connected && this.state.phase === "in-call")
-          this.socket.emit("call:caption-mark", {
-            callId: this.callId,
-            ...mark,
-          })
-      },
-      onUnavailable,
-      onStatus: (status, error) => {
-        this.speakStatus = { status, error }
-        this.patchCaptionStatus()
-      },
-    })
-    this.translator = new Translator({
-      tokens: this.tokens,
-      onTranslation: (speakerId, segment) =>
-        this.receiveTranslation(speakerId, segment),
-      onUnavailable,
-      onStatus: (status, error) => {
-        this.readStatus = { status, error }
-        this.patchCaptionStatus()
+          this.socket.emit("call:audio-end", { callId: this.callId })
       },
     })
   }
@@ -384,8 +345,6 @@ export class CallSession {
     this.applyJoin(result)
     this.patch({ phase: "in-call", joinedAt: Date.now() })
     this.trackSelfAudio()
-    // the token pair is fetched at join, so the first caption sessions open without waiting
-    if (result.captions) this.tokens.prefetch()
     this.syncCaptioner()
   }
 
@@ -400,9 +359,6 @@ export class CallSession {
     this.transport?.dispose()
     this.transport = null
     this.captioner.stop()
-    this.translator.stop()
-    this.tokens.clear()
-    this.outbox = []
     window.clearInterval(this.captionTimer)
     this.captionTimer = undefined
     this.stopLocalMedia()
@@ -472,7 +428,6 @@ export class CallSession {
       t.on("rejoined", (result) => {
         this.applyJoin(result)
         this.patch({ phase: "in-call" })
-        this.flushOutbox()
       }),
       t.on("declined", (user) =>
         this.notice(`${user.name} declined the call`, "info")
@@ -494,7 +449,7 @@ export class CallSession {
     this.patch({
       title: result.title,
       kind: result.call.type,
-      captionsAvailable: result.captions && this.state.captionsAvailable,
+      captionsAvailable: result.captions,
       glossary: result.glossary,
     })
     this.mergeHistory(result.transcript)
@@ -534,10 +489,7 @@ export class CallSession {
     this.syncCaptioner()
   }
 
-  /**
-   * Our microphone is transcribed while anyone in the call (us included) reads captions; while
-   * we read them, every speaker of another language is translated into ours.
-   */
+  /** Our microphone goes to the server while anyone in the call (us included) reads captions. */
   private syncCaptioner() {
     const { phase, captions, captionsAvailable } = this.state
     const joined = phase === "in-call" || phase === "reconnecting"
@@ -546,32 +498,21 @@ export class CallSession {
       joined &&
       captionsAvailable &&
       (captions.enabled || remote.some((p) => p.captions.enabled))
-    this.captioner.configure(captions.lang, active)
+    this.captioner.configure(active)
     this.captioner.setTrack(
       joined ? this.audioTrack : null,
       !(this.audioTrack?.enabled && this.audioTrack.readyState === "live")
-    )
-    this.translator.sync(
-      joined && captionsAvailable && captions.enabled ? captions.lang : null
     )
     if (active !== this.state.captionsActive)
       this.patch({ captionsActive: active })
   }
 
-  private patchCaptionStatus() {
-    const rank: Record<CaptionStatus, number> = {
-      off: 0,
-      live: 1,
-      connecting: 2,
-      error: 3,
-    }
-    const worst =
-      rank[this.readStatus.status] > rank[this.speakStatus.status]
-        ? this.readStatus
-        : this.speakStatus
-    if (worst.error && worst.error !== this.state.captionError)
-      this.notice(i18n.t("call.captions.failed", { error: worst.error }))
-    this.patch({ captionStatus: worst.status, captionError: worst.error })
+  /** The call's caption provider session (opened on speech, closed when idle). */
+  receiveCaptionStatus(p: ServerPayload<"call:caption-status">) {
+    if (p.callId !== this.callId) return
+    if (p.error && p.error !== this.state.captionError)
+      this.notice(i18n.t("call.captions.failed", { error: p.error }))
+    this.patch({ captionStatus: p.status, captionError: p.error })
   }
 
   /** Sets the call's glossary (names, product terms) for everyone's transcriber. */
@@ -583,25 +524,9 @@ export class CallSession {
   receiveGlossary(p: ServerPayload<"call:glossary">) {
     if (p.callId !== this.callId) return
     this.patch({ glossary: p.terms })
-    this.captioner.glossaryChanged()
   }
 
-  private sendCaption(segment: CaptionSegment) {
-    const payload = { callId: this.callId, ...segment }
-    if (this.socket?.connected && this.state.phase === "in-call")
-      return this.socket.emit("call:caption", payload)
-    // partials are stale by the time we're back; finals are resent (the server dedupes them)
-    if (segment.final)
-      this.outbox = [...this.outbox, payload].slice(-MAX_OUTBOX)
-  }
-
-  private flushOutbox() {
-    const pending = this.outbox
-    this.outbox = []
-    for (const payload of pending) this.sendCaption(payload)
-  }
-
-  /** The original of an utterance, from the server (our own come back too, in its order). */
+  /** An utterance and its translation, from the server (our own come back too, in its order). */
   receiveCaption(p: ServerPayload<"call:caption">) {
     if (p.callId !== this.callId || this.state.phase === "ended") return
     const self = p.from === this.socket?.id
@@ -610,44 +535,21 @@ export class CallSession {
       : (this.remote.get(p.from)?.user ??
         [...this.remote.values()].find((r) => r.user.id === p.userId)?.user)
     if (!user) return
-    const translated =
-      !self && p.lang !== this.state.captions.lang && this.translator.enabled
-    if (translated && p.final)
-      this.translator.request(p.from, p.utteranceId, p.text)
-    this.updateLine(`${p.userId}:${p.utteranceId}`, p.final, (existing) => ({
+    const lang = this.state.captions.lang
+    const translation =
+      p.translation?.lang === lang
+        ? { text: p.translation.text, final: p.final }
+        : null
+    this.updateLine(`${p.userId}:${p.utteranceId}`, p.final, () => ({
       user,
       self,
       sourceLang: p.lang,
       source: { text: p.text, final: p.final },
-      translation: existing?.translation ?? null,
-      untranslated:
-        p.lang !== this.state.captions.lang &&
-        !existing?.translation &&
-        !translated,
+      translation,
+      // final without a translation into our language: none will come
+      untranslated: p.lang !== lang && p.final && !translation,
       startedAt: p.ts,
     }))
-  }
-
-  /** Our translation of a remote speaker's utterance. */
-  private receiveTranslation(
-    speakerId: string,
-    s: { utteranceId: string; text: string; final: boolean }
-  ) {
-    const peer = this.remote.get(speakerId)
-    if (!peer || this.state.phase === "ended") return
-    this.updateLine(
-      `${peer.user.id}:${s.utteranceId}`,
-      s.final,
-      (existing) => ({
-        user: peer.user,
-        self: false,
-        sourceLang: peer.captions.lang,
-        source: existing?.source ?? null,
-        translation: { text: s.text, final: s.final },
-        untranslated: false,
-        startedAt: existing?.startedAt ?? Date.now(),
-      })
-    )
   }
 
   private updateLine(
@@ -676,7 +578,7 @@ export class CallSession {
     this.captionTimer ??= window.setInterval(this.pruneCaptions, 1_000)
   }
 
-  /** What was said before we (re)joined: originals only, in the server's order. */
+  /** What was said before we (re)joined, in the server's order. */
   private mergeHistory(entries: TranscriptEntry[]) {
     if (!entries.length) return
     const known = new Set(this.state.transcript.map((l) => l.id))
@@ -689,8 +591,13 @@ export class CallSession {
         self: e.socketId === me,
         sourceLang: e.lang,
         source: { text: e.text, final: true },
-        translation: null,
-        untranslated: e.lang !== this.state.captions.lang,
+        translation:
+          e.translation?.lang === this.state.captions.lang
+            ? { text: e.translation.text, final: true }
+            : null,
+        untranslated:
+          e.lang !== this.state.captions.lang &&
+          e.translation?.lang !== this.state.captions.lang,
         startedAt: e.ts,
         at: e.ts,
       }))

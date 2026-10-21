@@ -1,6 +1,9 @@
 import { ArgumentParser } from "argparse";
 import { app } from "./app";
 import { startReminderWorker } from "./server/jobs/reminders";
+import { ensureAdmin } from "./server/company";
+import { initOnboarding } from "./server/onboarding";
+import { loadSettings } from "./server/settings";
 import { localHttps } from "elysia-local-https";
 
 const parser = new ArgumentParser({ description: "cworkplace API server" });
@@ -20,6 +23,11 @@ parser.add_argument("--domain", {
   default: "localhost,127.0.0.1,::1",
 });
 const args = parser.parse_args();
+
+// admin settings (branding, social sign-in, caption provider) before the first request
+await loadSettings();
+await ensureAdmin();
+await initOnboarding();
 
 if (args.ssl) {
   app.listen(

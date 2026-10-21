@@ -67,6 +67,13 @@ export class RealtimeClient {
   }
 
   /** Fire-and-forget. Dropped while disconnected (like a volatile Socket.IO emit). */
+  /** A binary frame (call audio for live captions); dropped while disconnected. */
+  sendBinary(frame: ArrayBuffer) {
+    if (!this.connected) return false
+    this.ws!.send(frame)
+    return true
+  }
+
   emit<E extends ClientEvent>(event: E, payload: ClientPayload<E>) {
     if (this.connected) this.ws!.send(JSON.stringify({ e: event, d: payload }))
   }

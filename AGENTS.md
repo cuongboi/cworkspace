@@ -10,9 +10,10 @@ One deployment is one company. Signed-in users reach every page at a flat path (
 - **Feed**: posts (text, polls, events), comments with one level of replies, reactions, @mentions, attachments
 - **Chat**: 1:1 and group conversations, typing indicators, read receipts, presence
 - **Calls**: 1:1 and group audio/video calls with screen share (WebRTC mesh, max 6 people)
+- **Live captions**: speakers stream mic PCM as binary `/ws` frames; the server transcribes + translates (vi↔ja) with ONE provider session per call (`server/captions`, floor = one speaker at a time, closed when idle: providers bill by connection time)
 - **Calendar**: meetings, events, out-of-office, reminders; RSVP; recurrence (RRULE); video meetings
 - **Notifications**: stored and pushed live
-- **Admin settings**: people (role, deactivate, delete), invitations by email
+- **Admin settings**: people (role, deactivate, delete), invitations by email; app name/manifest, link previews (OG), theme, caption provider keys (Soniox | Gemini), social sign-in (Google, GitHub, LINE): stored in `AppSetting`, `.env` stays the default
 
 **Access control lives in the ZenStack access policies** (not in UI code): anonymous users read nothing, SECRET/CLOSED groups and conversations stay private to their members, and only instance admins (`User.role == 'admin'`) or RBAC grants (`User.permissions`) override moderation rules. Covered by `apps/api/tests/policies.test.ts`.
 
@@ -40,8 +41,9 @@ apps/
       env.ts                # Validated env vars (fail fast)
       lib/                  # auth.ts (better-auth + sign-up hooks), db.ts (ZenStack clients), errors.ts, mail.ts
       plugins/auth.ts       # better-auth routes + `auth: true` macro
-      routes/               # execute, uploads, files, conversations, groups, channels, hooks (webhooks + bot API), invitations, rtc, captions
-      server/               # session (dbFor), company ("All company", invitations), notify, storage (S3), rate-limit,
+      routes/               # execute, uploads, files, conversations, groups, channels, hooks (webhooks + bot API), invitations, rtc, settings (admin instance settings)
+      server/               # settings (admin settings over .env, encrypted keys), captions/ (Soniox | Gemini adapters),
+                            # session (dbFor), company ("All company", invitations), notify, storage (S3), rate-limit,
                             # plugins/realtime-plugin.ts (mutation side effects), jobs/reminders.ts
       websocket/            # index (/ws endpoint), hub (rooms/emit), presence + typing, calls (signaling)
       public/               # GENERATED web build — do not edit
@@ -86,10 +88,12 @@ Read env **only** through `env` from `@/env`. When adding a key, add it to `src/
 | `RESEND_API_KEY`, `MAIL_FROM`                                                                                                                                       | no                    | unset → emails are printed to the API console                                                             |
 | `S3_ENDPOINT`, `S3_REGION`, `S3_BUCKET`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`                                                                                 | for uploads           | unset → uploads answer 502 `UPSTREAM_ERROR`                                                               |
 | `STUN_URLS`, `TURN_URLS`, `TURN_SECRET`                                                                                                                             | for calls across NATs | Google STUN, no TURN                                                                                      |
-| `GEMINI_API_KEY`, `GEMINI_TRANSCRIBE_MODEL`, `GEMINI_TRANSLATE_MODEL`                                                                                               | for live captions     | unset → captions off                                                                                      |
+| `SONIOX_API_KEY`, `SONIOX_MODEL`, `GEMINI_API_KEY`, `GEMINI_TRANSCRIBE_MODEL`, `GEMINI_TRANSLATE_MODEL` (defaults for Settings → Integrations)                                                                                              | for live captions     | unset → captions off                                                                                      |
 | `FIREBASE_PROJECT_ID`, `FIREBASE_CLIENT_EMAIL`, `FIREBASE_PRIVATE_KEY`, `FIREBASE_API_KEY`, `FIREBASE_APP_ID`, `FIREBASE_MESSAGING_SENDER_ID`, `FIREBASE_VAPID_KEY` | for background push   | unset → push off                                                                                          |
 | `TRUST_PROXY`, `ALLOW_PRIVATE_WEBHOOKS`                                                                                                                             | no                    | `false` (channel integrations: trust `X-Forwarded-For`; let outgoing webhooks reach private hosts in dev) |
-| `APP_NAME`, `APP_INFO` (JSON: shortName, description, themeColor, backgroundColor, ogImage, locale, twitterSite) | no | "CC Workplace" (rendered into index.html, OG tags, manifest and `COMPANY_NAME` at runtime) |
+| `APP_NAME`, `APP_INFO` (JSON: shortName, description, themeColor, backgroundColor, ogImage, locale, twitterSite) | no | "CC Workplace" (rendered into index.html, OG tags, manifest and `COMPANY_NAME` at runtime; admin settings override) |
+| `SETTINGS_SECRET` | no | `BETTER_AUTH_SECRET` (encrypts API keys and OAuth secrets stored in admin settings) |
+| `ONBOARDING_TOKEN` | no | random, printed at boot while there are no users (first-run setup link) |
 | `VITE_BETTER_AUTH_URL`                                                                                                                                              | no                    | —                                                                                                         |
 | `DB_LOG_QUERIES`                                                                                                                                                    | no                    | `false`                                                                                                   |
 
@@ -154,6 +158,7 @@ write as
 - Roles: instance `User.role` (`admin` | `user`); group `GroupMember.role` (ADMIN | MODERATOR | MEMBER); conversation `ConversationMember.role` (ADMIN | MEMBER). Instance admin rule: `auth().role == 'admin'`.
 - Server-written models: Notification (create), Call/CallParticipant (all writes), Message type CALL/SYSTEM, Invitation (all writes, via `routes/invitations.ts`).
 - better-auth tables are written by better-auth through the **unscoped** adapter. Keep their `@@map` and field names compatible. Session/Account/Verification/Jwks are `@@deny('all', true)` and never routed by `/api/execute`. Manage users (role, ban, delete) through `authClient.admin.*`.
+- First run: while the user table is empty, `/onboarding` creates the admin + first settings (`routes/onboarding.ts`, `server/onboarding.ts`); it needs the setup token from the boot log (or `ONBOARDING_TOKEN`), and ordinary sign-up is refused until then. `RESEND_*`/`FIREBASE_*` and caption keys are defaults that admins override in Settings.
 - Sign-up hooks (`lib/auth.ts` → `src/server/company.ts`): the first user becomes `admin`; every new user joins the "All company" group (created by the first user); a pending `Invitation` for the email is accepted and grants its role.
 
 ## Backend rules (`apps/api`)
@@ -165,7 +170,7 @@ write as
 - Responses use one envelope: success `{ "data": ... }`; failure `{ "error": { "message", "code", "details?" } }` with codes `UNAUTHORIZED`, `FORBIDDEN`, `INVALID_INPUT`, `NOT_FOUND`, `CONFLICT`, `INVALID_STATE`, `UPSTREAM_ERROR`, `INTERNAL`.
 - `/api/execute` (`{ model, operator, args }`) allow-lists models and CRUD operators (`guardExecute`), caps `findMany.take` at 100 and rate-limits 300/min per user. Operations that need a transaction, a find-or-create, external services, or bypassing policies get a dedicated route instead.
 - **Mutation side effects** (socket events, notifications) belong in `src/server/plugins/realtime-plugin.ts` (`afterEntityMutation`, after commit; handlers must stay cheap and never throw). Create notifications with `notify()` from `@/server/notify`; the plugin pushes every new Notification live.
-- Files under `src/lib/db.ts`, `src/server/plugins/realtime-plugin.ts`, `src/server/notify.ts`, `src/server/session.ts` and `src/websocket/hub.ts` use **relative imports**: the web app type-imports `Database` from `lib/db.ts`, and `@/` would resolve against the web app's alias there.
+- Files under `src/lib/db.ts`, `src/server/plugins/realtime-plugin.ts`, `src/server/notify.ts`, `src/server/session.ts`, `src/server/push.ts`, `src/server/settings.ts` and `src/websocket/hub.ts` use **relative imports**: the web app type-imports `Database` from `lib/db.ts`, and `@/` would resolve against the web app's alias there.
 
 ## Realtime (`/ws`)
 

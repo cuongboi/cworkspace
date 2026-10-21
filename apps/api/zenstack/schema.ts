@@ -589,6 +589,74 @@ export class SchemaType implements SchemaDef {
                 id: { type: "String" }
             }
         },
+        AppSetting: {
+            name: "AppSetting",
+            fields: {
+                id: {
+                    name: "id",
+                    type: "String",
+                    id: true,
+                    attributes: [{ name: "@id" }, { name: "@default", args: [{ name: "value", value: ExpressionUtils.literal("default") }] }] as readonly AttributeApplication[],
+                    default: "default" as FieldDefault
+                },
+                branding: {
+                    name: "branding",
+                    type: "Json",
+                    attributes: [{ name: "@default", args: [{ name: "value", value: ExpressionUtils.literal("{}") }] }] as readonly AttributeApplication[],
+                    default: "{}" as FieldDefault
+                },
+                captions: {
+                    name: "captions",
+                    type: "Json",
+                    attributes: [{ name: "@default", args: [{ name: "value", value: ExpressionUtils.literal("{}") }] }] as readonly AttributeApplication[],
+                    default: "{}" as FieldDefault
+                },
+                social: {
+                    name: "social",
+                    type: "Json",
+                    attributes: [{ name: "@default", args: [{ name: "value", value: ExpressionUtils.literal("{}") }] }] as readonly AttributeApplication[],
+                    default: "{}" as FieldDefault
+                },
+                email: {
+                    name: "email",
+                    type: "Json",
+                    attributes: [{ name: "@default", args: [{ name: "value", value: ExpressionUtils.literal("{}") }] }] as readonly AttributeApplication[],
+                    default: "{}" as FieldDefault
+                },
+                push: {
+                    name: "push",
+                    type: "Json",
+                    attributes: [{ name: "@default", args: [{ name: "value", value: ExpressionUtils.literal("{}") }] }] as readonly AttributeApplication[],
+                    default: "{}" as FieldDefault
+                },
+                secrets: {
+                    name: "secrets",
+                    type: "String",
+                    attributes: [{ name: "@default", args: [{ name: "value", value: ExpressionUtils.literal("") }] }] as readonly AttributeApplication[],
+                    default: "" as FieldDefault
+                },
+                updatedById: {
+                    name: "updatedById",
+                    type: "String",
+                    optional: true
+                },
+                updatedAt: {
+                    name: "updatedAt",
+                    type: "DateTime",
+                    updatedAt: true,
+                    attributes: [{ name: "@updatedAt" }] as readonly AttributeApplication[]
+                }
+            },
+            attributes: [
+                { name: "@@deny", args: [{ name: "operation", value: ExpressionUtils.literal("all") }, { name: "condition", value: ExpressionUtils.literal(true) }] },
+                { name: "@@allow", args: [{ name: "operation", value: ExpressionUtils.literal("all") }, { name: "condition", value: ExpressionUtils.binary(ExpressionUtils.member(ExpressionUtils.call("auth"), ["role"]), "==", ExpressionUtils.literal("admin")) }] },
+                { name: "@@map", args: [{ name: "name", value: ExpressionUtils.literal("app_setting") }] }
+            ] as readonly AttributeApplication[],
+            idFields: ["id"],
+            uniqueFields: {
+                id: { type: "String" }
+            }
+        },
         Group: {
             name: "Group",
             fields: {

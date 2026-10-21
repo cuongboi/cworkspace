@@ -2,7 +2,7 @@ import type { ClientFrame } from "@app/shared/realtime-events";
 import Elysia from "elysia";
 import { authMacro } from "@/plugins/auth";
 import { toSessionUser } from "@/server/session";
-import { registerCalls } from "./calls";
+import { onCallAudio, registerCalls } from "./calls";
 import { Conn, type RawSocket, register, unregister } from "./hub";
 import { announceOffline, registerPresence, registerTyping } from "./presence";
 
@@ -24,6 +24,19 @@ function parseFrame(message: unknown): ClientFrame | null {
   return { e: e as ClientFrame["e"], d, id: typeof id === "number" ? id : undefined };
 }
 
+const decoder = new TextDecoder();
+
+/**
+ * Binary frames carry call audio for live captions: `[n: u8][callId: n bytes utf-8][PCM16]`
+ * (16 kHz mono, little-endian). Binary avoids base64 for a 32 KB/s stream per speaker.
+ */
+function onBinaryFrame(conn: Conn, bytes: Uint8Array) {
+  const n = bytes[0];
+  if (!n || n > 64 || bytes.length <= 1 + n) return;
+  const callId = decoder.decode(bytes.subarray(1, 1 + n));
+  onCallAudio(conn, callId, bytes.subarray(1 + n));
+}
+
 /**
  * `/ws`: authenticated from the better-auth session cookie (`auth: true` rejects the upgrade).
  * Protocol and events: `@app/shared/realtime-events`. Handlers: presence, typing, calls.
@@ -43,6 +56,8 @@ export const webSocketPlugin = () =>
     },
     message(ws, message) {
       const conn = conns.get(ws.raw);
+      if (conn && (message instanceof Uint8Array || message instanceof ArrayBuffer))
+        return onBinaryFrame(conn, new Uint8Array(message));
       const frame = parseFrame(message);
       if (!conn || !frame) return;
       conn.dispatch(frame.e, frame.d, frame.id);

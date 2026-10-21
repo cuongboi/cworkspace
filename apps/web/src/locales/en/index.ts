@@ -13,6 +13,7 @@ import { calendar } from "./calendar"
 import { people } from "./people"
 import { notifications } from "./notifications"
 import { settings } from "./settings"
+import { onboarding } from "./onboarding"
 import { errors } from "./errors"
 
 export const en = {
@@ -30,6 +31,7 @@ export const en = {
   people,
   notifications,
   settings,
+  onboarding,
   errors,
 }
 

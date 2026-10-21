@@ -70,4 +70,9 @@ export const auth: DeepStrings<typeof en> = {
     createYourAccount: "Tạo tài khoản của bạn",
     haveAccount: "Tôi đã có tài khoản",
   },
+  social: {
+    continueWith: "Tiếp tục với {{provider}}",
+    or: "hoặc",
+    failed: "Không đăng nhập được bằng {{provider}}",
+  },
 }

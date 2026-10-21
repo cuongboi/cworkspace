@@ -32,6 +32,7 @@
   "scripts": {
     "build": "bun run --filter @app/web build && bun run --filter @app/api build",
     "dev": "turbo run dev",
+    "preview": "./run-server --ssl",
     "lint": "turbo run lint",
     "format": "prettier --write \"**/*.{ts,tsx,md}\"",
     "check-types": "turbo run check-types",
