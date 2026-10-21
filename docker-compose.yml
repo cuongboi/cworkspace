@@ -1,12 +1,18 @@
-# Local infrastructure for cworkplace: MiniStack (AWS emulator: S3 + RDS Postgres), StackPort (UI) and coturn (TURN).
+# Infrastructure for cworkplace: MiniStack (AWS emulator: S3 + RDS Postgres), StackPort (UI) and coturn (TURN).
 #   docker compose up -d        # then: bun --cwd apps/api run db:push && bun run dev
+# Values come from the root .env (written by setup.sh on servers); the defaults match local development.
 # The API is a single long-lived process (realtime state lives in memory), so no Redis is needed.
+name: cworkplace
+
 services:
   ministack:
     image: ministackorg/ministack:latest
-    ports: ["4566:4566"]
+    container_name: cworkplace-ministack
+    restart: unless-stopped
+    # loopback only: browsers reach S3 through Caddy at /s3/*
+    ports: ["${BIND_ADDR:-127.0.0.1}:4566:4566"]
     environment:
-      - MINISTACK_REGION=us-east-1
+      - MINISTACK_REGION=${S3_REGION:-us-east-1}
       # keep resources and S3 objects in ~/.ministack across restarts
       - PERSIST_STATE=1
       - STATE_DIR=/var/lib/ministack/state
@@ -22,40 +28,46 @@ services:
   # web UI for browsing the emulated AWS resources: http://localhost:8080
   stackport:
     image: davireis/stackport:latest
-    ports: ["8080:8080"]
+    container_name: cworkplace-stackport
+    restart: unless-stopped
+    ports: ["${BIND_ADDR:-127.0.0.1}:8080:8080"]
     environment:
       - AWS_ENDPOINT_URL=http://ministack:4566
-      - AWS_REGION=us-east-1
+      - AWS_REGION=${S3_REGION:-us-east-1}
       # boto3 refuses to sign requests without credentials; MiniStack accepts any
-      - AWS_ACCESS_KEY_ID=test
-      - AWS_SECRET_ACCESS_KEY=test
+      - AWS_ACCESS_KEY_ID=${S3_ACCESS_KEY_ID:-test}
+      - AWS_SECRET_ACCESS_KEY=${S3_SECRET_ACCESS_KEY:-test}
       - STACKPORT_ALLOW_WRITES=true
     depends_on: [ministack]
 
-  # creates the private bucket and the Postgres instance once
+  # creates the private bucket and the Postgres instance once; its last log line is the RDS port (read by setup.sh)
   ministack-init:
     image: amazon/aws-cli:2.27.0
+    container_name: cworkplace-ministack-init
     depends_on: [ministack]
     environment:
-      AWS_ACCESS_KEY_ID: test
-      AWS_SECRET_ACCESS_KEY: test
-      AWS_DEFAULT_REGION: us-east-1
+      AWS_ACCESS_KEY_ID: ${S3_ACCESS_KEY_ID:-test}
+      AWS_SECRET_ACCESS_KEY: ${S3_SECRET_ACCESS_KEY:-test}
+      AWS_DEFAULT_REGION: ${S3_REGION:-us-east-1}
       AWS_ENDPOINT_URL: http://ministack:4566
+    # The RDS password only applies on creation; changing POSTGRES_PASSWORD later doesn't alter an existing instance.
     entrypoint: >
       /bin/sh -c "
       until aws s3api list-buckets >/dev/null 2>&1; do sleep 1; done;
-      aws s3api head-bucket --bucket cworkplace 2>/dev/null || aws s3api create-bucket --bucket cworkplace;
-      aws rds describe-db-instances --db-instance-identifier cworkplace >/dev/null 2>&1 || aws rds create-db-instance --db-instance-identifier cworkplace --engine postgres --db-instance-class db.t3.micro --master-username cworkplace --master-user-password cworkplace --db-name cworkplace --allocated-storage 20;
-      aws rds describe-db-instances --db-instance-identifier cworkplace --query 'DBInstances[0].Endpoint' --output text;
+      aws s3api head-bucket --bucket ${S3_BUCKET:-cworkplace} 2>/dev/null || aws s3api create-bucket --bucket ${S3_BUCKET:-cworkplace};
+      aws rds describe-db-instances --db-instance-identifier cworkplace >/dev/null 2>&1 || aws rds create-db-instance --db-instance-identifier cworkplace --engine postgres --db-instance-class db.t3.micro --master-username ${POSTGRES_USER:-cworkplace} --master-user-password ${POSTGRES_PASSWORD:-cworkplace} --db-name ${POSTGRES_DB:-cworkplace} --allocated-storage 20;
+      aws rds describe-db-instances --db-instance-identifier cworkplace --query 'DBInstances[0].Endpoint.Port' --output text;
       "
 
   coturn:
     image: coturn/coturn:4.6
+    container_name: cworkplace-coturn
+    restart: unless-stopped
     command: >
       -n --log-file=stdout
       --listening-port=3478
-      --use-auth-secret --static-auth-secret=change-me-turn-secret
-      --realm=cworkplace.local
+      --use-auth-secret --static-auth-secret=${TURN_SECRET:-change-me-turn-secret}
+      --realm=${DOMAIN:-cworkplace.local}
       --min-port=49160 --max-port=49200
       --no-cli --fingerprint
     ports:

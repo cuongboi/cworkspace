@@ -9,11 +9,11 @@
 {$DOMAIN} {
 	encode zstd gzip
 
-	# MinIO (presigned uploads/downloads). Signatures cover host + path, so strip /s3 and
+	# MiniStack S3 (presigned uploads/downloads). Signatures cover host + path, so strip /s3 and
 	# restore the internal Host the API signed with.
 	handle_path /s3/* {
-		reverse_proxy 127.0.0.1:9000 {
-			header_up Host 127.0.0.1:9000
+		reverse_proxy 127.0.0.1:4566 {
+			header_up Host 127.0.0.1:4566
 		}
 	}
 

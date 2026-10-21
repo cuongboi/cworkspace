@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# Ubuntu server setup: installs Docker + Caddy, writes .env, starts the docker-compose stack,
+# then runs Caddy (TLS reverse proxy) and the API binary.
+#   ./setup.sh <domain>        # safe to re-run: secrets and running containers are kept
 set -euo pipefail
 
 DOMAIN="${1:-}"
@@ -10,42 +13,89 @@ fi
 ROOT_DIR="$(cd "$(dirname "$0")" && pwd)"
 ENV_FILE="$ROOT_DIR/.env"
 EXAMPLE_FILE="$ROOT_DIR/.env.example"
+COMPOSE_FILE="$ROOT_DIR/docker-compose.yml"
 SERVER="$ROOT_DIR/run-server"
 
-PG_DB="cworkplace"
-MINIO_DATA="${MINIO_DATA:-$HOME/minio-data}"
-COTURN_PID_FILE="/var/tmp/cworkplace-coturn.pid"
-MINIO_PID_FILE="/var/tmp/cworkplace-minio.pid"
+# Long-running services the app needs; ministack-init is a one-shot job checked separately.
+REQUIRED_CONTAINERS=(cworkplace-ministack cworkplace-coturn)
+INIT_CONTAINER="cworkplace-ministack-init"
+
+log() { printf '\033[1;34m==>\033[0m %s\n' "$*"; }
+die() { printf '\033[1;31mError:\033[0m %s\n' "$*" >&2; exit 1; }
+
+# ============================================================
+# 0. Preflight
+# ============================================================
+[ -r /etc/os-release ] || die "cannot detect the OS (/etc/os-release missing)"
+# shellcheck disable=SC1091
+. /etc/os-release
+[ "${ID:-}" = "ubuntu" ] || die "this script supports Ubuntu only (found '${ID:-unknown}')"
+UBUNTU_CODENAME="${UBUNTU_CODENAME:-$VERSION_CODENAME}"
+
+[ -x "$SERVER" ] || die "$SERVER not found or not executable; build it with 'bun run build' or download a release."
+[ -f "$COMPOSE_FILE" ] || die "$COMPOSE_FILE not found"
 
 # ============================================================
 # 1. Install everything that's missing
 # ============================================================
-APT_PACKAGES=()
-command -v psql >/dev/null 2>&1 || APT_PACKAGES+=(postgresql)
-command -v turnserver >/dev/null 2>&1 || APT_PACKAGES+=(coturn)
-command -v caddy >/dev/null 2>&1 || APT_PACKAGES+=(caddy)
-if [ "${#APT_PACKAGES[@]}" -gt 0 ]; then
-  echo "Installing: ${APT_PACKAGES[*]}"
-  sudo apt update
-  sudo apt install -y "${APT_PACKAGES[@]}"
-fi
-
-install_bin() {
-  local name="$1" url="$2"
-  if ! command -v "$name" >/dev/null 2>&1; then
-    echo "Installing: $name"
-    wget -q "$url" -O "/var/tmp/$name"
-    chmod +x "/var/tmp/$name"
-    sudo mv "/var/tmp/$name" /usr/local/bin/
-  fi
+APT_UPDATED=0
+apt_install() {
+  [ "$APT_UPDATED" = 1 ] || { sudo apt-get update; APT_UPDATED=1; }
+  sudo DEBIAN_FRONTEND=noninteractive apt-get install -y "$@"
 }
-install_bin minio https://dl.min.io/server/minio/release/linux-amd64/minio
-install_bin mc https://dl.min.io/client/mc/release/linux-amd64/mc
 
-if [ ! -x "$SERVER" ]; then
-  echo "$SERVER not found or not executable; build it with 'bun run build' or download a release." >&2
-  exit 1
+APT_PACKAGES=()
+command -v caddy >/dev/null 2>&1 || APT_PACKAGES+=(caddy)
+command -v openssl >/dev/null 2>&1 || APT_PACKAGES+=(openssl)
+command -v curl >/dev/null 2>&1 || APT_PACKAGES+=(curl)
+if [ "${#APT_PACKAGES[@]}" -gt 0 ]; then
+  log "Installing: ${APT_PACKAGES[*]}"
+  apt_install "${APT_PACKAGES[@]}"
 fi
+
+# --- Docker Engine (https://docs.docker.com/engine/install/ubuntu/) ---
+install_docker() {
+  log "Installing Docker Engine"
+  # Distro packages conflict with Docker's own; removing absent ones is a no-op.
+  local pkg conflicting=()
+  for pkg in docker.io docker-compose docker-compose-v2 docker-doc podman-docker containerd runc; do
+    dpkg -s "$pkg" >/dev/null 2>&1 && conflicting+=("$pkg")
+  done
+  [ "${#conflicting[@]}" -eq 0 ] || sudo apt-get remove -y "${conflicting[@]}"
+
+  apt_install ca-certificates curl
+  sudo install -m 0755 -d /etc/apt/keyrings
+  sudo curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
+  sudo chmod a+r /etc/apt/keyrings/docker.asc
+  sudo tee /etc/apt/sources.list.d/docker.sources >/dev/null <<EOF
+Types: deb
+URIs: https://download.docker.com/linux/ubuntu
+Suites: $UBUNTU_CODENAME
+Components: stable
+Signed-By: /etc/apt/keyrings/docker.asc
+EOF
+  APT_UPDATED=0
+  apt_install docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+}
+
+if ! command -v docker >/dev/null 2>&1 || ! docker compose version >/dev/null 2>&1; then
+  install_docker
+fi
+sudo systemctl enable --now docker >/dev/null
+if ! id -nG "$USER" | grep -qw docker; then
+  sudo usermod -aG docker "$USER"
+  log "Added $USER to the 'docker' group (takes effect on next login)"
+fi
+
+# A fresh group membership isn't active in this shell yet; fall back to sudo until it is.
+if docker info >/dev/null 2>&1; then
+  DOCKER=(docker)
+else
+  DOCKER=(sudo --preserve-env=HOME docker)
+fi
+# HOME is passed explicitly: the compose file mounts ${HOME}/.ministack and sudo may reset it.
+compose() { "${DOCKER[@]}" compose --project-directory "$ROOT_DIR" -f "$COMPOSE_FILE" --env-file "$ENV_FILE" "$@"; }
+log "Docker: $("${DOCKER[@]}" --version)"
 
 # ============================================================
 # 2. Build .env from .env.example
@@ -82,100 +132,108 @@ secret() {
   fi
 }
 
+write_env() {
+  local tmp k
+  tmp="$(mktemp "$ENV_FILE.XXXXXX")"
+  chmod 600 "$tmp"
+  for k in "${KEYS[@]}"; do printf '%s=%s\n' "$k" "${ENV[$k]}" >>"$tmp"; done
+  mv "$tmp" "$ENV_FILE"
+}
+
+database_url() {
+  set_env DATABASE_URL "postgresql://${ENV[POSTGRES_USER]}:${ENV[POSTGRES_PASSWORD]}@127.0.0.1:$1/${ENV[POSTGRES_DB]}"
+}
+
 # Domain
+set_env DOMAIN "$DOMAIN"
 set_env APP_URL "https://$DOMAIN"
 set_env WEB_ORIGIN "https://$DOMAIN"
 set_env BETTER_AUTH_URL "https://$DOMAIN"
 set_env TRUST_PROXY "true"
 secret BETTER_AUTH_SECRET
 
-# PostgreSQL: reuse the password from a previous run so existing connections keep working.
-PG_PASSWORD="$(sed -n 's|^postgresql://postgres:\([^@]*\)@127\.0\.0\.1:5432/.*|\1|p' <<<"${ENV[DATABASE_URL]:-}")"
-PG_PASSWORD="${PG_PASSWORD:-$(openssl rand -hex 32)}"
-set_env DATABASE_URL "postgresql://postgres:$PG_PASSWORD@127.0.0.1:5432/$PG_DB"
+# PostgreSQL (MiniStack RDS): the password is fixed when the instance is first created, so never rotate it.
+set_env POSTGRES_USER "${ENV[POSTGRES_USER]:-cworkplace}"
+set_env POSTGRES_DB "${ENV[POSTGRES_DB]:-cworkplace}"
+if [ ! -d "$HOME/.ministack" ]; then
+  secret POSTGRES_PASSWORD
+else
+  set_env POSTGRES_PASSWORD "${ENV[POSTGRES_PASSWORD]:-cworkplace}"
+fi
+PG_PORT="$(sed -n 's|^postgresql://[^@]*@[^:/]*:\([0-9]*\)/.*|\1|p' <<<"${ENV[DATABASE_URL]:-}")"
+database_url "${PG_PORT:-15432}"
 
 # coturn
 secret TURN_SECRET
 set_env TURN_URLS "turn:$DOMAIN:3478?transport=udp,turn:$DOMAIN:3478?transport=tcp"
 
-# MinIO: the MiniStack dev keys (test/test) get replaced with real credentials.
-if [ "${ENV[S3_ACCESS_KEY_ID]:-}" = "${EXAMPLE[S3_ACCESS_KEY_ID]:-}" ] || [ -z "${ENV[S3_ACCESS_KEY_ID]:-}" ]; then
-  set_env S3_ACCESS_KEY_ID "cworkplace"
-fi
-secret S3_SECRET_ACCESS_KEY
+# S3 (MiniStack accepts any credentials; they only have to match between API and compose)
+set_env S3_ACCESS_KEY_ID "${ENV[S3_ACCESS_KEY_ID]:-cworkplace}"
+set_env S3_SECRET_ACCESS_KEY "${ENV[S3_SECRET_ACCESS_KEY]:-cworkplace}"
 set_env S3_BUCKET "${ENV[S3_BUCKET]:-cworkplace}"
-set_env S3_REGION "us-east-1"
-set_env S3_ENDPOINT "http://127.0.0.1:9000"
+set_env S3_REGION "${ENV[S3_REGION]:-us-east-1}"
+set_env S3_ENDPOINT "http://127.0.0.1:4566"
 set_env S3_PUBLIC_URL "https://$DOMAIN/s3"
 
-: >"$ENV_FILE"
-chmod 600 "$ENV_FILE"
-for k in "${KEYS[@]}"; do
-  printf '%s=%s\n' "$k" "${ENV[$k]}" >>"$ENV_FILE"
-done
-echo "Wrote $ENV_FILE"
+write_env
+log "Wrote $ENV_FILE"
 
 # ============================================================
-# 3. Configure and start services
+# 3. Docker containers
 # ============================================================
-stop_pid_file() {
-  local pid
-  pid="$(cat "$1" 2>/dev/null || true)"
-  if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then
-    kill "$pid" || true
-    sleep 1
-  fi
+container_running() {
+  [ "$("${DOCKER[@]}" inspect -f '{{.State.Running}}' "$1" 2>/dev/null)" = "true" ]
 }
 
-# --- PostgreSQL ---
-sudo systemctl enable --now postgresql
-sudo -u postgres psql -v ON_ERROR_STOP=1 -q -c "ALTER USER postgres WITH PASSWORD '$PG_PASSWORD';"
-if ! sudo -u postgres psql -tAc "SELECT 1 FROM pg_database WHERE datname = '$PG_DB'" | grep -q 1; then
-  sudo -u postgres createdb "$PG_DB"
+MISSING=()
+for c in "${REQUIRED_CONTAINERS[@]}"; do container_running "$c" || MISSING+=("$c"); done
+# The init job must have finished successfully at least once (bucket + database exist).
+INIT_EXIT="$("${DOCKER[@]}" inspect -f '{{.State.Status}}:{{.State.ExitCode}}' "$INIT_CONTAINER" 2>/dev/null || true)"
+[ "$INIT_EXIT" = "exited:0" ] || MISSING+=("$INIT_CONTAINER")
+
+if [ "${#MISSING[@]}" -gt 0 ]; then
+  log "Starting containers (not running: ${MISSING[*]})"
+  compose up -d --remove-orphans
+else
+  log "Containers already running: ${REQUIRED_CONTAINERS[*]}"
 fi
-echo "PostgreSQL ready, database '$PG_DB'"
 
-# --- coturn ---
-stop_pid_file "$COTURN_PID_FILE"
-nohup turnserver \
-  --listening-port=3478 \
-  --fingerprint \
-  --use-auth-secret \
-  --static-auth-secret="${ENV[TURN_SECRET]}" \
-  --realm="$DOMAIN" \
-  --no-cli \
-  --log-file=stdout \
-  >/var/tmp/coturn.log 2>&1 &
-echo $! >"$COTURN_PID_FILE"
-echo "coturn running (pid $!), log: /var/tmp/coturn.log"
+log "Waiting for $INIT_CONTAINER (bucket + RDS instance)"
+if [ "$("${DOCKER[@]}" wait "$INIT_CONTAINER")" != "0" ]; then
+  "${DOCKER[@]}" logs --tail 50 "$INIT_CONTAINER" >&2 || true
+  die "$INIT_CONTAINER failed"
+fi
+for c in "${REQUIRED_CONTAINERS[@]}"; do
+  container_running "$c" || { "${DOCKER[@]}" logs --tail 50 "$c" >&2 || true; die "$c is not running"; }
+done
 
-# --- MinIO ---
-mkdir -p "$MINIO_DATA"
-stop_pid_file "$MINIO_PID_FILE"
-# Bound to loopback: browsers reach it only through Caddy at /s3/*.
-MINIO_ROOT_USER="${ENV[S3_ACCESS_KEY_ID]}" MINIO_ROOT_PASSWORD="${ENV[S3_SECRET_ACCESS_KEY]}" \
-  nohup minio server "$MINIO_DATA" \
-  --address 127.0.0.1:9000 \
-  --console-address 127.0.0.1:9001 \
-  >/var/tmp/minio.log 2>&1 &
-echo $! >"$MINIO_PID_FILE"
+# The init job prints the RDS port last; keep DATABASE_URL in sync with it.
+RDS_PORT="$("${DOCKER[@]}" logs "$INIT_CONTAINER" 2>/dev/null | grep -E '^[0-9]+$' | tail -n1 || true)"
+if [ -n "$RDS_PORT" ] && [ "$RDS_PORT" != "${PG_PORT:-15432}" ]; then
+  database_url "$RDS_PORT"
+  write_env
+  log "DATABASE_URL now points at port $RDS_PORT"
+fi
+RDS_PORT="${RDS_PORT:-${PG_PORT:-15432}}"
 
-for _ in $(seq 1 30); do
-  curl -sf http://127.0.0.1:9000/minio/health/live >/dev/null && break
+log "Waiting for PostgreSQL on 127.0.0.1:$RDS_PORT"
+for _ in $(seq 1 60); do
+  (exec 3<>"/dev/tcp/127.0.0.1/$RDS_PORT") 2>/dev/null && break
   sleep 1
 done
-mc alias set cworkplace http://127.0.0.1:9000 "${ENV[S3_ACCESS_KEY_ID]}" "${ENV[S3_SECRET_ACCESS_KEY]}" >/dev/null
-mc mb --ignore-existing "cworkplace/${ENV[S3_BUCKET]}" >/dev/null
-echo "MinIO running (pid $(cat "$MINIO_PID_FILE")), bucket '${ENV[S3_BUCKET]}', log: /var/tmp/minio.log"
+(exec 3<>"/dev/tcp/127.0.0.1/$RDS_PORT") 2>/dev/null || die "PostgreSQL did not come up on port $RDS_PORT"
 
-# --- Caddy ---
-# The Caddyfile proxies /s3/* to MinIO and everything else to the API; Caddy handles TLS.
-# Started in the background (caddy start) so the server below can run in the foreground.
+# ============================================================
+# 4. Caddy + server
+# ============================================================
+# run-server stays in the foreground (exec), so Caddy is started as a background daemon right before it.
+# Caddy proxies /s3/* to MiniStack and everything else to the API; it handles TLS.
+log "Starting Caddy for $DOMAIN"
 caddy stop >/dev/null 2>&1 || true
 DOMAIN="$DOMAIN" caddy start --config "$ROOT_DIR/Caddyfile" --adapter caddyfile
 
-# --- Server ---
 # The binary reads its config from the environment, so export everything in .env.
+log "Starting $SERVER on 127.0.0.1:3000"
 set -a
 # shellcheck disable=SC1090
 . "$ENV_FILE"
