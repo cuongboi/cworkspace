@@ -184,6 +184,20 @@ database_url "${PG_PORT:-15432}"
 # coturn
 secret TURN_SECRET
 set_env TURN_URLS "turn:$DOMAIN:3478?transport=udp,turn:$DOMAIN:3478?transport=tcp"
+# coturn runs on the host network and must advertise the public IP; keep an existing value on re-runs.
+PUBLIC_IP="${ENV[TURN_EXTERNAL_IP]:-}"
+[ -n "$PUBLIC_IP" ] || PUBLIC_IP="$(curl -fsS4 --max-time 5 https://api.ipify.org || curl -fsS4 --max-time 5 https://ifconfig.me || true)"
+[ -n "$PUBLIC_IP" ] || die "cannot detect the public IP; set TURN_EXTERNAL_IP in $ENV_FILE"
+set_env TURN_EXTERNAL_IP "$PUBLIC_IP"
+set_env TURN_MIN_PORT "${ENV[TURN_MIN_PORT]:-49152}"
+set_env TURN_MAX_PORT "${ENV[TURN_MAX_PORT]:-65535}"
+if command -v ufw >/dev/null 2>&1 && sudo ufw status | grep -q "Status: active"; then
+  log "Opening TURN ports in ufw"
+  sudo ufw allow 3478/tcp >/dev/null
+  sudo ufw allow 3478/udp >/dev/null
+  sudo ufw allow "${ENV[TURN_MIN_PORT]}:${ENV[TURN_MAX_PORT]}/udp" >/dev/null
+fi
+log "TURN: $PUBLIC_IP:3478 (also allow 3478/tcp+udp and ${ENV[TURN_MIN_PORT]}-${ENV[TURN_MAX_PORT]}/udp in your cloud firewall)"
 
 # S3 (MiniStack accepts any credentials; they only have to match between API and compose)
 set_env S3_ACCESS_KEY_ID "${ENV[S3_ACCESS_KEY_ID]:-cworkplace}"
@@ -214,6 +228,8 @@ if [ "${#MISSING[@]}" -gt 0 ]; then
   compose up -d --remove-orphans
 else
   log "Containers already running: ${REQUIRED_CONTAINERS[*]}"
+  # Recreates coturn only when its config changed (e.g. a new public IP).
+  compose up -d coturn
 fi
 
 log "Waiting for $INIT_CONTAINER (bucket + RDS instance)"
