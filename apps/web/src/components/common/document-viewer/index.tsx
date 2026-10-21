@@ -276,7 +276,7 @@ function HtmlFrame({
     <iframe
       title={title}
       srcDoc={srcDoc}
-      sandbox="allow-popups allow-popups-to-escape-sandbox"
+      sandbox="allow-popups"
       referrerPolicy="no-referrer"
       className="min-h-0 w-full flex-1 bg-white"
     />

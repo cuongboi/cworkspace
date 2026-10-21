@@ -2,7 +2,7 @@ import { toPlainText } from "@app/shared/mentions";
 import { env } from "../../env";
 import { decryptSecret, signPayload } from "../../lib/crypto";
 import { hostAllowed } from "../../lib/ip";
-import { resolvesPublic } from "../../lib/safe-fetch";
+import { assertPublicUrl, pinnedFetch } from "../../lib/safe-fetch";
 
 /**
  * Channel integrations, server side: posting BOT messages, and outgoing webhooks (a signed POST
@@ -80,7 +80,10 @@ export async function recordDelivery(
     await db.integrationDelivery.deleteMany({ where: { id: { in: stale.map((d) => d.id) } } });
 }
 
-/** Rejects non-http(s), disallowed hosts and (unless allowed by env) private addresses. */
+/**
+ * Rejects non-http(s), disallowed hosts and (unless allowed by env) private addresses. Returns
+ * the validated address the delivery must connect to (DNS rebinding).
+ */
 async function checkTarget(rawUrl: string, allowedHosts: string[]) {
   const url = new URL(rawUrl);
   const local = url.hostname === "localhost" || url.hostname === "127.0.0.1";
@@ -90,10 +93,12 @@ async function checkTarget(rawUrl: string, allowedHosts: string[]) {
   )
     throw new Error("Target must use https");
   if (!hostAllowed(url.hostname, allowedHosts)) throw new Error("Host is not in the allowlist");
-  if (env.ALLOW_PRIVATE_WEBHOOKS) return url;
-  if (!(await resolvesPublic(url.hostname)))
-    throw new Error("Target resolves to a private address");
-  return url;
+  const address = await assertPublicUrl(url, {
+    allowPrivate: env.ALLOW_PRIVATE_WEBHOOKS,
+    // admins pin the host with `allowedHosts`; webhook receivers often listen on custom ports
+    allowAnyPort: true,
+  });
+  return { url, address };
 }
 
 type OutgoingIntegration = {
@@ -116,14 +121,17 @@ async function deliver(
   let error: string | undefined;
   try {
     if (!integration.targetUrl) throw new Error("No target URL");
-    const url = await checkTarget(integration.targetUrl, integration.allowedHosts);
+    const targetUrl = integration.targetUrl;
+    let target = await checkTarget(targetUrl, integration.allowedHosts);
     const body = JSON.stringify(payload);
     const secret = decryptSecret(integration.secretCipher);
     for (let attempt = 0; attempt <= RETRIES; attempt++) {
       if (attempt) await new Promise((r) => setTimeout(r, 500 * 2 ** attempt));
       const ts = String(Math.floor(Date.now() / 1000));
       try {
-        const res = await fetch(url, {
+        // re-resolved and re-validated on every retry: DNS may have changed since the last one
+        if (attempt) target = await checkTarget(targetUrl, integration.allowedHosts);
+        const res = await pinnedFetch(target.url, target.address, {
           method: "POST",
           redirect: "manual", // a redirect could point at a private address
           signal: AbortSignal.timeout(TIMEOUT_MS),

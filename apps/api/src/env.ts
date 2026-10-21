@@ -24,11 +24,28 @@ export const nonNegativeInt = (key: string, fallback: number): number => {
   return value;
 };
 
+/** Secrets that sign sessions or encrypt stored keys: short ones are brute-forceable. */
+const secretOf = (key: string, value: string) => {
+  if (value && value.length < 32)
+    throw new Error(`${key} must be at least 32 characters (e.g. \`openssl rand -hex 32\`)`);
+  return value;
+};
+
+/** Credentialed CORS: a wildcard would hand every site the signed-in user's session. */
+const webOrigin = (value: string) => {
+  if (value.includes("*"))
+    throw new Error("WEB_ORIGIN must list exact origins (comma-separated); `*` is not allowed");
+  return value;
+};
+
+const IS_PRODUCTION = process.env.NODE_ENV === "production";
+
 export const env = {
+  IS_PRODUCTION,
   DATABASE_URL: read("DATABASE_URL"),
-  BETTER_AUTH_SECRET: read("BETTER_AUTH_SECRET"),
+  BETTER_AUTH_SECRET: secretOf("BETTER_AUTH_SECRET", read("BETTER_AUTH_SECRET")),
   BETTER_AUTH_URL: read("BETTER_AUTH_URL", "http://localhost:3000"),
-  WEB_ORIGIN: read("WEB_ORIGIN", "http://localhost:5173"),
+  WEB_ORIGIN: webOrigin(read("WEB_ORIGIN", "http://localhost:5173")),
   BETTER_AUTH_BASE_PATH: read("BETTER_AUTH_BASE_PATH", "/api/auth"),
   /** Public URL of the web app, used in emailed links (invitations, password reset). */
   APP_URL: read("APP_URL", read("WEB_ORIGIN", "http://localhost:5173").split(",")[0]!),
@@ -38,7 +55,9 @@ export const env = {
   /** Fixed setup token for first-run onboarding (else a random one is printed at boot). */
   ONBOARDING_TOKEN: read("ONBOARDING_TOKEN", ""),
   /** Encrypts API keys stored in admin settings; defaults to BETTER_AUTH_SECRET. */
-  SETTINGS_SECRET: read("SETTINGS_SECRET", ""),
+  SETTINGS_SECRET: secretOf("SETTINGS_SECRET", read("SETTINGS_SECRET", "")),
+  /** Serve the OpenAPI spec + Scalar UI at /openapi (off in production unless enabled). */
+  OPENAPI_ENABLED: read("OPENAPI_ENABLED", String(!IS_PRODUCTION)) === "true",
   DB_LOG_QUERIES: read("DB_LOG_QUERIES", "false") === "true",
 
   // Email (Resend). Without a key, emails are printed to the API console.

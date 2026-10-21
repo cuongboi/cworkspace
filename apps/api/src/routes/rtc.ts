@@ -3,7 +3,8 @@ import { Elysia } from "elysia";
 import { env } from "@/env";
 import { authMacro } from "../plugins/auth";
 
-const TTL_SECONDS = 6 * 60 * 60;
+/** short-lived: a leaked credential relays through our TURN for at most an hour */
+const TTL_SECONDS = 60 * 60;
 
 const list = (v: string) =>
   v

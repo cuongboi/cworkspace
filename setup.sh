@@ -61,14 +61,15 @@ export BUN_INSTALL="${BUN_INSTALL:-$HOME/.bun}"
 export PATH="$BUN_INSTALL/bin:$PATH"
 if ! command -v bun >/dev/null 2>&1; then
   log "Installing Bun"
-  curl -fsSL https://bun.sh/install | bash
+  # pinned to the repo's devEngines version (package.json)
+  curl -fsSL https://bun.sh/install | bash -s "bun-v1.4.3"
 fi
 log "Bun: $(bun --version)"
 
 # --- Server binary: build it from source when no release binary is present ---
 if [ ! -x "$SERVER" ]; then
   log "$SERVER not found; building from source"
-  (cd "$ROOT_DIR" && bun install && bun run build)
+  (cd "$ROOT_DIR" && bun install --frozen-lockfile && bun run build)
 fi
 
 # --- Docker Engine (https://docs.docker.com/engine/install/ubuntu/) ---
@@ -168,6 +169,8 @@ set_env APP_URL "https://$DOMAIN"
 set_env WEB_ORIGIN "https://$DOMAIN"
 set_env BETTER_AUTH_URL "https://$DOMAIN"
 set_env TRUST_PROXY "true"
+# production defaults in the API (e.g. /openapi off unless OPENAPI_ENABLED=true)
+set_env NODE_ENV "production"
 secret BETTER_AUTH_SECRET
 
 # PostgreSQL (MiniStack RDS): the password is fixed when the instance is first created, so never rotate it.

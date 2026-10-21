@@ -421,9 +421,11 @@ describe("calendar", () => {
 
 describe("attachments", () => {
   it("are private until attached, unless public", async () => {
+    // rows are created by POST /api/uploads with the trusted client
     const mk = (name: string, isPublic = false) =>
-      as("alice").attachment.create({
+      db.attachment.create({
         data: {
+          uploaderId: users.alice.id,
           key: `test/${run}/${name}`,
           name,
           mimeType: "image/png",
@@ -608,5 +610,211 @@ describe("invitations", () => {
       await as("carol").invitation.findUnique({ where: { id: invitation.id } }),
     ).not.toBeNull();
     expect(await as("bob").invitation.findUnique({ where: { id: invitation.id } })).toBeNull();
+  });
+});
+
+describe("security hardening", () => {
+  const future = () => {
+    const startAt = new Date(Date.now() + 86_400_000);
+    return { startAt, endAt: new Date(startAt.getTime() + 3_600_000) };
+  };
+  const upload = (u: keyof typeof users, name: string) =>
+    db.attachment.create({
+      data: {
+        uploaderId: users[u].id,
+        key: `test/${run}/sec/${name}`,
+        name,
+        mimeType: "image/png",
+        size: 1,
+      },
+    });
+
+  it("DIRECT conversations and their members are never created by clients", async () => {
+    const directKey = [users.bob.id, users.carol.id].sort().join(":");
+    await rejected(
+      as("bob").conversation.create({
+        data: {
+          type: "DIRECT",
+          directKey,
+          members: { create: [{ userId: users.bob.id }, { userId: users.carol.id }] },
+        },
+      }),
+    );
+    await rejected(as("bob").conversation.create({ data: { type: "DIRECT", directKey } }));
+    expect(await db.conversation.findUnique({ where: { directKey } })).toBeNull();
+
+    const direct = await db.conversation.create({
+      data: {
+        type: "DIRECT",
+        directKey: `${directKey}:${run}`,
+        createdById: users.alice.id,
+        members: { create: [{ userId: users.alice.id }] },
+      },
+    });
+    await rejected(
+      as("alice").conversationMember.create({
+        data: { conversationId: direct.id, userId: users.bob.id },
+      }),
+    );
+  });
+
+  it("group moderators add plain members only; admins add any role", async () => {
+    const g = await as("alice").group.create({
+      data: {
+        name: "mods",
+        slug: `mods-${run}`,
+        privacy: "SECRET",
+        members: {
+          create: [
+            { userId: users.alice.id, role: "ADMIN" },
+            { userId: users.bob.id, role: "MODERATOR" },
+          ],
+        },
+      },
+    });
+    await rejected(
+      as("bob").groupMember.create({
+        data: { groupId: g.id, userId: users.carol.id, role: "ADMIN" },
+      }),
+    );
+    await rejected(
+      as("bob").groupMember.create({
+        data: { groupId: g.id, userId: users.carol.id, role: "MODERATOR" },
+      }),
+    );
+    await as("bob").groupMember.create({ data: { groupId: g.id, userId: users.carol.id } });
+    await as("alice").groupMember.create({
+      data: { groupId: g.id, userId: users.erin.id, role: "MODERATOR" },
+    });
+  });
+
+  it("a creator who left cannot re-add themself while others remain", async () => {
+    const g = await as("alice").group.create({
+      data: {
+        name: "left",
+        slug: `left-${run}`,
+        privacy: "SECRET",
+        members: {
+          create: [
+            { userId: users.alice.id, role: "ADMIN" },
+            { userId: users.bob.id, role: "ADMIN" },
+          ],
+        },
+      },
+    });
+    await as("alice").groupMember.delete({
+      where: { groupId_userId: { groupId: g.id, userId: users.alice.id } },
+    });
+    await rejected(
+      as("alice").groupMember.create({
+        data: { groupId: g.id, userId: users.alice.id, role: "ADMIN" },
+      }),
+    );
+
+    const convo = await as("alice").conversation.create({
+      data: {
+        type: "GROUP",
+        title: "left",
+        members: {
+          create: [{ userId: users.alice.id, role: "ADMIN" }, { userId: users.bob.id }],
+        },
+      },
+    });
+    await as("alice").conversationMember.delete({
+      where: { conversationId_userId: { conversationId: convo.id, userId: users.alice.id } },
+    });
+    await rejected(
+      as("alice").conversationMember.create({
+        data: { conversationId: convo.id, userId: users.alice.id, role: "ADMIN" },
+      }),
+    );
+  });
+
+  it("attachments are created server-side and linked only to the caller's own content", async () => {
+    await rejected(
+      as("bob").attachment.create({
+        data: { key: `test/${run}/sec/direct`, name: "x", mimeType: "text/html", size: 1 },
+      }),
+    );
+    // bob's own upload can't be pushed onto alice's post, comment or message
+    const comment = await as("alice").comment.create({ data: { postId, content: "c" } });
+    const convo = await as("alice").conversation.create({
+      data: {
+        type: "GROUP",
+        title: "att",
+        members: {
+          create: [{ userId: users.alice.id, role: "ADMIN" }, { userId: users.bob.id }],
+        },
+      },
+    });
+    const msg = await as("alice").message.create({
+      data: { conversationId: convo.id, content: "m" },
+    });
+    const mine = await upload("bob", "mine.png");
+    await rejected(as("bob").attachment.update({ where: { id: mine.id }, data: { postId } }));
+    await rejected(
+      as("bob").attachment.update({ where: { id: mine.id }, data: { commentId: comment.id } }),
+    );
+    await rejected(
+      as("bob").attachment.update({ where: { id: mine.id }, data: { messageId: msg.id } }),
+    );
+    // the normal flow: connect on create of one's own message
+    const own = await upload("bob", "own.png");
+    await as("bob").message.create({
+      data: {
+        conversationId: convo.id,
+        content: "pic",
+        attachments: { connect: [{ id: own.id }] },
+      },
+    });
+  });
+
+  it("messages: no forged integration, no edits after leaving", async () => {
+    const convo = await as("alice").conversation.create({
+      data: {
+        type: "GROUP",
+        title: "msg",
+        members: {
+          create: [{ userId: users.alice.id, role: "ADMIN" }, { userId: users.bob.id }],
+        },
+      },
+    });
+    const integration = await db.channelIntegration.findFirst({ select: { id: true } });
+    if (integration)
+      await rejected(
+        as("bob").message.create({
+          data: { conversationId: convo.id, content: "bot", integrationId: integration.id },
+        }),
+      );
+    const msg = await as("bob").message.create({
+      data: { conversationId: convo.id, content: "hi" },
+    });
+    await as("bob").conversationMember.delete({
+      where: { conversationId_userId: { conversationId: convo.id, userId: users.bob.id } },
+    });
+    await rejected(
+      as("bob").message.update({ where: { id: msg.id }, data: { content: "edited" } }),
+    );
+  });
+
+  it("ban state and permissions are private to the user and admins", async () => {
+    const seen = await as("bob").user.findUnique({ where: { id: users.erin.id } });
+    expect(seen).not.toBeNull();
+    expect(seen?.permissions ?? null).toBeNull();
+    expect(seen?.banned ?? null).toBeNull();
+    const self = await as("erin").user.findUnique({ where: { id: users.erin.id } });
+    expect(self?.permissions).toEqual(grants.erin);
+    const admin = await as("dave").user.findUnique({ where: { id: users.erin.id } });
+    expect(admin?.permissions).toEqual(grants.erin);
+    expect(admin?.banned).toBe(false);
+  });
+
+  it("nobody RSVPs themself onto someone's out-of-office", async () => {
+    const ooo = await as("alice").event.create({
+      data: { title: "Away", type: "OUT_OF_OFFICE", ...future() },
+    });
+    await rejected(
+      as("bob").eventAttendee.create({ data: { eventId: ooo.id, userId: users.bob.id } }),
+    );
   });
 });

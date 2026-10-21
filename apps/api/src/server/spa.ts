@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import path from "node:path";
 import { buildManifest, renderShell } from "@app/shared/app-config";
 import { env } from "@/env";
@@ -10,7 +11,7 @@ import { getSettings, onSettingsChange } from "@/server/settings";
  * paint, `window.__APP_CONFIG__`), so one web build serves any company. Settings come from the
  * admin over `.env`; a change clears the rendered pages.
  */
-type Page = { html: string; etag: string };
+type Page = { html: string; etag: string; csp: string };
 
 let template: Promise<string | null> | undefined;
 /** Keyed by origin; a single entry when APP_URL is set (bounded: Host is client-controlled). */
@@ -22,7 +23,7 @@ onSettingsChange(({ app }) => {
   manifest = JSON.stringify(buildManifest(app));
 });
 
-/** The browser-facing origin, only needed when APP_URL isn't a URL (e.g. `WEB_ORIGIN=*`). */
+/** The browser-facing origin, only needed when APP_URL isn't a URL (forwarded headers only behind TRUST_PROXY). */
 function requestOrigin(request: Request) {
   if (getSettings().app.url) return "";
   const url = new URL(request.url);
@@ -41,9 +42,26 @@ export const publicAppConfig = () => ({
   ...(onboardingRequired() ? { onboarding: true } : {}),
 });
 
+/**
+ * Scripts are limited to our own files plus the shell's inline ones (theme boot,
+ * `window.__APP_CONFIG__`), allowed by hash so an HTML injection can't add more. Other
+ * directives stay open: media and API calls reach S3 presigned URLs, Firebase and OAuth hosts.
+ */
+function contentSecurityPolicy(html: string) {
+  const hashes = [...html.matchAll(/<script(?![^>]*\ssrc=)[^>]*>([\s\S]*?)<\/script>/g)].map(
+    (m) => `'sha256-${createHash("sha256").update(m[1]!).digest("base64")}'`,
+  );
+  return [
+    `script-src 'self' ${hashes.join(" ")}`.trim(),
+    "frame-ancestors 'none'",
+    "base-uri 'self'",
+    "object-src 'none'",
+  ].join("; ");
+}
+
 function render(tpl: string, origin: string): Page {
   const html = renderShell(tpl, publicAppConfig(), origin || undefined);
-  return { html, etag: `"${Bun.hash(html).toString(36)}"` };
+  return { html, etag: `"${Bun.hash(html).toString(36)}"`, csp: contentSecurityPolicy(html) };
 }
 
 export async function serveIndex(
@@ -73,6 +91,7 @@ export async function serveIndex(
   // revalidate every load (the shell names the hashed assets); 304 keeps it cheap
   set.headers["cache-control"] = "no-cache";
   set.headers.etag = page.etag;
+  set.headers["content-security-policy"] = page.csp;
   if (request.headers.get("if-none-match") === page.etag) {
     set.status = 304;
     return "";

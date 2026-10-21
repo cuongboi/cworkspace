@@ -24,6 +24,8 @@ import { uploadsRoute } from "./routes/uploads";
 import { serveIndex, serveManifest } from "./server/spa";
 import { webSocketPlugin } from "./websocket";
 
+const HTTPS = env.APP_URL.startsWith("https:") || env.BETTER_AUTH_URL.startsWith("https:");
+
 const ASSET_PATH = path.join(import.meta.dir, "public");
 
 /** The whole server (API, auth, `/ws`, SPA) without `listen`, so tests can call `app.handle()`. */
@@ -50,15 +52,27 @@ export const app = new Elysia()
     set.status = status;
     return body;
   })
+  // baseline for every response (errors and static files too: set before routing); handlers
+  // may override any of them, and server/documents.ts sends its own stricter Response headers
+  .onRequest(({ request, set }) => {
+    const h = set.headers;
+    h["x-content-type-options"] = "nosniff";
+    h["referrer-policy"] = "strict-origin-when-cross-origin";
+    h["x-frame-options"] = "DENY";
+    if (HTTPS || request.url.startsWith("https:"))
+      h["strict-transport-security"] = "max-age=31536000; includeSubDomains";
+  })
   .use(
-    openapi({
-      documentation: {
-        info: { title: pkg.name, description: pkg.description, version: pkg.version },
-        paths: (await BetterAuthOpenApi.paths()) as never,
-        components: (await BetterAuthOpenApi.components()) as never,
-      },
-      scalar: { hideModels: true },
-    }),
+    env.OPENAPI_ENABLED
+      ? openapi({
+          documentation: {
+            info: { title: pkg.name, description: pkg.description, version: pkg.version },
+            paths: (await BetterAuthOpenApi.paths()) as never,
+            components: (await BetterAuthOpenApi.components()) as never,
+          },
+          scalar: { hideModels: true },
+        })
+      : new Elysia({ name: "openapi.disabled" }),
   )
   .get("/health", () => ({ ok: true }))
   .use(betterAuthPlugin)

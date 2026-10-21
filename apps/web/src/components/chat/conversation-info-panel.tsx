@@ -444,7 +444,7 @@ function FilesTab({ conversationId }: { conversationId: string }) {
                 <a
                   href={fileUrl(f.id)}
                   target="_blank"
-                  rel="noreferrer"
+                  rel="noopener noreferrer"
                   title={f.name}
                   className="block aspect-square overflow-hidden rounded-md border bg-card outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 >

@@ -12,16 +12,17 @@ jobs:
     # bumpp's own release commit must not re-trigger the workflow
     if: "!startsWith(github.event.head_commit.message, 'chore: release')"
     runs-on: ubuntu-latest
-    # DOCKERHUB_* are environment secrets: only visible to jobs that declare this environment
     environment: ACTIONS
-    env:
-      IMAGE: ${{ secrets.DOCKERHUB_USERNAME }}/cworkplace
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with: { fetch-depth: 0 }
-      - uses: oven-sh/setup-bun@v2
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with: { bun-version: 1.4.3 }
       - run: bun install --frozen-lockfile
+      - name: Lint
+        run: bun run lint
+      - name: Type-check
+        run: bun run check-types
       - name: Build SPA + Linux binary
         run: bun run build # web build → apps/api/src/public, then bun --compile → ./run-server
       - name: Bump version, commit, tag, push
@@ -31,12 +32,16 @@ jobs:
           bunx bumpp package.json apps/api/package.json --release patch --yes \
             --commit "chore: release v%s" --tag "v%s" --push
           echo "VERSION=$(jq -r .version apps/api/package.json)" >> "$GITHUB_ENV"
-          echo "DESCRIPTION=$(jq -r .description package.json)" >> "$GITHUB_ENV"
+          {
+            echo "DESCRIPTION<<__DESCRIPTION_EOF__"
+            jq -r .description package.json
+            echo "__DESCRIPTION_EOF__"
+          } >> "$GITHUB_ENV"
       - name: Package
         run: |
           mv run-server run-server-linux-x64
           tar -czf run-server-linux-x64.tar.gz run-server-linux-x64
-      - uses: softprops/action-gh-release@v2
+      - uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2.6.2
         with:
           tag_name: v${{ env.VERSION }}
           name: v${{ env.VERSION }}

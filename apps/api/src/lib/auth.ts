@@ -40,7 +40,22 @@ const createAuth = () =>
     ],
     trustedOrigins: env.WEB_ORIGIN.split(","),
     // Session rows record this IP; the account page lists it next to the user agent.
-    advanced: { ipAddress: { ipAddressHeaders: [CLIENT_IP_HEADER] } },
+    advanced: {
+      ipAddress: { ipAddressHeaders: [CLIENT_IP_HEADER] },
+      useSecureCookies: env.BETTER_AUTH_URL.startsWith("https"),
+    },
+    // explicit (better-auth only enables it in production by default); in-memory per process
+    rateLimit: {
+      enabled: true,
+      window: 60,
+      max: 100,
+      customRules: {
+        "/sign-in/email": { window: 60, max: 5 },
+        "/sign-up/email": { window: 60, max: 5 },
+        "/request-password-reset": { window: 300, max: 3 },
+        "/forget-password": { window: 300, max: 3 },
+      },
+    },
     session: {
       // Sliding idle timeout: each request within updateAge extends the session by expiresIn.
       expiresIn: 60 * 60,

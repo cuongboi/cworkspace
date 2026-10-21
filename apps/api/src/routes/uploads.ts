@@ -1,5 +1,6 @@
 import { createId } from "@paralleldrive/cuid2";
 import { Elysia, t } from "elysia";
+import { db } from "@/lib/db";
 import { badRequest, tooManyRequests, upstreamError } from "@/lib/errors";
 import { rateLimit } from "@/server/rate-limit";
 import { MAX_UPLOAD_BYTES, presignUpload, storageConfigured } from "@/server/storage";
@@ -7,8 +8,9 @@ import { authMacro } from "../plugins/auth";
 
 // executable/markup types are stored as plain text: served back with their real type they
 // could run script on the bucket/our origin; as text/plain the browser only shows the source
+// (XML types included: XSLT/XHTML/SVG documents can run script; so can Flash)
 const UNSAFE =
-  /^(text\/html|application\/(x-)?(javascript|ecmascript)|image\/svg\+xml|application\/xhtml\+xml)$/i;
+  /^(text\/html|text\/javascript|application\/(x-)?(javascript|ecmascript)|(text|application)\/([\w.+-]+\+)?xml|image\/svg\+xml|text\/xsl|application\/(x-shockwave-flash|vnd\.adobe\.flash\.movie))$/i;
 
 /**
  * POST /api/uploads → creates the Attachment row and returns a presigned POST for the browser
@@ -26,14 +28,20 @@ export const uploadsRoute = new Elysia({ name: "routes.uploads" }).use(authMacro
 
     const id = createId();
     const safeName = body.name.replace(/[^\w.\- ]+/g, "_").slice(-120) || "file";
-    const attachment = await userDb.attachment.create({
-      data: {
-        id,
-        ...body,
-        key: `files/${id}/${safeName}`,
-        uploaderId: user.id,
-      },
+    // Attachment create is denied by policy (it would skip the checks above): create it with the
+    // trusted client, then link the wiki page through the policy client so its edit-rights rule applies
+    const { wikiPageId, ...fields } = body;
+    let attachment = await db.attachment.create({
+      data: { id, ...fields, key: `files/${id}/${safeName}`, uploaderId: user.id },
     });
+    if (wikiPageId) {
+      try {
+        attachment = await userDb.attachment.update({ where: { id }, data: { wikiPageId } });
+      } catch (err) {
+        await db.attachment.delete({ where: { id } }).catch(() => {});
+        throw err;
+      }
+    }
     const upload = await presignUpload(attachment.key, attachment.mimeType, attachment.size);
     set.status = 201;
     return { data: { attachment, upload } };

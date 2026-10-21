@@ -38,11 +38,13 @@ model User {
     bio                     String?
     // better-auth admin plugin: written by the server only, never through /api/execute
     role                    String?              @deny('update', true)
-    banned                  Boolean?             @default(false) @deny('update', true)
-    banReason               String?              @deny('update', true)
-    banExpires              DateTime?            @deny('update', true)
+    // moderation/RBAC state is private to the user and instance admins (better-auth and the
+    // session read it through the unscoped client)
+    banned                  Boolean?             @default(false) @deny('update', true) @deny('read', auth().id != id && auth().role != 'admin')
+    banReason               String?              @deny('update', true) @deny('read', auth().id != id && auth().role != 'admin')
+    banExpires              DateTime?            @deny('update', true) @deny('read', auth().id != id && auth().role != 'admin')
     // RBAC: [{ model, actions }], see `type Permission`
-    permissions             PermissionType[]     @json @default("[]") @deny('update', true)
+    permissions             PermissionType[]     @json @default("[]") @deny('update', true) @deny('read', auth().id != id && auth().role != 'admin')
     createdAt               DateTime             @default(now())
     updatedAt               DateTime             @default(now()) @updatedAt
     sessions                Session[]
@@ -274,12 +276,15 @@ model GroupMember {
     createdAt DateTime         @default(now())
 
     @@allow('read', check(group, 'read'))
-    // creator bootstraps the group with themself as admin
-    @@allow('create', userId == auth().id && group.createdById == auth().id)
+    // creator bootstraps the group with themself as admin; only while nobody else is in it, so a
+    // creator who left (or was removed) cannot re-add themself as admin later
     // self-join: PUBLIC → ACTIVE member, CLOSED → PENDING request (default group is joined server-side)
-    @@allow('create', userId == auth().id && role == MEMBER && !group.isDefault && ((group.privacy == PUBLIC && status == ACTIVE) || (group.privacy == CLOSED && status == PENDING)))
-    // group admins/moderators add people
-    @@allow('create', group.members?[userId == auth().id && status == ACTIVE && role in [ADMIN, MODERATOR]])
+    // group admins add anyone with any role; moderators add plain members only
+    @@allow('create',
+        (userId == auth().id && group.createdById == auth().id && !(group.members?[userId != auth().id]))
+        || (userId == auth().id && role == MEMBER && !group.isDefault && ((group.privacy == PUBLIC && status == ACTIVE) || (group.privacy == CLOSED && status == PENDING)))
+        || group.members?[userId == auth().id && status == ACTIVE && role == ADMIN]
+        || (role == MEMBER && group.members?[userId == auth().id && status == ACTIVE && role == MODERATOR]))
     // group admins approve requests and change roles
     @@allow('update', group.members?[userId == auth().id && status == ACTIVE && role == ADMIN] || (auth().role == 'admin' || auth().permissions?[model == currentModel() && currentOperation() in actions]))
     // leave, or be removed by a group admin/moderator or an instance admin (nobody leaves the default group)
@@ -488,8 +493,12 @@ model Attachment {
 
     @@deny('all', auth() == null)
     @@allow('read', uploaderId == auth().id || isPublic || check(post, 'read') || check(comment, 'read') || check(message, 'read') || check(wikiPage, 'read'))
-    // created by POST /api/uploads; the uploader attaches it to their own post/comment/message
-    @@allow('create,update,delete', uploaderId == auth().id)
+    // created only by POST /api/uploads (trusted client, after its MIME/size checks); the uploader
+    // attaches it to their own post/comment/message
+    @@allow('update,delete', uploaderId == auth().id)
+    @@deny('create', true)
+    // only the author of a post/comment/message may attach files to it
+    @@deny('create,post-update', (postId != null && post.authorId != auth().id) || (commentId != null && !check(comment, 'update')) || (messageId != null && !check(message, 'update')))
     @@deny('post-update', uploaderId != before().uploaderId || key != before().key || mimeType != before().mimeType)
     // only someone who may edit a page can attach files to it
     @@deny('create,post-update', wikiPageId != null && !check(wikiPage, 'update'))
@@ -549,6 +558,8 @@ model Conversation {
     // group chats: grounded in the group, not the mirrored rows, so a lagging mirror never grants access
     @@allow('read', groupId != null && group.members?[userId == auth().id && status == ACTIVE])
     @@allow('create', createdById == auth().id)
+    // 1:1 chats are created by POST /api/conversations/direct only (directKey and members derived server-side)
+    @@deny('create', type == DIRECT)
     @@allow('update', type != DIRECT && members?[userId == auth().id])
     @@allow('delete', type != DIRECT && members?[userId == auth().id && role == ADMIN])
     @@deny('post-update', directKey != before().directKey || createdById != before().createdById || groupId != before().groupId || channelId != before().channelId)
@@ -574,8 +585,12 @@ model ConversationMember {
     joinedAt       DateTime         @default(now())
 
     @@allow('read', check(conversation, 'read'))
-    @@allow('create', conversation.createdById == auth().id)
-    @@allow('create', conversation.type != DIRECT && conversation.members?[userId == auth().id && role == ADMIN])
+    // the creator bootstraps with themself (only while nobody else is in it, so a creator who left
+    // cannot re-add themself); then conversation admins add people. DIRECT members are server-written.
+    @@allow('create',
+        (userId == auth().id && conversation.createdById == auth().id && !(conversation.members?[userId != auth().id]))
+        || conversation.members?[userId == auth().id && role == ADMIN])
+    @@deny('create', conversation.type == DIRECT)
     // own read state / mute / favorite; admins manage roles
     @@allow('update', userId == auth().id || conversation.members?[userId == auth().id && role == ADMIN])
     // group chat membership follows the group (server-side sync); members only update their own read state / mute
@@ -623,10 +638,11 @@ model Message {
 
     @@allow('read', check(conversation, 'read'))
     @@allow('create', senderId == auth().id && type == TEXT && check(conversation, 'read'))
-    @@allow('update', senderId == auth().id && type == TEXT)
+    @@allow('update', senderId == auth().id && type == TEXT && check(conversation, 'read'))
     @@deny('post-update', conversationId != before().conversationId || senderId != before().senderId || integrationId != before().integrationId || threadId != before().threadId)
     // thread replies need validation and counter updates: POST /api/conversations/:id/threads/:rootId/replies
-    @@deny('create', threadId != null)
+    // BOT messages (integrationId) are written by the server only
+    @@deny('create', threadId != null || integrationId != null)
 
     @@index([conversationId, createdAt])
     @@index([threadId, createdAt])
@@ -766,11 +782,10 @@ model EventAttendee {
     createdAt DateTime @default(now())
 
     @@allow('read', check(event, 'read'))
-    // the creator invites; anyone who can see a group event can RSVP themself
-    @@allow('create', event.creatorId == auth().id)
-    @@allow('create', userId == auth().id && check(event, 'read'))
-    @@allow('update', userId == auth().id || event.creatorId == auth().id)
-    @@allow('delete', userId == auth().id || event.creatorId == auth().id)
+    // the creator invites; anyone who can see a group event can RSVP themself (not to someone's
+    // out-of-office, which every user can read)
+    @@allow('create', event.creatorId == auth().id || (userId == auth().id && check(event, 'read') && event.type != OUT_OF_OFFICE))
+    @@allow('update,delete', userId == auth().id || event.creatorId == auth().id)
     @@deny('post-update', eventId != before().eventId || userId != before().userId)
 
     @@unique([eventId, userId])

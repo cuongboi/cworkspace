@@ -11,6 +11,7 @@ import {
   MAX_GLOSSARY_TERMS,
   MAX_MESH_PARTICIPANTS,
   type MediaState,
+  type RtcSignal,
   type TranscriptEntry,
   type UserSummary,
 } from "@app/shared/realtime-events";
@@ -63,6 +64,18 @@ const MAX_CAPTION_CHARS = 500;
 const MAX_TRANSCRIPT = 2_000;
 /** a 100 ms PCM16 chunk at 16 kHz is 3200 bytes; anything much larger is not our client */
 const MAX_AUDIO_BYTES = 16_000;
+/**
+ * Caption audio per user, across all their sockets: ~10 frames/s of 100 ms, with headroom.
+ * Bounds what one account can make the server send to a provider billed by the hour.
+ */
+const AUDIO_FRAMES_PER_USER = 60;
+const AUDIO_WINDOW_MS = 2_000;
+/** PCM16 RMS below this (about -55 dBFS) is silence: not sent, so it neither bills nor holds the floor */
+const MIN_AUDIO_RMS = 60;
+/** Hard cap on captioning one call, from its first forwarded audio; then captions stop */
+const CAPTION_BUDGET_MS = 4 * 60 * 60 * 1000;
+/** Largest relayed WebRTC signal (an SDP offer with many tracks stays well under this) */
+const MAX_SIGNAL_BYTES = 64 * 1024;
 
 /**
  * Live caption state of a call, in memory only: the transcript is gone when the call ends.
@@ -73,13 +86,17 @@ type CallCaptionState = {
   seq: number;
   entries: TranscriptEntry[];
   glossary: string[];
+  /** when audio was first forwarded to a provider (budget start) */
+  startedAt: number | null;
+  /** the budget ran out: no more audio for this call */
+  exhausted: boolean;
 };
 const captionState = new Map<string, CallCaptionState>();
 
 function captionsOf(callId: string): CallCaptionState {
   let state = captionState.get(callId);
   if (!state) {
-    state = { seq: 0, entries: [], glossary: [] };
+    state = { seq: 0, entries: [], glossary: [], startedAt: null, exhausted: false };
     captionState.set(callId, state);
   }
   return state;
@@ -157,12 +174,42 @@ export function onCallAudio(socket: Conn, callId: string, pcm: Uint8Array) {
   if (!peers || !self || !self.media.audio) return;
   if (pcm.byteLength === 0 || pcm.byteLength > MAX_AUDIO_BYTES || pcm.byteLength % 2) return;
   if (!rateLimit(`call:audio:${socket.id}`, 40, 2_000)) return;
+  if (!rateLimit(`call:audio-user:${socket.user.id}`, AUDIO_FRAMES_PER_USER, AUDIO_WINDOW_MS))
+    return;
+  // a provider session for one person talking to themselves (or their own second tab) is waste
+  if (new Set([...peers.values()].map((p) => p.user.id)).size < 2) return;
   if (![...peers.values()].some((p) => p.captions.enabled)) return;
   if (!captionsAvailable()) return;
+  if (rms(pcm) < MIN_AUDIO_RMS) return;
+  const state = captionsOf(callId);
+  if (state.exhausted) return;
+  const now = Date.now();
+  state.startedAt ??= now;
+  if (now - state.startedAt > CAPTION_BUDGET_MS) {
+    state.exhausted = true;
+    closeCallCaptions(callId);
+    emitToRoom(rooms.call(callId), "call:caption-status", {
+      callId,
+      status: "off",
+      error: "Caption time limit for this call reached",
+    });
+    return;
+  }
   pipelineOf(callId).push(
     { socketId: socket.id, userId: socket.user.id, lang: self.captions.lang },
     pcm,
   );
+}
+
+/** Root mean square of little-endian PCM16 samples. */
+function rms(pcm: Uint8Array) {
+  const view = new DataView(pcm.buffer, pcm.byteOffset, pcm.byteLength);
+  let sum = 0;
+  for (let i = 0; i < pcm.byteLength; i += 2) {
+    const s = view.getInt16(i, true);
+    sum += s * s;
+  }
+  return Math.sqrt(sum / (pcm.byteLength / 2));
 }
 
 /** callId → socketId → peer */
@@ -174,6 +221,8 @@ const answered = new Set<string>();
  * group and join at will. `messageId` is the call's log entry in the chat, updated when it ends.
  */
 const groupCalls = new Map<string, { groupId: string; messageId: string }>();
+/** callId → the user who started it (the host: edits the caption glossary) */
+const hosts = new Map<string, string>();
 /** socketId → connection, to remove a user's sockets from a call (group membership ended) */
 const conns = new Map<string, Conn>();
 
@@ -278,6 +327,7 @@ async function endCall(callId: string) {
     select: callSelect,
   });
   live.delete(callId);
+  hosts.delete(callId);
   captionState.delete(callId);
   closeCallCaptions(callId);
   const group = groupCalls.get(callId);
@@ -502,6 +552,7 @@ export function registerCalls(socket: Conn) {
         select: callSelect,
       });
       live.set(call.id, new Map());
+      hosts.set(call.id, call.startedById);
 
       if (callGroupId && call.conversationId) {
         const message = await db.message.create({
@@ -574,6 +625,7 @@ export function registerCalls(socket: Conn) {
       if (!call || call.status === "ENDED") return ack(fail("This call has ended"));
       const peers = live.get(call.id) ?? new Map<string, CallPeer>();
       live.set(call.id, peers);
+      if (!hosts.has(call.id)) hosts.set(call.id, call.startedById);
       const distinctUsers = new Set([...peers.values()].map((p) => p.user.id));
       if (!distinctUsers.has(user.id) && distinctUsers.size >= MAX_MESH_PARTICIPANTS) {
         return ack(fail(`Calls are limited to ${MAX_MESH_PARTICIPANTS} people`));
@@ -672,16 +724,15 @@ export function registerCalls(socket: Conn) {
 
   socket.on("call:glossary", ({ callId, terms }) => {
     const id = String(callId);
-    if (!live.get(id)?.has(socket.id) || !Array.isArray(terms)) return;
+    const peers = live.get(id);
+    if (!peers?.has(socket.id) || !Array.isArray(terms)) return;
+    // the host edits the glossary (it steers the provider for everyone); while the host is not
+    // in the call, any participant may
+    const host = hosts.get(id);
+    const hostPresent = [...peers.values()].some((p) => p.user.id === host);
+    if (hostPresent && user.id !== host) return;
     if (!rateLimit(`call:glossary:${socket.id}`, 5, 10_000)) return;
-    const glossary = [
-      ...new Set(
-        terms
-          .filter((t): t is string => typeof t === "string")
-          .map((t) => t.trim().slice(0, MAX_GLOSSARY_TERM_CHARS))
-          .filter(Boolean),
-      ),
-    ].slice(0, MAX_GLOSSARY_TERMS);
+    const glossary = sanitizeGlossary(terms);
     captionsOf(id).glossary = glossary;
     peekCallCaptions(id)?.glossaryChanged();
     emitToRoom(rooms.call(id), "call:glossary", { callId: id, terms: glossary });
@@ -691,10 +742,13 @@ export function registerCalls(socket: Conn) {
     const peers = live.get(String(callId));
     // relay only between two sockets of the same call
     if (!peers?.has(socket.id) || !peers.has(String(to))) return;
+    if (!rateLimit(`call:signal:${socket.id}`, 200, 10_000)) return;
+    const signal = sanitizeSignal(data);
+    if (!signal) return;
     emitToConn(String(to), "rtc:signal", {
       callId: String(callId),
       from: socket.id,
-      data,
+      data: signal,
     });
   });
 
@@ -705,6 +759,70 @@ export function registerCalls(socket: Conn) {
 }
 
 const logError = (what: string) => (err: unknown) => console.error(`[calls] ${what}`, err);
+
+/** Glossary terms are fed to the caption provider: letters, digits, space, `_` and `-` only. */
+const GLOSSARY_TERM_MAX = Math.min(40, MAX_GLOSSARY_TERM_CHARS);
+export function sanitizeGlossary(terms: unknown[]): string[] {
+  return [
+    ...new Set(
+      terms
+        .filter((t): t is string => typeof t === "string")
+        .map((t) =>
+          t
+            .normalize("NFKC")
+            .replace(/[^\p{L}\p{N} _-]/gu, "")
+            .replace(/\s+/g, " ")
+            .trim()
+            .slice(0, GLOSSARY_TERM_MAX)
+            .trim(),
+        )
+        .filter(Boolean),
+    ),
+  ].slice(0, MAX_GLOSSARY_TERMS);
+}
+
+const SDP_TYPES = new Set(["offer", "answer", "pranswer", "rollback"]);
+
+/**
+ * Only the two shapes the web client sends (`lib/rtc/mesh-transport.ts`) are relayed, rebuilt
+ * field by field so nothing else rides along, and capped in size.
+ */
+function sanitizeSignal(data: unknown): RtcSignal | null {
+  if (!data || typeof data !== "object") return null;
+  const d = data as Record<string, unknown>;
+  let signal: RtcSignal;
+  if ("description" in d) {
+    const desc = d.description as Record<string, unknown> | null;
+    if (!desc || typeof desc !== "object" || !SDP_TYPES.has(desc.type as string)) return null;
+    if (desc.sdp !== undefined && typeof desc.sdp !== "string") return null;
+    signal = {
+      description: {
+        type: desc.type as "offer" | "answer" | "pranswer" | "rollback",
+        ...(typeof desc.sdp === "string" ? { sdp: desc.sdp } : {}),
+      },
+    };
+  } else if ("candidate" in d) {
+    const c = d.candidate as Record<string, unknown> | null;
+    if (c === null) signal = { candidate: null };
+    else {
+      if (typeof c !== "object") return null;
+      const { candidate, sdpMid, sdpMLineIndex, usernameFragment } = c;
+      if (candidate !== undefined && typeof candidate !== "string") return null;
+      if (sdpMid != null && typeof sdpMid !== "string") return null;
+      if (sdpMLineIndex != null && !Number.isInteger(sdpMLineIndex)) return null;
+      if (usernameFragment != null && typeof usernameFragment !== "string") return null;
+      signal = {
+        candidate: {
+          ...(typeof candidate === "string" ? { candidate } : {}),
+          sdpMid: (sdpMid as string | null | undefined) ?? null,
+          sdpMLineIndex: (sdpMLineIndex as number | null | undefined) ?? null,
+          ...(typeof usernameFragment === "string" ? { usernameFragment } : {}),
+        },
+      };
+    }
+  } else return null;
+  return JSON.stringify(signal).length <= MAX_SIGNAL_BYTES ? signal : null;
+}
 
 function sanitizeMedia(media: MediaState | undefined): MediaState {
   return {

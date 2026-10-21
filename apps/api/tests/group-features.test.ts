@@ -298,10 +298,20 @@ describe("knowledge (wiki)", () => {
 });
 
 describe("knowledge images", () => {
-  const image = (u: keyof typeof users, name: string, wikiPageId?: string) =>
-    as(u).attachment.create({
-      data: { key: `test/${run}/wiki/${name}`, name, mimeType: "image/png", size: 1, wikiPageId },
+  // mirrors POST /api/uploads: the row is created server-side, then linked under the user's policies
+  const image = async (u: keyof typeof users, name: string, wikiPageId?: string) => {
+    const row = await db.attachment.create({
+      data: {
+        key: `test/${run}/wiki/${name}`,
+        name,
+        mimeType: "image/png",
+        size: 1,
+        uploaderId: users[u].id,
+      },
     });
+    if (!wikiPageId) return row;
+    return as(u).attachment.update({ where: { id: row.id }, data: { wikiPageId } });
+  };
 
   it("follow the page's visibility", async () => {
     const page = await as("bob").wikiPage.create({ data: { groupId: closed, title: "Diagrams" } });

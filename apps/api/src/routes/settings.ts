@@ -25,14 +25,17 @@ type BrandingImage = (typeof BRANDING_IMAGES)[number];
 
 const str = (max: number) => t.Optional(t.String({ maxLength: max }));
 
+const imageUrl = t.Optional(t.String({ maxLength: 2048, pattern: "^(https?:\\/\\/|\\/|$)" }));
+
 const brandingSchema = t.Object({
   name: str(60),
   shortName: str(30),
   description: str(300),
   locale: str(10),
   twitterSite: str(16),
-  ogImage: str(2048),
-  icon: str(2048),
+  // absolute http(s) or same-origin path: no javascript:/data: URLs in the rendered shell
+  ogImage: imageUrl,
+  icon: imageUrl,
   // an uploaded image (POST /api/uploads, isPublic) served at /api/branding/<kind>
   iconFile: t.Optional(t.Nullable(t.String({ maxLength: 64 }))),
   ogImageFile: t.Optional(t.Nullable(t.String({ maxLength: 64 }))),

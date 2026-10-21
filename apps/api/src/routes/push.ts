@@ -36,6 +36,8 @@ export const pushRoute = new Elysia({ name: "routes.push" })
   .post(
     "/api/push/tokens",
     async ({ user, body, headers }) => {
+      // each call can move a token between users and grows the table: bound it per user
+      if (!rateLimit(`push-token:${user.id}`, 10, 60_000)) throw tooManyRequests();
       const userAgent = headers["user-agent"]?.slice(0, 500) ?? null;
       // a token identifies a browser: whoever signs in there last receives its pushes
       await db.pushToken.upsert({

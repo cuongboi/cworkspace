@@ -1,5 +1,4 @@
 import { Elysia, t } from "elysia";
-import { env } from "@/env";
 import { decryptSecret, safeEqual, sha256, verifySignature } from "@/lib/crypto";
 import { db } from "@/lib/db";
 import { badRequest, forbidden, notFound, tooManyRequests, unauthorized } from "@/lib/errors";

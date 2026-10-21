@@ -35,6 +35,11 @@ export async function initOnboarding() {
       ? `\n🔐 No users yet. Finish setup at ${env.APP_URL}/onboarding with ONBOARDING_TOKEN.\n`
       : `\n🔐 No users yet. Finish setup (link valid until restart):\n   ${link}\n`,
   );
+  // the random token lands in logs (journald, docker logs); a fixed secret keeps it out of them
+  if (!env.ONBOARDING_TOKEN && env.IS_PRODUCTION)
+    console.warn(
+      "⚠️  Set ONBOARDING_TOKEN in production so the setup token isn't written to logs.",
+    );
 }
 
 export const onboardingRequired = () => required;

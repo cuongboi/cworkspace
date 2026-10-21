@@ -1,12 +1,13 @@
-# Infrastructure for cworkplace: MiniStack (AWS emulator: S3 + RDS Postgres), StackPort (UI) and coturn (TURN).
-#   docker compose up -d        # then: bun --cwd apps/api run db:push && bun run dev
+# Infrastructure for cworkplace: MiniStack (AWS emulator: S3 + RDS Postgres), StackPort (UI, dev profile) and coturn (TURN).
+#   docker compose --profile dev up -d   # needs TURN_SECRET in .env        # then: bun --cwd apps/api run db:push && bun run dev
 # Values come from the root .env (written by setup.sh on servers); the defaults match local development.
 # The API is a single long-lived process (realtime state lives in memory), so no Redis is needed.
 name: cworkplace
 
 services:
   ministack:
-    image: ministackorg/ministack:latest
+    # pinned by digest (multi-arch index of 1.5.31); bump deliberately
+    image: ministackorg/ministack:1.5.31@sha256:e47e700674792f8a4272cb6e65ac84d1a04b4e7e69810339e7b8c7e81f600c29
     container_name: cworkplace-ministack
     restart: unless-stopped
     # loopback only: browsers reach S3 through Caddy at /s3/*
@@ -26,8 +27,10 @@ services:
       - ${HOME}/.ministack:/var/lib/ministack
 
   # web UI for browsing the emulated AWS resources: http://localhost:8080
+  # development only (it can write to the bucket): `docker compose --profile dev up -d`
   stackport:
-    image: davireis/stackport:latest
+    image: davireis/stackport:0.4.6@sha256:7e5385f24eecf340ddaa8d7f1e6b296656ffb5ea4475ba81731520f4568d01fe
+    profiles: ["dev"]
     container_name: cworkplace-stackport
     restart: unless-stopped
     ports: ["${BIND_ADDR:-127.0.0.1}:8080:8080"]
@@ -50,6 +53,8 @@ services:
       AWS_SECRET_ACCESS_KEY: ${S3_SECRET_ACCESS_KEY:-test}
       AWS_DEFAULT_REGION: ${S3_REGION:-us-east-1}
       AWS_ENDPOINT_URL: http://ministack:4566
+    # The ":-cworkplace" fallbacks are for local development only; setup.sh always writes a random
+    # POSTGRES_PASSWORD (and S3 keys) into .env on servers.
     # The RDS password only applies on creation; changing POSTGRES_PASSWORD later doesn't alter an existing instance.
     entrypoint: >
       /bin/sh -c "
@@ -74,6 +79,17 @@ services:
       --listening-port=3478
       --min-port=${TURN_MIN_PORT:-49152} --max-port=${TURN_MAX_PORT:-65535}
       --fingerprint --lt-cred-mech
-      --use-auth-secret --static-auth-secret=${TURN_SECRET:-change-me-turn-secret}
+      --use-auth-secret --static-auth-secret=${TURN_SECRET:?TURN_SECRET is required}
       --realm=${DOMAIN:-cworkplace.local}
       --no-cli --no-tls --no-dtls
+      --no-multicast-peers
+      --denied-peer-ip=0.0.0.0-0.255.255.255
+      --denied-peer-ip=10.0.0.0-10.255.255.255
+      --denied-peer-ip=100.64.0.0-100.127.255.255
+      --denied-peer-ip=127.0.0.0-127.255.255.255
+      --denied-peer-ip=169.254.0.0-169.254.255.255
+      --denied-peer-ip=172.16.0.0-172.31.255.255
+      --denied-peer-ip=192.168.0.0-192.168.255.255
+      --denied-peer-ip=::1
+      --denied-peer-ip=fc00::-fdff:ffff:ffff:ffff:ffff:ffff:ffff:ffff
+      --denied-peer-ip=fe80::-febf:ffff:ffff:ffff:ffff:ffff:ffff:ffff

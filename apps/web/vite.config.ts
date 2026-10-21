@@ -68,6 +68,12 @@ export default defineConfig(({ command, mode }) => ({
     alias: {
       "@": resolve(import.meta.dirname, "./src"),
     },
+    dedupe: ["react", "react-dom"],
+  },
+  // Scan every source file up front: deps found later (inside lazy routes) make Vite re-optimize
+  // mid-session, and the open page then mixes two React copies ("reading 'useContext'" of null).
+  optimizeDeps: {
+    entries: ["index.html", "src/**/*.{ts,tsx}"],
   },
   // build: {
   //   // Warn if any chunk still ends up over the 100 kB budget.

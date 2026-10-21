@@ -1,6 +1,6 @@
 import { Elysia, t } from "elysia";
 import { db } from "@/lib/db";
-import { badRequest } from "@/lib/errors";
+import { badRequest, invalidState, notFound } from "@/lib/errors";
 import { createThreadReply } from "@/server/threads";
 import { authMacro } from "../plugins/auth";
 
@@ -12,19 +12,35 @@ export const conversationsRoute = new Elysia({ name: "routes.conversations" })
   .use(authMacro)
   .post(
     "/api/conversations/direct",
-    async ({ body: { userId }, user, userDb, set }) => {
+    async ({ body: { userId }, user, set }) => {
       if (userId === user.id) throw badRequest("Cannot message yourself");
-      const directKey = [user.id, userId].sort().join(":");
-      const existing = await userDb.conversation.findUnique({
-        where: { directKey },
-        select: { id: true },
+      // DIRECT conversations are denied to the policy client (anyone could pre-claim a directKey):
+      // the key, members and creator are derived here and written with the trusted client
+      const target = await db.user.findUnique({
+        where: { id: userId },
+        select: { id: true, banned: true },
       });
-      if (existing) return { data: existing };
+      if (!target || target.banned) throw notFound("User not found");
+      const directKey = [user.id, userId].sort().join(":");
+      const find = () =>
+        db.conversation.findUnique({
+          where: { directKey },
+          select: { id: true, type: true, members: { select: { userId: true } } },
+        });
+      const owned = (c: NonNullable<Awaited<ReturnType<typeof find>>>) => {
+        const ids = new Set(c.members.map((m) => m.userId));
+        if (c.type !== "DIRECT" || !ids.has(user.id))
+          throw invalidState("Conversation unavailable");
+        return { data: { id: c.id } };
+      };
+      const existing = await find();
+      if (existing) return owned(existing);
       try {
-        const created = await userDb.conversation.create({
+        const created = await db.conversation.create({
           data: {
             type: "DIRECT",
             directKey,
+            createdById: user.id,
             members: { create: [{ userId: user.id }, { userId }] },
           },
           select: { id: true },
@@ -32,12 +48,9 @@ export const conversationsRoute = new Elysia({ name: "routes.conversations" })
         set.status = 201;
         return { data: created };
       } catch (err) {
-        // lost a race with the other user creating the same conversation
-        const raced = await db.conversation.findUnique({
-          where: { directKey },
-          select: { id: true, members: { where: { userId: user.id }, select: { id: true } } },
-        });
-        if (raced?.members.length) return { data: { id: raced.id } };
+        // lost a race with the other user creating the same conversation (unique directKey)
+        const raced = await find();
+        if (raced) return owned(raced);
         throw err;
       }
     },

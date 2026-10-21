@@ -46,16 +46,59 @@ export const MAX_TAKE = 100;
 const isPlainObject = (v: unknown): v is Record<string, unknown> =>
   typeof v === "object" && v !== null && !Array.isArray(v);
 
+const clampTake = (take: unknown) => {
+  const n = typeof take === "number" && Number.isFinite(take) ? Math.trunc(take) : MAX_TAKE;
+  // keeps the sign: a negative take pages backwards
+  return Math.sign(n || 1) * Math.min(Math.abs(n), MAX_TAKE);
+};
+
+type FieldDef = { type: string; array?: boolean; relation?: unknown };
+const modelFields = (name: string) =>
+  (schema.models as unknown as Record<string, { fields: Record<string, FieldDef> }>)[name]?.fields;
+
+/**
+ * Caps `take` on every to-many relation read nested in `include` / `select`, so one call can't
+ * fan out into unbounded rows. To-one relations and `_count` are left alone.
+ */
+function boundNested(
+  modelName: string,
+  args: Record<string, unknown>,
+  depth = 0,
+): Record<string, unknown> {
+  if (depth > 8) throw badRequest("Query is nested too deeply");
+  const fields = modelFields(modelName);
+  const out = { ...args };
+  for (const key of ["include", "select"] as const) {
+    const sel = out[key];
+    if (!isPlainObject(sel) || !fields) continue;
+    const next: Record<string, unknown> = { ...sel };
+    for (const [name, value] of Object.entries(sel)) {
+      const field = fields[name];
+      if (!field?.relation) continue;
+      if (field.array) {
+        const rel = isPlainObject(value) ? value : {};
+        if (value !== true && !isPlainObject(value)) continue;
+        next[name] = { ...boundNested(field.type, rel, depth + 1), take: clampTake(rel.take) };
+      } else if (isPlainObject(value)) {
+        next[name] = boundNested(field.type, value, depth + 1);
+      }
+    }
+    out[key] = next;
+  }
+  return out;
+}
+
 /** Validates the call and bounds its cost. Throws `HttpError` (400) on anything off-list. */
 export function guardExecute(model: string, operator: string, args: unknown) {
   if (!MODELS.has(model)) throw badRequest(`Unknown model "${model}"`);
   if (!OPERATORS.has(operator)) throw badRequest(`Operator "${operator}" is not allowed`);
   if (!isPlainObject(args)) throw badRequest("args must be an object");
-  const bounded = { ...args };
-  if (operator === "findMany") {
-    const take = typeof bounded.take === "number" ? bounded.take : MAX_TAKE;
-    // keeps the sign: a negative take pages backwards
-    bounded.take = Math.sign(take || 1) * Math.min(Math.abs(take), MAX_TAKE);
+  const bounded = boundNested(model.charAt(0).toUpperCase() + model.slice(1), args);
+  if (operator === "findMany") bounded.take = clampTake(bounded.take);
+  // groupBy can't default a take (it would also need an orderBy): require a bounded one
+  if (operator === "groupBy") {
+    if (typeof bounded.take !== "number") throw badRequest("groupBy needs a take");
+    bounded.take = clampTake(bounded.take);
   }
   return bounded;
 }
