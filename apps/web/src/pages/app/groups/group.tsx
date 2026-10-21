@@ -6,7 +6,7 @@ import {
 } from "lucide-react"
 import { parseAsString, useQueryState } from "nuqs"
 import { Link, Navigate, useParams } from "react-router-dom"
-import { useEffect } from "react"
+import { useEffect, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { PostComposer } from "@/components/feed/post-composer"
 import { canModerate } from "@/components/groups/channel-data"
@@ -40,12 +40,15 @@ import { db } from "@/lib/api-client"
 import { rememberGroup } from "@/lib/last-group"
 import { useDbQuery } from "@/lib/query"
 import { ScrollArea } from "@/components/ui/scroll-area"
+import { PageScrollContext } from "@/hooks/use-page-scroll"
 
 const GroupPage = () => {
   const params = useParams()
   const { me, isAdmin } = useApp()
   const { t } = useTranslation()
   const slug = params.groupSlug ?? ""
+  // the page scrolls its own viewport (bleed layout): the virtualized feed needs it as its scroll element
+  const [viewport, setViewport] = useState<HTMLDivElement | null>(null)
   const [tabParam, setTabParam] = useQueryState(
     "tab",
     parseAsString.withDefault("")
@@ -131,86 +134,88 @@ const GroupPage = () => {
   )
 
   return (
-    <ScrollArea className="h-full">
-      <Tabs
-        value={tab}
-        onValueChange={setTab}
-        className="min-h-full gap-0 bg-background"
-      >
-        <GroupHeader group={group} tab={tab} live={isMember ? live : null} />
-        <div className="mx-auto w-full max-w-5xl px-3 py-4 md:px-6 md:py-5">
-          <TabsContent
-            value="discussion"
-            className="grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_280px]"
-          >
-            <div className="flex min-w-0 flex-col gap-3">
-              {isMember && live ? <GroupLiveCallBanner live={live} /> : null}
+    <ScrollArea viewportRef={setViewport} className="h-full">
+      <PageScrollContext value={viewport}>
+        <Tabs
+          value={tab}
+          onValueChange={setTab}
+          className="min-h-full gap-0 bg-background"
+        >
+          <GroupHeader group={group} tab={tab} live={isMember ? live : null} />
+          <div className="mx-auto w-full max-w-5xl px-3 py-4 md:px-6 md:py-5">
+            <TabsContent
+              value="discussion"
+              className="grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_280px]"
+            >
+              <div className="flex min-w-0 flex-col gap-3">
+                {isMember && live ? <GroupLiveCallBanner live={live} /> : null}
+                {canSeePosts ? (
+                  <>
+                    {canPost ? (
+                      <PostComposer groupId={group.id} groupName={group.name} />
+                    ) : isMember ? (
+                      <p className="rounded-xl border bg-card px-4 py-3 text-sm text-muted-foreground">
+                        {t("groups.features.adminsOnlyPosting")}
+                      </p>
+                    ) : null}
+                    <PostFeed
+                      scope={["group", group.id, me.id]}
+                      where={{ groupId: group.id }}
+                      pinnedFirst
+                      showGroup={false}
+                      empty={
+                        <Empty className="rounded-2xl border bg-card">
+                          <EmptyHeader>
+                            <EmptyMedia variant="icon">
+                              <MessageSquareIcon />
+                            </EmptyMedia>
+                            <EmptyTitle>{t("groups.noPosts")}</EmptyTitle>
+                            <EmptyDescription>
+                              {isMember
+                                ? t("groups.noPostsMember")
+                                : t("groups.noPostsGuest")}
+                            </EmptyDescription>
+                          </EmptyHeader>
+                          {isMember ? null : joinCta}
+                        </Empty>
+                      }
+                    />
+                  </>
+                ) : (
+                  locked
+                )}
+              </div>
+              <div className="hidden lg:block">
+                <GroupSideRail group={group} isMember={isMember} />
+              </div>
+            </TabsContent>
+            <TabsContent value="calendar">
               {canSeePosts ? (
-                <>
-                  {canPost ? (
-                    <PostComposer groupId={group.id} groupName={group.name} />
-                  ) : isMember ? (
-                    <p className="rounded-xl border bg-card px-4 py-3 text-sm text-muted-foreground">
-                      {t("groups.features.adminsOnlyPosting")}
-                    </p>
-                  ) : null}
-                  <PostFeed
-                    scope={["group", group.id, me.id]}
-                    where={{ groupId: group.id }}
-                    pinnedFirst
-                    showGroup={false}
-                    empty={
-                      <Empty className="rounded-2xl border bg-card">
-                        <EmptyHeader>
-                          <EmptyMedia variant="icon">
-                            <MessageSquareIcon />
-                          </EmptyMedia>
-                          <EmptyTitle>{t("groups.noPosts")}</EmptyTitle>
-                          <EmptyDescription>
-                            {isMember
-                              ? t("groups.noPostsMember")
-                              : t("groups.noPostsGuest")}
-                          </EmptyDescription>
-                        </EmptyHeader>
-                        {isMember ? null : joinCta}
-                      </Empty>
-                    }
-                  />
-                </>
+                <GroupCalendar group={group} canCreate={isMember} />
               ) : (
                 locked
               )}
-            </div>
-            <div className="hidden lg:block">
-              <GroupSideRail group={group} isMember={isMember} />
-            </div>
-          </TabsContent>
-          <TabsContent value="calendar">
-            {canSeePosts ? (
-              <GroupCalendar group={group} canCreate={isMember} />
-            ) : (
-              locked
-            )}
-          </TabsContent>
-          <TabsContent value="members" className="mx-auto w-full">
-            {canSeePosts || group.privacy === "CLOSED" ? (
-              <GroupMembers group={group} />
-            ) : (
-              locked
-            )}
-          </TabsContent>
-          <TabsContent
-            value="about"
-            className="mx-auto flex w-full flex-col gap-3"
-          >
-            <GroupAbout group={group} />
-            {/* phones have no side column: its members and shortcuts live here */}
-            <div className="lg:hidden">
-              <GroupSideRail group={group} isMember={isMember} hideAbout />
-            </div>
-          </TabsContent>
-        </div>
-      </Tabs>
+            </TabsContent>
+            <TabsContent value="members" className="mx-auto w-full">
+              {canSeePosts || group.privacy === "CLOSED" ? (
+                <GroupMembers group={group} />
+              ) : (
+                locked
+              )}
+            </TabsContent>
+            <TabsContent
+              value="about"
+              className="mx-auto flex w-full flex-col gap-3"
+            >
+              <GroupAbout group={group} />
+              {/* phones have no side column: its members and shortcuts live here */}
+              <div className="lg:hidden">
+                <GroupSideRail group={group} isMember={isMember} hideAbout />
+              </div>
+            </TabsContent>
+          </div>
+        </Tabs>
+      </PageScrollContext>
     </ScrollArea>
   )
 }

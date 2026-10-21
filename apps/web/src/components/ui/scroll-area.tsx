@@ -1,6 +1,6 @@
-import * as React from "react"
-import { cn } from "cn"
-import { ScrollArea as ScrollAreaPrimitive } from "radix-ui"
+import * as React from "react";
+import { cn } from "cn";
+import { ScrollArea as ScrollAreaPrimitive } from "radix-ui";
 
 function ScrollArea({
   className,
@@ -10,9 +10,9 @@ function ScrollArea({
   viewportClassName,
   ...props
 }: React.ComponentProps<typeof ScrollAreaPrimitive.Root> & {
-  orientation?: "vertical" | "horizontal" | "both"
-  viewportRef?: React.Ref<HTMLDivElement>
-  viewportClassName?: string
+  orientation?: "vertical" | "horizontal" | "both";
+  viewportRef?: React.Ref<HTMLDivElement>;
+  viewportClassName?: string;
 }) {
   return (
     <ScrollAreaPrimitive.Root
@@ -28,7 +28,7 @@ function ScrollArea({
           // Radix wraps content in a `display: table` div that grows to its
           // content's width, which breaks `truncate` in vertical-only lists.
           orientation === "vertical" && "[&>div]:block!",
-          viewportClassName
+          viewportClassName,
         )}
       >
         {children}
@@ -37,7 +37,7 @@ function ScrollArea({
       {orientation !== "vertical" && <ScrollBar orientation="horizontal" />}
       <ScrollAreaPrimitive.Corner />
     </ScrollAreaPrimitive.Root>
-  )
+  );
 }
 
 function ScrollBar({
@@ -51,8 +51,8 @@ function ScrollBar({
       data-orientation={orientation}
       orientation={orientation}
       className={cn(
-        "flex touch-none p-px transition-colors select-none data-horizontal:h-2.5 data-horizontal:flex-col data-horizontal:border-t data-horizontal:border-t-transparent data-vertical:h-full data-vertical:w-2.5 data-vertical:border-l data-vertical:border-l-transparent",
-        className
+        "z-100 flex touch-none p-px transition-colors select-none data-horizontal:h-2.5 data-horizontal:flex-col data-horizontal:border-t data-horizontal:border-t-transparent data-vertical:h-full data-vertical:w-2.5 data-vertical:border-l data-vertical:border-l-transparent",
+        className,
       )}
       {...props}
     >
@@ -61,7 +61,7 @@ function ScrollBar({
         className="relative flex-1 rounded-full bg-border"
       />
     </ScrollAreaPrimitive.ScrollAreaScrollbar>
-  )
+  );
 }
 
-export { ScrollArea, ScrollBar }
+export { ScrollArea, ScrollBar };
