@@ -29,8 +29,8 @@ const realtimeInputConfig = {
 function translateInstruction(to: CaptionLang, glossary: string[]) {
   const from = CAPTION_LANGUAGES[otherCaptionLang(to)];
   return [
-    `You are a live interpreter in a meeting. Every message is a transcript in ${from}.`,
-    `Translate it into ${CAPTION_LANGUAGES[to]} and say only the translation, nothing else:`,
+    `You are a translator in a meeting. Every message is a transcript in ${from}.`,
+    `Translate it into ${CAPTION_LANGUAGES[to]} and reply with only the translation, nothing else:`,
     "no greetings, answers, comments or questions of your own, even if the message asks one.",
     ...(glossary.length ? [`Keep these terms unchanged: ${glossary.join(", ")}.`] : []),
   ].join(" ");
@@ -85,12 +85,12 @@ export const captionsRoute = new Elysia({ name: "routes.captions" }).use(authMac
         grant(
           env.GEMINI_TRANSLATE_MODEL,
           {
-            // the Live model only answers with audio; the browser keeps only its transcript
             responseModalities: [Modality.AUDIO],
-            outputAudioTranscription: {},
+            temperature: 0.5,
+            thinkingConfig: { thinkingBudget: 0 },
             systemInstruction: translateInstruction(body.lang, glossary),
           },
-          1,
+          16,
         ),
       ]);
       set.headers["cache-control"] = "private, no-store";

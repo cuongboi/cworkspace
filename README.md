@@ -14,22 +14,22 @@ Under the hood it is a full-stack TypeScript monorepo: a **React SPA** (`apps/we
 
 ## Tech stack
 
-| Area | Technology |
-| --- | --- |
-| Monorepo | [Turborepo](https://turborepo.dev), Bun workspaces (`apps/*`, `packages/*`) |
-| Runtime / package manager | [Bun](https://bun.sh) 1.4.x, Node ≥ 24 |
-| API framework | [Elysia](https://elysiajs.com) + `@elysia/cors`, `@elysia/openapi` (Scalar UI), `@elysia/static` |
-| Database / ORM | PostgreSQL (`pg`) + [ZenStack v3](https://zenstack.dev) (`@zenstackhq/orm`, access-policy plugin) |
-| Auth | [better-auth](https://better-auth.com) — email/password, JWT, bearer, admin plugins, ZenStack adapter |
-| Realtime | Bun WebSocket via Elysia (`/ws`, authenticated, typed JSON protocol in `@app/shared`) |
-| Access control | better-auth `admin` plugin (`User.role`), `User.permissions` RBAC, ZenStack policies |
-| Files / email / calls | S3-compatible bucket (AWS S3, R2, MiniStack), Resend, WebRTC + coturn |
-| Web framework | React 19, Vite 8, TypeScript |
-| Routing / URL state | React Router 7, [nuqs](https://nuqs.dev) |
-| Data fetching | TanStack Query over a typed ORM proxy (`db.<model>.<op>()`) |
-| UI | Tailwind CSS 4, [shadcn/ui](https://ui.shadcn.com) (Radix), lucide-react, Geist font (zinc theme from `design.html`) |
-| Lint / format | API: `oxlint` + `oxfmt` · Web: ESLint + Prettier (with Tailwind plugin) |
-| Env loading | `dotenv-cli` — every app reads the root `.env` |
+| Area                      | Technology                                                                                                           |
+| ------------------------- | -------------------------------------------------------------------------------------------------------------------- |
+| Monorepo                  | [Turborepo](https://turborepo.dev), Bun workspaces (`apps/*`, `packages/*`)                                          |
+| Runtime / package manager | [Bun](https://bun.sh) 1.4.x, Node ≥ 24                                                                               |
+| API framework             | [Elysia](https://elysiajs.com) + `@elysia/cors`, `@elysia/openapi` (Scalar UI), `@elysia/static`                     |
+| Database / ORM            | PostgreSQL (`pg`) + [ZenStack v3](https://zenstack.dev) (`@zenstackhq/orm`, access-policy plugin)                    |
+| Auth                      | [better-auth](https://better-auth.com) — email/password, JWT, bearer, admin plugins, ZenStack adapter                |
+| Realtime                  | Bun WebSocket via Elysia (`/ws`, authenticated, typed JSON protocol in `@app/shared`)                                |
+| Access control            | better-auth `admin` plugin (`User.role`), `User.permissions` RBAC, ZenStack policies                                 |
+| Files / email / calls     | S3-compatible bucket (AWS S3, R2, MiniStack), Resend, WebRTC + coturn                                                |
+| Web framework             | React 19, Vite 8, TypeScript                                                                                         |
+| Routing / URL state       | React Router 7, [nuqs](https://nuqs.dev)                                                                             |
+| Data fetching             | TanStack Query over a typed ORM proxy (`db.<model>.<op>()`)                                                          |
+| UI                        | Tailwind CSS 4, [shadcn/ui](https://ui.shadcn.com) (Radix), lucide-react, Geist font (zinc theme from `design.html`) |
+| Lint / format             | API: `oxlint` + `oxfmt` · Web: ESLint + Prettier (with Tailwind plugin)                                              |
+| Env loading               | `dotenv-cli` — every app reads the root `.env`                                                                       |
 
 ## Project structure
 
@@ -87,65 +87,65 @@ Open http://localhost:5173, and sign up: the first account becomes the instance 
 
 ### Environment variables (root `.env`)
 
-| Variable | Required | Default | Purpose |
-| --- | --- | --- | --- |
-| `DATABASE_URL` | yes | — | PostgreSQL connection string |
-| `BETTER_AUTH_SECRET` | yes | — | Secret for signing sessions/tokens (use a long random string) |
-| `BETTER_AUTH_URL` | no | `http://localhost:3000` | Public base URL of the API |
-| `BETTER_AUTH_BASE_PATH` | no | `/api/auth` | Mount path for auth routes |
-| `WEB_ORIGIN` | no | `http://localhost:5173` | Allowed CORS / trusted origins (comma-separated) |
-| `APP_URL` | no | first `WEB_ORIGIN` | Public web URL used in emailed links |
-| `RESEND_API_KEY` / `MAIL_FROM` | no | — | Email delivery (invitations, password reset); printed to the console when unset |
-| `S3_ENDPOINT` / `S3_REGION` / `S3_BUCKET` / `S3_ACCESS_KEY_ID` / `S3_SECRET_ACCESS_KEY` | for uploads | — | Private S3-compatible bucket for attachments, avatars and covers |
-| `STUN_URLS` / `TURN_URLS` / `TURN_SECRET` | for calls across NATs | Google STUN | WebRTC ICE servers; TURN credentials are issued per user and expire |
-| `VITE_BETTER_AUTH_URL` | no | — | Auth URL exposed to the web app |
-| `DB_LOG_QUERIES` | no | `false` | Set `true` to log SQL queries |
+| Variable                                                                                | Required              | Default                 | Purpose                                                                         |
+| --------------------------------------------------------------------------------------- | --------------------- | ----------------------- | ------------------------------------------------------------------------------- |
+| `DATABASE_URL`                                                                          | yes                   | —                       | PostgreSQL connection string                                                    |
+| `BETTER_AUTH_SECRET`                                                                    | yes                   | —                       | Secret for signing sessions/tokens (use a long random string)                   |
+| `BETTER_AUTH_URL`                                                                       | no                    | `http://localhost:3000` | Public base URL of the API                                                      |
+| `BETTER_AUTH_BASE_PATH`                                                                 | no                    | `/api/auth`             | Mount path for auth routes                                                      |
+| `WEB_ORIGIN`                                                                            | no                    | `http://localhost:5173` | Allowed CORS / trusted origins (comma-separated)                                |
+| `APP_URL`                                                                               | no                    | first `WEB_ORIGIN`      | Public web URL used in emailed links                                            |
+| `RESEND_API_KEY` / `MAIL_FROM`                                                          | no                    | —                       | Email delivery (invitations, password reset); printed to the console when unset |
+| `S3_ENDPOINT` / `S3_REGION` / `S3_BUCKET` / `S3_ACCESS_KEY_ID` / `S3_SECRET_ACCESS_KEY` | for uploads           | —                       | Private S3-compatible bucket for attachments, avatars and covers                |
+| `STUN_URLS` / `TURN_URLS` / `TURN_SECRET`                                               | for calls across NATs | Google STUN             | WebRTC ICE servers; TURN credentials are issued per user and expire             |
+| `VITE_BETTER_AUTH_URL`                                                                  | no                    | —                       | Auth URL exposed to the web app                                                 |
+| `DB_LOG_QUERIES`                                                                        | no                    | `false`                 | Set `true` to log SQL queries                                                   |
 
 ## Scripts
 
 Root (runs across all apps through Turborepo):
 
-| Command | Description |
-| --- | --- |
-| `bun run dev` | Run all apps in watch mode |
-| `bun run build` | Build all apps |
-| `bun run lint` | Lint all apps |
-| `bun run check-types` | Type-check all apps |
-| `bun run format` | Format with Prettier |
+| Command               | Description                |
+| --------------------- | -------------------------- |
+| `bun run dev`         | Run all apps in watch mode |
+| `bun run build`       | Build all apps             |
+| `bun run lint`        | Lint all apps              |
+| `bun run check-types` | Type-check all apps        |
+| `bun run format`      | Format with Prettier       |
 
 `apps/api`:
 
-| Command | Description |
-| --- | --- |
-| `bun run dev` | Start the API with `--watch` |
-| `bun run db:generate` | Regenerate ZenStack TS files from `schema.zmodel` |
-| `bun run db:push` | Push the schema to the database |
-| `bun run test` | `bun test`: access policies (against the real DB), `/api/execute` contract |
-| `bun run build` | Compile a standalone `server` binary (embeds `src/public`) |
-| `bun run lint` / `lint:fix` / `format` | oxlint / oxfmt |
+| Command                                | Description                                                                |
+| -------------------------------------- | -------------------------------------------------------------------------- |
+| `bun run dev`                          | Start the API with `--watch`                                               |
+| `bun run db:generate`                  | Regenerate ZenStack TS files from `schema.zmodel`                          |
+| `bun run db:push`                      | Push the schema to the database                                            |
+| `bun run test`                         | `bun test`: access policies (against the real DB), `/api/execute` contract |
+| `bun run build`                        | Compile a standalone `server` binary (embeds `src/public`)                 |
+| `bun run lint` / `lint:fix` / `format` | oxlint / oxfmt                                                             |
 
 `apps/web`:
 
-| Command | Description |
-| --- | --- |
-| `bun run dev` | Vite dev server |
-| `bun run build` | Type-check, build, and copy `dist/` into `apps/api/src/public` |
-| `bun run lint` / `format` / `typecheck` | ESLint / Prettier / `tsc --noEmit` |
+| Command                                 | Description                                                    |
+| --------------------------------------- | -------------------------------------------------------------- |
+| `bun run dev`                           | Vite dev server                                                |
+| `bun run build`                         | Type-check, build, and copy `dist/` into `apps/api/src/public` |
+| `bun run lint` / `format` / `typecheck` | ESLint / Prettier / `tsc --noEmit`                             |
 
 ## API overview
 
-| Endpoint | Description |
-| --- | --- |
-| `GET /health` | Liveness check |
-| `GET\|POST /api/auth/*` | better-auth routes (sign-in, sign-up, session, password reset, admin, JWKS…) |
-| `POST /api/execute` | Run an allowlisted ORM operation `{ model, operator, args }` under the caller's access policies (auth required, 300/min) |
-| `POST /api/uploads` | Create an attachment and a presigned upload to the bucket |
-| `GET /api/files/:id` | Access-checked redirect to a short-lived download URL |
-| `POST /api/conversations/direct` | Find or create the 1:1 conversation with a colleague |
-| `GET /api/rtc/ice` | STUN/TURN servers with temporary TURN credentials |
-| `WS /ws` | Authenticated realtime channel: live updates, presence, typing, call signaling (see `packages/shared/src/realtime-events.ts`) |
-| `GET /openapi` | Interactive API docs (Scalar), including auth routes |
-| `GET /*` | Serves the built SPA from `src/public` (unknown `/api/*` paths return a JSON 404) |
+| Endpoint                         | Description                                                                                                                   |
+| -------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| `GET /health`                    | Liveness check                                                                                                                |
+| `GET\|POST /api/auth/*`          | better-auth routes (sign-in, sign-up, session, password reset, admin, JWKS…)                                                  |
+| `POST /api/execute`              | Run an allowlisted ORM operation `{ model, operator, args }` under the caller's access policies (auth required, 300/min)      |
+| `POST /api/uploads`              | Create an attachment and a presigned upload to the bucket                                                                     |
+| `GET /api/files/:id`             | Access-checked redirect to a short-lived download URL                                                                         |
+| `POST /api/conversations/direct` | Find or create the 1:1 conversation with a colleague                                                                          |
+| `GET /api/rtc/ice`               | STUN/TURN servers with temporary TURN credentials                                                                             |
+| `WS /ws`                         | Authenticated realtime channel: live updates, presence, typing, call signaling (see `packages/shared/src/realtime-events.ts`) |
+| `GET /openapi`                   | Interactive API docs (Scalar), including auth routes                                                                          |
+| `GET /*`                         | Serves the built SPA from `src/public` (unknown `/api/*` paths return a JSON 404)                                             |
 
 All JSON responses use one envelope: success → `{ "data": ... }`, failure → `{ "error": { "message", "code", "details?" } }` with codes such as `UNAUTHORIZED`, `FORBIDDEN`, `INVALID_INPUT`, `NOT_FOUND`, `CONFLICT`, `INVALID_STATE`, `INTERNAL`.
 
@@ -159,18 +159,20 @@ All JSON responses use one envelope: success → `{ "data": ... }`, failure → 
   - `authDb.$setAuth(user)` — policy-enforced; this is what `userDb` in route handlers is. Use it for anything driven by user input.
   - `db` — bypasses policies. Only for trusted server code (auth adapter, background jobs, seeding). Never expose it to `/api/execute`.
 
-- Use RBAC permission for table like: 
-``` 
+- Use RBAC permission for table like:
+
+```
   permission = [
       {model: "User", actions: ["create", "update", "delete"]}
   ]
 ```
 
-RBAC with condition for model like: 
-```
+RBAC with condition for model like:
+
+````
 model ExampleModel {
     id ...
-    ... 
+    ...
     @@allow('all', auth().permissions?[model == currentModel() && currentOperation() in actions])
     ...
 }
@@ -209,15 +211,15 @@ model ExampleModel {
 bun --cwd apps/web run build   # builds the SPA into apps/api/src/public
 bun --cwd apps/api run build   # compiles apps/api/server (single binary)
 ./apps/api/server --host 0.0.0.0 --port 3000
-```
+````
 
 The binary serves the API, auth, WebSocket, and the SPA from one origin. It still needs the environment variables above at runtime.
 
-## Development flow 
+## Development flow
 
 - Checking database: read @apps/api/zenstack/schema.zmodel to understand the database schema.
 - Updating or creating a table then run `bun --cwd apps/api run db:push` to update/create the table in the database.
 - Write/update websocket communication related tasks: write/update code in `./apps/api/src/websocket/*`.
 - Write/update component related tasks: write/update code in `./apps/web/src/components/*`.
 - Write/update route related tasks: write/update code in `./apps/web/src/routes/*`.
-
+- When planning, please create mermaid diagram to describe the architecture.
