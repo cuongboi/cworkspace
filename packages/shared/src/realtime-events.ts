@@ -142,43 +142,31 @@ export type CallPeer = {
 /** WebRTC signaling payload relayed verbatim between two sockets of the same call. */
 export type RtcSignal =
   | {
-    description: {
-      type: "offer" | "answer" | "pranswer" | "rollback";
-      sdp?: string;
-    };
-  }
+      description: {
+        type: "offer" | "answer" | "pranswer" | "rollback";
+        sdp?: string;
+      };
+    }
   | {
-    candidate: {
-      candidate?: string;
-      sdpMid?: string | null;
-      sdpMLineIndex?: number | null;
-    } | null;
-  };
+      candidate: {
+        candidate?: string;
+        sdpMid?: string | null;
+        sdpMLineIndex?: number | null;
+      } | null;
+    };
 
 /** Server → client */
 export interface ServerToClientEvents {
   // feed
-  "post:changed": (p: {
-    groupId: string;
-    postId: string;
-    action: MutationAction;
-  }) => void;
+  "post:changed": (p: { groupId: string; postId: string; action: MutationAction }) => void;
   "comment:changed": (p: {
     groupId: string;
     postId: string;
     commentId: string;
     action: MutationAction;
   }) => void;
-  "reaction:changed": (p: {
-    groupId: string;
-    postId: string;
-    commentId: string | null;
-  }) => void;
-  "poll:changed": (p: {
-    groupId: string;
-    postId: string;
-    pollId: string;
-  }) => void;
+  "reaction:changed": (p: { groupId: string; postId: string; commentId: string | null }) => void;
+  "poll:changed": (p: { groupId: string; postId: string; pollId: string }) => void;
   "group:changed": (p: { groupId: string }) => void;
   /** a channel of the group was created, renamed, moved or deleted */
   "channel:changed": (p: { groupId: string }) => void;
@@ -188,11 +176,7 @@ export interface ServerToClientEvents {
   "message:new": (p: ChatMessagePayload) => void;
   "message:changed": (p: { conversationId: string; messageId: string }) => void;
   "conversation:changed": (p: { conversationId: string }) => void;
-  "conversation:read": (p: {
-    conversationId: string;
-    userId: string;
-    lastReadAt: Date;
-  }) => void;
+  "conversation:read": (p: { conversationId: string; userId: string; lastReadAt: Date }) => void;
   typing: (p: { conversationId: string; user: UserSummary }) => void;
   // presence
   "presence:snapshot": (p: { online: string[] }) => void;
@@ -201,22 +185,10 @@ export interface ServerToClientEvents {
   "notification:new": (p: NotificationPayload) => void;
   "event:changed": (p: { eventId: string }) => void;
   // calls
-  "call:incoming": (p: {
-    call: CallSummary;
-    from: UserSummary;
-    title: string;
-  }) => void;
+  "call:incoming": (p: { call: CallSummary; from: UserSummary; title: string }) => void;
   "call:peer-joined": (p: CallPeer & { callId: string }) => void;
-  "call:peer-left": (p: {
-    callId: string;
-    socketId: string;
-    userId: string;
-  }) => void;
-  "call:peer-media": (p: {
-    callId: string;
-    socketId: string;
-    media: MediaState;
-  }) => void;
+  "call:peer-left": (p: { callId: string; socketId: string; userId: string }) => void;
+  "call:peer-media": (p: { callId: string; socketId: string; media: MediaState }) => void;
   /** the user answered on another tab/device: stop ringing there */
   "call:answered": (p: { callId: string }) => void;
   "call:declined": (p: { callId: string; user: UserSummary }) => void;
@@ -238,9 +210,7 @@ export interface ServerToClientEvents {
   "rtc:signal": (p: { callId: string; from: string; data: RtcSignal }) => void;
 }
 
-export type Ack<T> = (
-  res: { ok: true; data: T } | { ok: false; error: string },
-) => void;
+export type Ack<T> = (res: { ok: true; data: T } | { ok: false; error: string }) => void;
 
 /** Client → server */
 export interface ClientToServerEvents {

@@ -9,6 +9,7 @@ import { type ClipboardEvent, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { toast } from "sonner"
 import { AttachmentList } from "@/components/common/attachment-list"
+import { LinkPreviews } from "@/components/common/link-previews"
 import { MentionTextarea } from "@/components/common/mention-textarea"
 import { RichText } from "@/components/common/rich-text"
 import { TimeAgo } from "@/components/common/time-ago"
@@ -237,6 +238,13 @@ function CommentItem({
               </Link>
               {comment.content ? (
                 <RichText text={comment.content} className="text-sm" />
+              ) : null}
+              {comment.content ? (
+                <LinkPreviews
+                  text={comment.content}
+                  max={1}
+                  className="mt-1.5"
+                />
               ) : null}
               {reactions.length > 0 ? (
                 <ReactionSummary

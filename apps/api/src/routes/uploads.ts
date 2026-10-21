@@ -5,8 +5,9 @@ import { rateLimit } from "@/server/rate-limit";
 import { MAX_UPLOAD_BYTES, presignUpload, storageConfigured } from "@/server/storage";
 import { authMacro } from "../plugins/auth";
 
-// executable/markup types are never stored: they could be served back from our origin
-const BLOCKED =
+// executable/markup types are stored as plain text: served back with their real type they
+// could run script on the bucket/our origin; as text/plain the browser only shows the source
+const UNSAFE =
   /^(text\/html|application\/(x-)?(javascript|ecmascript)|image\/svg\+xml|application\/xhtml\+xml)$/i;
 
 /**
@@ -19,7 +20,7 @@ export const uploadsRoute = new Elysia({ name: "routes.uploads" }).use(authMacro
   async ({ body, user, userDb, set }) => {
     if (!storageConfigured) throw upstreamError("File storage is not configured");
     if (!rateLimit(`upload:${user.id}`, 30, 60_000)) throw tooManyRequests("Too many uploads");
-    if (BLOCKED.test(body.mimeType)) throw badRequest("This file type is not allowed");
+    if (UNSAFE.test(body.mimeType)) body.mimeType = "text/plain";
     if (body.isPublic && !body.mimeType.startsWith("image/"))
       throw badRequest("Only images can be shared publicly");
 

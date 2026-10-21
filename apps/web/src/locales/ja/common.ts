@@ -28,4 +28,26 @@ export const common: DeepStrings<typeof en> = {
   you: "あなた",
   justNow: "たった今",
   noResults: "結果がありません",
+  documentViewer: {
+    view: "表示",
+    description: "ドキュメントのプレビュー",
+    openInNewTab: "新しいタブで開く",
+    download: "ダウンロード",
+    tooLarge: "このファイルは大きすぎてプレビューできません。",
+    loadFailed: "ドキュメントを読み込めませんでした。",
+    empty: "このファイルは空です。",
+    rowsTruncated: "{{total}} 行中、最初の {{shown}} 行を表示しています。",
+  },
+  linkPreview: {
+    play: "動画を再生",
+    openImage: "画像を開く",
+  },
+  media: {
+    more: "その他のオプション",
+    back: "{{count}}秒戻る",
+    forward: "{{count}}秒進む",
+    speed: "再生速度",
+    pip: "ピクチャーインピクチャー",
+    download: "ダウンロード",
+  },
 }

@@ -69,10 +69,7 @@ export function notificationText(n: NotificationLinkable): string {
 }
 
 /** Where a notification leads. `groupSlug` is needed for group notifications. */
-export function notificationHref(
-  n: NotificationLinkable,
-  groupSlug = n.group?.slug,
-): string {
+export function notificationHref(n: NotificationLinkable, groupSlug = n.group?.slug): string {
   switch (n.type) {
     case "GROUP_JOIN_REQUEST":
       return groupSlug ? `/groups/${groupSlug}?tab=members` : "/groups";
@@ -82,7 +79,9 @@ export function notificationHref(
     case "EVENT_REMINDER":
       return n.eventId ? `/calendar?event=${n.eventId}` : "/calendar";
     case "THREAD_REPLY":
-      return n.conversationId ? threadHref(n.conversationId, dataField(n.data, "threadId")) : "/chat";
+      return n.conversationId
+        ? threadHref(n.conversationId, dataField(n.data, "threadId"))
+        : "/chat";
     case "MENTION":
     case "MISSED_CALL":
       if (n.conversationId && n.type === "MENTION") {

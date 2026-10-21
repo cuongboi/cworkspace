@@ -28,4 +28,26 @@ export const common: DeepStrings<typeof en> = {
   you: "Bạn",
   justNow: "vừa xong",
   noResults: "Không có kết quả",
+  documentViewer: {
+    view: "Xem",
+    description: "Xem trước tài liệu",
+    openInNewTab: "Mở trong tab mới",
+    download: "Tải xuống",
+    tooLarge: "Tệp quá lớn để xem trước.",
+    loadFailed: "Không thể tải tài liệu này.",
+    empty: "Tệp này trống.",
+    rowsTruncated: "Đang hiển thị {{shown}} / {{total}} dòng đầu tiên.",
+  },
+  linkPreview: {
+    play: "Phát video",
+    openImage: "Mở ảnh",
+  },
+  media: {
+    more: "Tùy chọn khác",
+    back: "Lùi {{count}} giây",
+    forward: "Tới {{count}} giây",
+    speed: "Tốc độ",
+    pip: "Hình trong hình",
+    download: "Tải xuống",
+  },
 }

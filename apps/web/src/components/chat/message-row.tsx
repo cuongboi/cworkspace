@@ -18,6 +18,7 @@ import { useTranslation } from "react-i18next"
 import { toast } from "sonner"
 import { useCalls } from "@/components/call/call-provider"
 import { AttachmentList } from "@/components/common/attachment-list"
+import { LinkPreviews } from "@/components/common/link-previews"
 import { RichText } from "@/components/common/rich-text"
 import { UserAvatar } from "@/components/common/user-avatar"
 import { Button } from "@/components/ui/button"
@@ -41,6 +42,7 @@ import {
 } from "@/components/ui/tooltip"
 import { useApp } from "@/hooks/use-app"
 import { useDateLocale } from "@/lib/i18n"
+import { isBareMediaUrl } from "@/lib/link-preview"
 import { toPlainText } from "@/lib/mentions"
 import type { ReactionType } from "@app/api/zenstack/models"
 import {
@@ -269,7 +271,7 @@ function TextMessage({
           </button>
         ) : null}
 
-        {hasText || deleted ? (
+        {(hasText && !isBareMediaUrl(message.content)) || deleted ? (
           <div
             className={cn(
               "max-w-3xl text-xs leading-relaxed break-words text-foreground/80",
@@ -282,6 +284,10 @@ function TextMessage({
               <RichText text={message.content} />
             )}
           </div>
+        ) : null}
+
+        {!deleted && hasText && message.attachments.length === 0 ? (
+          <LinkPreviews text={message.content} className="w-full max-w-md" />
         ) : null}
 
         {!deleted && message.attachments.length > 0 ? (

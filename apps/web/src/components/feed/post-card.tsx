@@ -15,6 +15,7 @@ import { useState } from "react"
 import { useTranslation } from "react-i18next"
 import { toast } from "sonner"
 import { AttachmentList } from "@/components/common/attachment-list"
+import { LinkPreviews } from "@/components/common/link-previews"
 import { MentionTextarea } from "@/components/common/mention-textarea"
 import { RichText } from "@/components/common/rich-text"
 import { TimeAgo } from "@/components/common/time-ago"
@@ -308,6 +309,9 @@ export function PostCard({
                 </button>
               ) : null}
             </div>
+          ) : null}
+          {!editing && post.content && post.attachments.length === 0 ? (
+            <LinkPreviews text={post.content} />
           ) : null}
           <AttachmentList attachments={post.attachments} />
           {post.poll ? <PollWidget poll={post.poll} /> : null}

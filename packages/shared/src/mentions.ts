@@ -13,9 +13,7 @@ export function formatMention(name: string, userId: string) {
 }
 
 export function extractMentionIds(text: string): string[] {
-  return [
-    ...new Set([...text.matchAll(MENTION_RE)].map((m) => m[2] as string)),
-  ];
+  return [...new Set([...text.matchAll(MENTION_RE)].map((m) => m[2] as string))];
 }
 
 export type TextSegment =
@@ -31,13 +29,11 @@ export function parseText(text: string): TextSegment[] {
   const pushText = (chunk: string) => {
     let last = 0;
     for (const m of chunk.matchAll(URL_RE)) {
-      if (m.index > last)
-        segments.push({ kind: "text", text: chunk.slice(last, m.index) });
+      if (m.index > last) segments.push({ kind: "text", text: chunk.slice(last, m.index) });
       segments.push({ kind: "link", url: m[0] });
       last = m.index + m[0].length;
     }
-    if (last < chunk.length)
-      segments.push({ kind: "text", text: chunk.slice(last) });
+    if (last < chunk.length) segments.push({ kind: "text", text: chunk.slice(last) });
   };
   let last = 0;
   for (const m of text.matchAll(MENTION_RE)) {

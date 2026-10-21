@@ -2,6 +2,8 @@
 # Ubuntu server setup: installs Docker + Caddy, writes .env, starts the docker-compose stack,
 # then runs Caddy (TLS reverse proxy) and the API binary.
 #   ./setup.sh <domain>        # safe to re-run: secrets and running containers are kept
+# Re-exec under bash when started as `sh setup.sh` (dash has no arrays or [[ ]]).
+if [ -z "${BASH_VERSION:-}" ]; then exec bash "$0" "$@"; fi
 set -euo pipefail
 
 DOMAIN="${1:-}"
@@ -48,9 +50,25 @@ APT_PACKAGES=()
 command -v caddy >/dev/null 2>&1 || APT_PACKAGES+=(caddy)
 command -v openssl >/dev/null 2>&1 || APT_PACKAGES+=(openssl)
 command -v curl >/dev/null 2>&1 || APT_PACKAGES+=(curl)
+command -v unzip >/dev/null 2>&1 || APT_PACKAGES+=(unzip)
 if [ "${#APT_PACKAGES[@]}" -gt 0 ]; then
   log "Installing: ${APT_PACKAGES[*]}"
   apt_install "${APT_PACKAGES[@]}"
+fi
+
+# --- Bun (the installer needs unzip) ---
+export BUN_INSTALL="${BUN_INSTALL:-$HOME/.bun}"
+export PATH="$BUN_INSTALL/bin:$PATH"
+if ! command -v bun >/dev/null 2>&1; then
+  log "Installing Bun"
+  curl -fsSL https://bun.sh/install | bash
+fi
+log "Bun: $(bun --version)"
+
+# --- Server binary: build it from source when no release binary is present ---
+if [ ! -x "$SERVER" ]; then
+  log "$SERVER not found; building from source"
+  (cd "$ROOT_DIR" && bun install && bun run build)
 fi
 
 # --- Docker Engine (https://docs.docker.com/engine/install/ubuntu/) ---
@@ -222,6 +240,10 @@ for _ in $(seq 1 60); do
   sleep 1
 done
 (exec 3<>"/dev/tcp/127.0.0.1/$RDS_PORT") 2>/dev/null || die "PostgreSQL did not come up on port $RDS_PORT"
+
+# DATABASE_URL in .env is final now; bring the schema up to date.
+log "Updating the database schema"
+(cd "$ROOT_DIR" && bun run --filter @app/api db:push)
 
 # ============================================================
 # 4. Caddy + server

@@ -1,5 +1,6 @@
 import { cn } from "cn"
 import { Link } from "react-router-dom"
+import { shortUrl } from "@/lib/link-preview"
 import { EVERYONE_ID, parseText } from "@/lib/mentions"
 
 /** Renders user text: preserves line breaks, links URLs and `@[Name](userId)` mentions. */
@@ -37,11 +38,12 @@ export function RichText({
             <a
               key={key}
               href={seg.url}
+              title={seg.url}
               target="_blank"
               rel="noopener noreferrer nofollow"
               className="text-primary underline-offset-2 hover:underline"
             >
-              {seg.url}
+              {shortUrl(seg.url)}
             </a>
           )
         }

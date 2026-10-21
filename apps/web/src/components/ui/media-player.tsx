@@ -37,7 +37,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { Loader2Icon, AlertTriangleIcon, RefreshCcwIcon, RotateCcwIcon, VolumeXIcon, Volume2Icon, Volume1Icon, PlayIcon, PauseIcon, RewindIcon, FastForwardIcon, CheckIcon, RepeatIcon, Minimize2Icon, Maximize2Icon, PictureInPicture2Icon, PictureInPictureIcon, SubtitlesIcon, CaptionsOffIcon, DownloadIcon, SettingsIcon } from "lucide-react";
+import { EllipsisIcon, Loader2Icon, AlertTriangleIcon, RefreshCcwIcon, RotateCcwIcon, VolumeXIcon, Volume2Icon, Volume1Icon, PlayIcon, PauseIcon, RewindIcon, FastForwardIcon, CheckIcon, RepeatIcon, Minimize2Icon, Maximize2Icon, PictureInPicture2Icon, PictureInPictureIcon, SubtitlesIcon, CaptionsOffIcon, DownloadIcon, SettingsIcon } from "lucide-react";
 
 const ROOT_NAME = "MediaPlayer";
 const SEEK_NAME = "MediaPlayerSeek";
@@ -3108,6 +3108,171 @@ function MediaPlayerTooltip(props: MediaPlayerTooltipProps) {
   );
 }
 
+const OVERFLOW_NAME = "MediaPlayerOverflow";
+
+interface MediaPlayerOverflowLabels {
+  more: string;
+  back: string;
+  forward: string;
+  speed: string;
+  pip: string;
+  download: string;
+}
+
+interface MediaPlayerOverflowProps
+  extends Omit<React.ComponentProps<typeof Button>, "children"> {
+  /** Seconds per seek step. */
+  seconds?: number;
+  speeds?: number[];
+  /** Which items to offer: put here what the narrow layout hides. */
+  items?: Array<"seek" | "speed" | "pip" | "download">;
+  labels?: Partial<MediaPlayerOverflowLabels>;
+}
+
+/**
+ * "⋯" menu with the secondary controls, for players too narrow to show them inline (pair with a
+ * container query that hides the inline buttons). Portalled into the player so it keeps working
+ * in fullscreen, and holds the controls open while it's open.
+ */
+function MediaPlayerOverflow(props: MediaPlayerOverflowProps) {
+  const {
+    seconds = SEEK_STEP_LONG,
+    speeds = SPEEDS,
+    items = ["seek", "speed", "pip", "download"],
+    labels: labelsProp,
+    className,
+    disabled,
+    ...buttonProps
+  } = props;
+  const labels: MediaPlayerOverflowLabels = {
+    more: "More",
+    back: `Back ${seconds}s`,
+    forward: `Forward ${seconds}s`,
+    speed: "Speed",
+    pip: "Picture in picture",
+    download: "Download",
+    ...labelsProp,
+  };
+
+  const context = useMediaPlayerContext(OVERFLOW_NAME);
+  const store = useStoreContext(OVERFLOW_NAME);
+  const dispatch = useMediaDispatch();
+  const mediaCurrentTime = useMediaSelector((state) => state.mediaCurrentTime ?? 0);
+  const [, seekableEnd = 0] = useMediaSelector((state) => state.mediaSeekable ?? [0, 0]);
+  const mediaPlaybackRate = useMediaSelector((state) => state.mediaPlaybackRate ?? 1);
+  const isPictureInPicture = useMediaSelector((state) => state.mediaIsPip ?? false);
+  const isDisabled = disabled || context.disabled;
+  // Firefox has no PiP API (its own overlay button only)
+  const canPip = typeof document !== "undefined" && document.pictureInPictureEnabled === true;
+
+  const seek = (delta: number) =>
+    dispatch({
+      type: MediaActionTypes.MEDIA_SEEK_REQUEST,
+      detail: Math.min(Math.max(0, mediaCurrentTime + delta), seekableEnd || Infinity),
+    });
+
+  const togglePip = () => {
+    dispatch({
+      type: isPictureInPicture
+        ? MediaActionTypes.MEDIA_EXIT_PIP_REQUEST
+        : MediaActionTypes.MEDIA_ENTER_PIP_REQUEST,
+    });
+    const mediaElement = context.mediaRef.current;
+    if (mediaElement instanceof HTMLVideoElement) {
+      (isPictureInPicture
+        ? document.exitPictureInPicture()
+        : mediaElement.requestPictureInPicture()
+      ).catch(() => undefined);
+    }
+  };
+
+  const download = () => {
+    const src = context.mediaRef.current?.currentSrc;
+    if (!src) return;
+    const link = document.createElement("a");
+    link.href = src;
+    link.download = "";
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  return (
+    <DropdownMenu modal={false} onOpenChange={(open) => store.setState("menuOpen", open)}>
+      <DropdownMenuTrigger asChild>
+        <Button
+          type="button"
+          aria-controls={context.mediaId}
+          aria-label={labels.more}
+          disabled={isDisabled}
+          {...buttonProps}
+          variant="ghost"
+          size="icon"
+          className={cn("size-8 aria-expanded:bg-accent/50", className)}
+        >
+          <EllipsisIcon />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent
+        container={context.portalContainer}
+        sideOffset={FLOATING_MENU_SIDE_OFFSET}
+        align="end"
+        className="min-w-44 data-[side=top]:mb-3.5"
+      >
+        {items.includes("seek") ? (
+          <>
+            <DropdownMenuItem onSelect={() => seek(-seconds)}>
+              <RewindIcon />
+              {labels.back}
+            </DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => seek(seconds)}>
+              <FastForwardIcon />
+              {labels.forward}
+            </DropdownMenuItem>
+          </>
+        ) : null}
+        {items.includes("speed") ? (
+          <DropdownMenuSub>
+            <DropdownMenuSubTrigger>
+              <SettingsIcon />
+              <span className="flex-1">{labels.speed}</span>
+              <Badge variant="outline" className="rounded-sm">
+                {mediaPlaybackRate}x
+              </Badge>
+            </DropdownMenuSubTrigger>
+            <DropdownMenuSubContent>
+              {speeds.map((speed) => (
+                <DropdownMenuItem
+                  key={speed}
+                  className="justify-between"
+                  onSelect={() =>
+                    dispatch({ type: MediaActionTypes.MEDIA_PLAYBACK_RATE_REQUEST, detail: speed })
+                  }
+                >
+                  {speed}x
+                  {mediaPlaybackRate === speed ? <CheckIcon /> : null}
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuSubContent>
+          </DropdownMenuSub>
+        ) : null}
+        {items.includes("pip") && canPip ? (
+          <DropdownMenuItem onSelect={togglePip}>
+            {isPictureInPicture ? <PictureInPictureIcon /> : <PictureInPicture2Icon />}
+            {labels.pip}
+          </DropdownMenuItem>
+        ) : null}
+        {items.includes("download") ? (
+          <DropdownMenuItem onSelect={download}>
+            <DownloadIcon />
+            {labels.download}
+          </DropdownMenuItem>
+        ) : null}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
 export {
   MediaPlayer,
   MediaPlayerAudio,
@@ -3119,6 +3284,7 @@ export {
   MediaPlayerFullscreen,
   MediaPlayerLoading,
   MediaPlayerLoop,
+  MediaPlayerOverflow,
   MediaPlayerPiP,
   MediaPlayerPlay,
   MediaPlayerPlaybackSpeed,

@@ -16,9 +16,11 @@ import { filesRoute } from "./routes/files";
 import { groupsRoute } from "./routes/groups";
 import { hooksRoute } from "./routes/hooks";
 import { invitationsRoute } from "./routes/invitations";
+import { linkPreviewRoute } from "./routes/link-preview";
 import { pushRoute } from "./routes/push";
 import { rtcRoute } from "./routes/rtc";
 import { uploadsRoute } from "./routes/uploads";
+import { serveIndex, serveManifest } from "./server/spa";
 import { webSocketPlugin } from "./websocket";
 
 const ASSET_PATH = path.join(import.meta.dir, "public");
@@ -67,6 +69,7 @@ export const app = new Elysia()
   .use(channelsRoute)
   .use(hooksRoute)
   .use(invitationsRoute)
+  .use(linkPreviewRoute)
   .use(rtcRoute)
   .use(callsRoute)
   .use(pushRoute)
@@ -76,22 +79,21 @@ export const app = new Elysia()
   .get("/api/*", () => {
     throw notFound();
   })
+  // generated from APP_NAME / APP_INFO, so the static file must never shadow it
+  .get("/manifest.webmanifest", serveManifest)
   // last: its `/*` wildcard would shadow every route registered after it
   .use(
     staticPlugin({
       assets: ASSET_PATH,
       prefix: "/",
       alwaysStatic: true,
+      // the raw template has no branding; `*` below serves the rendered shell
+      indexHTML: false,
+      // regexes: the plugin tests string patterns backwards (`pattern.includes(path)`), so
+      // strings, its default dotfile list included, never match
+      ignorePatterns: [/^\/(index\.html|manifest\.webmanifest)$/, /(^|\/)\.(env|git|DS_Store)/],
     }),
   )
-  .get("*", async ({ set }) => {
-    const file = Bun.file(path.join(ASSET_PATH, "index.html"));
-    const exists = await file.exists();
-
-    if (exists) {
-      set.headers["content-type"] = "text/html";
-      return file;
-    }
-  });
+  .get("*", (ctx) => serveIndex(ASSET_PATH, ctx));
 
 export type App = typeof app;

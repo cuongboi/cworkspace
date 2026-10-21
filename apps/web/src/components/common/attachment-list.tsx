@@ -1,10 +1,18 @@
 import { cn } from "cn"
-import { FileIcon, XIcon } from "lucide-react"
+import { File, XIcon } from "lucide-react"
 import { useState } from "react"
 import { useTranslation } from "react-i18next"
 import { Button } from "@/components/ui/button"
-import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog"
 import { fileUrl } from "@/lib/upload"
+import { ImageLightbox } from "./image-lightbox"
+import {
+  type DocumentSource,
+  DocumentViewerDialog,
+  isViewable,
+  useDocument,
+  ViewDocumentButton,
+} from "./document-viewer"
+import { VideoAttachment } from "./video-attachment"
 
 export type AttachmentLike = {
   id: string
@@ -22,12 +30,13 @@ export function formatBytes(bytes: number) {
 }
 
 /** "PDF", "ZIP", … from the file name, falling back to the mime subtype. */
-function fileKind(f: AttachmentLike) {
+export function fileKind(f: Pick<AttachmentLike, "name" | "mimeType">) {
   const ext = /\.([a-z0-9]{1,5})$/i.exec(f.name)?.[1]
   return (ext ?? f.mimeType.split("/")[1] ?? "file").toUpperCase()
 }
 
 const isImage = (a: AttachmentLike) => a.mimeType.startsWith("image/")
+const isVideo = (a: AttachmentLike) => a.mimeType.startsWith("video/")
 
 /** Image grid (click to enlarge) + file chips. `onRemove` turns it into an editable list. */
 export function AttachmentList({
@@ -41,9 +50,12 @@ export function AttachmentList({
 }) {
   const { t } = useTranslation()
   const [open, setOpen] = useState<AttachmentLike | null>(null)
+  const [doc, setDoc] = useState<DocumentSource | null>(null)
+  const docLoading = useDocument(doc).query.isLoading
   if (attachments.length === 0) return null
   const images = attachments.filter(isImage)
-  const files = attachments.filter((a) => !isImage(a))
+  const videos = attachments.filter(isVideo)
+  const files = attachments.filter((a) => !isImage(a) && !isVideo(a))
 
   return (
     <div className={cn("flex flex-col gap-2", className)}>
@@ -85,14 +97,18 @@ export function AttachmentList({
           ))}
         </div>
       ) : null}
+      {videos.map((v) => (
+        <div key={v.id} className="group relative">
+          <VideoAttachment attachment={v} />
+          {onRemove ? <RemoveButton onClick={() => onRemove(v.id)} /> : null}
+        </div>
+      ))}
       {files.map((f) => (
         <div
           key={f.id}
-          className="flex items-center gap-3 rounded-md border bg-card p-3"
+          className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-md border bg-card p-3 sm:flex-nowrap"
         >
-          <span className="flex size-8 shrink-0 items-center justify-center rounded-md bg-muted">
-            <FileIcon className="size-4 text-muted-foreground" />
-          </span>
+          <FileTypeIcon label={fileKind(f)} />
           <span className="flex min-w-0 flex-1 flex-col">
             <span className="truncate text-xs font-semibold">{f.name}</span>
             <span className="truncate text-2xs text-muted-foreground">
@@ -101,11 +117,29 @@ export function AttachmentList({
             </span>
           </span>
           {onRemove ? null : (
-            <Button asChild variant="outline" size="xs">
-              <a href={fileUrl(f.id, { download: true })}>
-                {t("feed.attachments.download")}
-              </a>
-            </Button>
+            <div className="flex w-full gap-2 sm:w-auto">
+              {isViewable(f.name) ? (
+                <ViewDocumentButton
+                  className="flex-1 sm:flex-none"
+                  loading={
+                    docLoading && doc?.kind === "file" && doc.id === f.id
+                  }
+                  onClick={() =>
+                    setDoc({ kind: "file", id: f.id, name: f.name })
+                  }
+                />
+              ) : null}
+              <Button
+                asChild
+                variant="outline"
+                size="xs"
+                className="flex-1 sm:flex-none"
+              >
+                <a href={fileUrl(f.id, { download: true })}>
+                  {t("feed.attachments.download")}
+                </a>
+              </Button>
+            </div>
           )}
           {onRemove ? (
             <Button
@@ -120,20 +154,44 @@ export function AttachmentList({
           ) : null}
         </div>
       ))}
-      <Dialog open={open !== null} onOpenChange={(o) => !o && setOpen(null)}>
-        <DialogContent className="max-w-4xl p-2">
-          <DialogTitle className="sr-only">{open?.name}</DialogTitle>
-          {open ? (
-            // biome-ignore lint/performance/noImgElement: see above
-            <img
-              src={fileUrl(open.id)}
-              alt={open.name}
-              className="max-h-[85vh] w-full rounded object-contain"
-            />
-          ) : null}
-        </DialogContent>
-      </Dialog>
+      <ImageLightbox
+        src={open ? fileUrl(open.id) : null}
+        alt={open?.name ?? ""}
+        onClose={() => setOpen(null)}
+      />
+      <DocumentViewerDialog source={doc} onClose={() => setDoc(null)} />
     </div>
+  )
+}
+
+/** Lucide file outline with the extension printed inside; font shrinks for longer labels. */
+export function FileTypeIcon({
+  label,
+  className,
+}: {
+  label: string
+  className?: string
+}) {
+  const text = label.slice(0, 4)
+  const fontSize = text.length <= 2 ? 7 : text.length === 3 ? 5.5 : 4.5
+  return (
+    <File
+      className={cn("size-8 shrink-0 text-muted-foreground", className)}
+      aria-hidden
+    >
+      <text
+        x={12}
+        y={18.5}
+        textAnchor="middle"
+        fontSize={fontSize}
+        fontFamily="Verdana,sans-serif"
+        fontWeight={700}
+        strokeWidth={0}
+        fill="currentColor"
+      >
+        {text}
+      </text>
+    </File>
   )
 }
 

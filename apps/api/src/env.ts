@@ -1,3 +1,5 @@
+import { parseAppConfig } from "@app/shared/app-config";
+
 /** Validated process environment. Fails fast at boot instead of at first use. */
 
 export const read = (key: string, fallback?: string): string => {
@@ -30,6 +32,9 @@ export const env = {
   BETTER_AUTH_BASE_PATH: read("BETTER_AUTH_BASE_PATH", "/api/auth"),
   /** Public URL of the web app, used in emailed links (invitations, password reset). */
   APP_URL: read("APP_URL", read("WEB_ORIGIN", "http://localhost:5173").split(",")[0]!),
+  // Branding: name + JSON details (shortName, description, themeColor, ogImage…), see app-config.ts
+  APP_NAME: read("APP_NAME", ""),
+  APP_INFO: read("APP_INFO", ""),
   DB_LOG_QUERIES: read("DB_LOG_QUERIES", "false") === "true",
 
   // Email (Resend). Without a key, emails are printed to the API console.
@@ -71,3 +76,6 @@ export const env = {
 } as const;
 
 export type Env = typeof env;
+
+/** Parsed once at boot: an invalid APP_INFO stops the server instead of shipping broken tags. */
+export const appConfig = parseAppConfig(env);

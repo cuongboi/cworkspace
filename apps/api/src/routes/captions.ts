@@ -1,9 +1,5 @@
 import { ActivityHandling, GoogleGenAI, Modality, TurnCoverage } from "@google/genai";
-import {
-  CAPTION_LANGUAGES,
-  type CaptionLang,
-  otherCaptionLang,
-} from "@app/shared/realtime-events";
+import { CAPTION_LANGUAGES, type CaptionLang, otherCaptionLang } from "@app/shared/realtime-events";
 import { Elysia, t } from "elysia";
 import { env } from "@/env";
 import { forbidden, tooManyRequests, upstreamError } from "@/lib/errors";

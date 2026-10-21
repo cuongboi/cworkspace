@@ -64,3 +64,13 @@ export async function presignDownload(key: string, fileName: string, inline: boo
   );
   return toPublic(url);
 }
+
+/** Read an object into memory; `null` when it is larger than `maxBytes`. */
+export async function readObject(key: string, maxBytes: number): Promise<Uint8Array | null> {
+  const res = await s3.send(new GetObjectCommand({ Bucket: bucket, Key: key }));
+  if ((res.ContentLength ?? 0) > maxBytes) {
+    await res.Body?.transformToWebStream().cancel();
+    return null;
+  }
+  return (await res.Body?.transformToByteArray()) ?? new Uint8Array();
+}

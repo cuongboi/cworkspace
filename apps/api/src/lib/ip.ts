@@ -5,6 +5,12 @@ import { isIP } from "node:net";
 function parse(ip: string): { v: 4 | 6; n: bigint } | null {
   const mapped = /^::ffff:(\d+\.\d+\.\d+\.\d+)$/i.exec(ip);
   if (mapped) ip = mapped[1]!;
+  // WHATWG URL serializes mapped addresses in hex (`[::ffff:7f00:1]`), which must map too
+  const hex = /^::ffff:([\da-f]{1,4}):([\da-f]{1,4})$/i.exec(ip);
+  if (hex) {
+    const n = (parseInt(hex[1]!, 16) << 16) | parseInt(hex[2]!, 16);
+    ip = [n >>> 24, (n >>> 16) & 255, (n >>> 8) & 255, n & 255].join(".");
+  }
   const kind = isIP(ip);
   if (kind === 4) {
     return { v: 4, n: ip.split(".").reduce((acc, p) => (acc << 8n) + BigInt(Number(p)), 0n) };

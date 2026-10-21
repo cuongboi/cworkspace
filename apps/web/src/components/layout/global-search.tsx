@@ -6,6 +6,7 @@ import {
   SearchIcon,
 } from "lucide-react"
 import { type ReactNode, useEffect, useState } from "react"
+import { useDebounced } from "@/hooks/use-debounced"
 import { useTranslation } from "react-i18next"
 import { useNavigate } from "react-router-dom"
 import { TimeAgo } from "@/components/common/time-ago"
@@ -475,13 +476,4 @@ function useFiles(q: string, take: number, enabled: boolean) {
 function snippet(text: string) {
   const plain = toPlainText(text).replace(/\s+/g, " ").trim()
   return plain.length > 80 ? `${plain.slice(0, 80)}…` : plain
-}
-
-function useDebounced<T>(value: T, ms: number) {
-  const [debounced, setDebounced] = useState(value)
-  useEffect(() => {
-    const t = window.setTimeout(() => setDebounced(value), ms)
-    return () => window.clearTimeout(t)
-  }, [value, ms])
-  return debounced
 }

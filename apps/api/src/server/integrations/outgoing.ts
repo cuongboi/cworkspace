@@ -1,9 +1,8 @@
-import { lookup } from "node:dns/promises";
-import { isIP } from "node:net";
 import { toPlainText } from "@app/shared/mentions";
 import { env } from "../../env";
 import { decryptSecret, signPayload } from "../../lib/crypto";
-import { hostAllowed, isPrivateIp } from "../../lib/ip";
+import { hostAllowed } from "../../lib/ip";
+import { resolvesPublic } from "../../lib/safe-fetch";
 
 /**
  * Channel integrations, server side: posting BOT messages, and outgoing webhooks (a signed POST
@@ -92,9 +91,7 @@ async function checkTarget(rawUrl: string, allowedHosts: string[]) {
     throw new Error("Target must use https");
   if (!hostAllowed(url.hostname, allowedHosts)) throw new Error("Host is not in the allowlist");
   if (env.ALLOW_PRIVATE_WEBHOOKS) return url;
-  const host = url.hostname.replace(/^\[|\]$/g, "");
-  const addresses = isIP(host) ? [host] : (await lookup(host, { all: true })).map((a) => a.address);
-  if (!addresses.length || addresses.some(isPrivateIp))
+  if (!(await resolvesPublic(url.hostname)))
     throw new Error("Target resolves to a private address");
   return url;
 }

@@ -25,4 +25,26 @@ export const common = {
   you: "You",
   justNow: "just now",
   noResults: "No results",
+  documentViewer: {
+    view: "View",
+    description: "Document preview",
+    openInNewTab: "Open in new tab",
+    download: "Download",
+    tooLarge: "This file is too large to preview.",
+    loadFailed: "Couldn't load this document.",
+    empty: "This file is empty.",
+    rowsTruncated: "Showing the first {{shown}} of {{total}} rows.",
+  },
+  linkPreview: {
+    play: "Play video",
+    openImage: "Open image",
+  },
+  media: {
+    more: "More options",
+    back: "Back {{count}}s",
+    forward: "Forward {{count}}s",
+    speed: "Speed",
+    pip: "Picture in picture",
+    download: "Download",
+  },
 }

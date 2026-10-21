@@ -3,7 +3,6 @@ import { format } from "date-fns"
 import {
   BellOffIcon,
   CalendarDaysIcon,
-  FileIcon,
   FolderOpenIcon,
   LogOutIcon,
   MessagesSquareIcon,
@@ -19,7 +18,11 @@ import { type ReactNode, useState } from "react"
 import { useQueryState } from "nuqs"
 import { useTranslation } from "react-i18next"
 import { toast } from "sonner"
-import { formatBytes } from "@/components/common/attachment-list"
+import {
+  FileTypeIcon,
+  fileKind,
+  formatBytes,
+} from "@/components/common/attachment-list"
 import { UserAvatar } from "@/components/common/user-avatar"
 import {
   AlertDialog,
@@ -467,9 +470,7 @@ function FilesTab({ conversationId }: { conversationId: string }) {
                   href={fileUrl(f.id, { download: true })}
                   className="flex items-center gap-2.5 rounded-md px-1 py-2 outline-none hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring"
                 >
-                  <span className="flex size-8 shrink-0 items-center justify-center rounded-md border bg-card">
-                    <FileIcon className="size-3.5 text-muted-foreground" />
-                  </span>
+                  <FileTypeIcon label={fileKind(f)} />
                   <span className="min-w-0 flex-1">
                     <span className="block truncate text-2xs font-semibold">
                       {f.name}
